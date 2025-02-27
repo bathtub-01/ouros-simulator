@@ -1,0 +1,35 @@
+use crate::hw_module::HwModule;
+
+#[derive(Default)]
+pub struct Register<V: Clone + Default> {
+    input: V,
+    value: V,
+}
+
+// Stack elements like `u32` also implements `Clone`, and
+// that will be zero-cost.
+impl<V: Clone + Default> Register<V> {
+    pub fn new(init: V) -> Self {
+        Default::default()
+    }
+
+    pub fn connect(&mut self, v: &V) {
+        self.input = v.clone();
+    }
+
+    pub fn value(&self) -> &V {
+        &self.value
+    }
+}
+
+impl<V: Clone + Default> HwModule for Register<V> {
+    type Output = V;
+
+    fn tick(&mut self) {
+        self.value = self.input.clone();
+    }
+
+    fn gen_output(&mut self) -> &Self::Output {
+        &self.value
+    }
+}
