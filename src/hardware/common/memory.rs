@@ -40,9 +40,7 @@ impl<T: Default + Clone> SinglePortMem<T> {
 }
 
 impl<T: Default + Clone> HwModule for SinglePortMem<T> {
-    type Output = MemOutput<T>;
-
-    fn tick(&mut self) {
+    fn update_local(&mut self) {
         let input = &self.states.input;
         let local = &mut self.states.local;
 
@@ -55,10 +53,8 @@ impl<T: Default + Clone> HwModule for SinglePortMem<T> {
         local.holder.tick();
     }
 
-    fn gen_output(&mut self) -> &Self::Output {
+    fn gen_output(&mut self) {
         self.states.output.dout = self.states.local.holder.value().clone();
-
-        &self.states.output
     }
 }
 
@@ -81,7 +77,7 @@ fn single_port_mem_spec() {
             input.is_write = false;
         });
         mem.tick();
-        assert_eq!(mem.gen_output().dout, i as u32 + 100);
+        assert_eq!(mem.states.output.dout, i as u32 + 100);
     }
 }
 

@@ -1,3 +1,5 @@
+// Example module to demonstrate the framework's usage.
+
 use crate::hardware::common::Register;
 use crate::hw_module::{HwModule, HwStates};
 
@@ -24,9 +26,7 @@ pub struct Bumper {
 }
 
 impl HwModule for Bumper {
-    type Output = BumperOutput;
-
-    fn tick(&mut self) {
+    fn update_local(&mut self) {
         // Update local state based on input
         let input = &self.states.input;
         let local = &mut self.states.local;
@@ -43,11 +43,9 @@ impl HwModule for Bumper {
         local.running.tick();
     }
 
-    fn gen_output(&mut self) -> &Self::Output {
+    fn gen_output(&mut self) {
         self.states.output.res = *self.states.local.counter.value();
         self.states.output.stm = *self.states.local.running.value();
-
-        &self.states.output
     }
 }
 
@@ -66,20 +64,20 @@ fn bumper_spec() {
     });
 
     bumper.tick();
-    assert_eq!(bumper.gen_output().stm, true);
+    assert_eq!(bumper.states.output.stm, true);
     bumper.tick();
-    assert_eq!(bumper.gen_output().res, 1);
+    assert_eq!(bumper.states.output.res, 1);
     bumper.tick();
-    assert_eq!(bumper.gen_output().res, 2);
+    assert_eq!(bumper.states.output.res, 2);
 
     bumper.states.link_input(|input| {
         input.start = false;
     });
 
     bumper.tick();
-    assert_eq!(bumper.gen_output().stm, false);
-    assert_eq!(bumper.gen_output().res, 3);
+    assert_eq!(bumper.states.output.stm, false);
+    assert_eq!(bumper.states.output.res, 3);
 
     bumper.tick();
-    assert_eq!(bumper.gen_output().res, 3);
+    assert_eq!(bumper.states.output.res, 3);
 }

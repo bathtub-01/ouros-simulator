@@ -9,7 +9,7 @@ pub struct Register<V: Clone + Default> {
 // Stack elements like `u32` also implements `Clone`, and
 // that will be zero-cost.
 impl<V: Clone + Default> Register<V> {
-    pub fn new(init: V) -> Self {
+    pub fn new() -> Self {
         Default::default()
     }
 
@@ -23,13 +23,9 @@ impl<V: Clone + Default> Register<V> {
 }
 
 impl<V: Clone + Default> HwModule for Register<V> {
-    type Output = V;
-
-    fn tick(&mut self) {
+    fn update_local(&mut self) {
         self.value = self.input.clone();
     }
 
-    fn gen_output(&mut self) -> &Self::Output {
-        &self.value
-    }
+    fn gen_output(&mut self) {}
 }
