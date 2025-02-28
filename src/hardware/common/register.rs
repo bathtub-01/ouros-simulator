@@ -27,5 +27,7 @@ impl<V: Clone + Default> HwModule for Register<V> {
         self.value = self.input.clone();
     }
 
+    fn tick_children(&mut self) {}
+
     fn gen_output(&mut self) {}
 }

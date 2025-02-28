@@ -36,11 +36,11 @@ impl HwModule for Bumper {
         if *local.running.value() {
             local.counter.connect(&(local.counter.value() + 1));
         }
+    }
 
-        // Tick all the sub-modules (can run in parallel)
-        // Sub-modules' can't be used after ticking
-        local.counter.tick();
-        local.running.tick();
+    fn tick_children(&mut self) {
+        self.states.local.counter.tick();
+        self.states.local.running.tick();
     }
 
     fn gen_output(&mut self) {

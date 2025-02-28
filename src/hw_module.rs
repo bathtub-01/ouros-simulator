@@ -38,17 +38,20 @@ impl<I: Default, L: Default, O: Default> HwStates<I, L, O> {
 /// The behavior of a hardware module at each clock cycle:
 ///   * `update_local`: update its local `state` (`input` should first be setup
 ///     through `link_input`)
+///   * `tick_children`: tick all the sub-modules (can run in parallel)
 ///   * `gen_output`: `output` ports are derived from local states
 ///
 /// By calling `tick` at cycle `n`, the whole module is **updated**. The `local`
 /// and `output` states are now in cycle `n+1`.
 pub trait HwModule {
     fn update_local(&mut self);
+    fn tick_children(&mut self);
     fn gen_output(&mut self);
 
     /// After `input` get setup, use `tick` to update local states and outputs.
     fn tick(&mut self) {
         self.update_local();
+        self.tick_children();
         self.gen_output();
     }
 }

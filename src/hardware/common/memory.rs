@@ -49,8 +49,10 @@ impl<T: Default + Clone> HwModule for SinglePortMem<T> {
         } else {
             local.holder.connect(&local.ram[input.addr]);
         }
+    }
 
-        local.holder.tick();
+    fn tick_children(&mut self) {
+        self.states.local.holder.tick();
     }
 
     fn gen_output(&mut self) {
