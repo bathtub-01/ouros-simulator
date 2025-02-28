@@ -1,4 +1,3 @@
-use crate::hardware::common::Register;
 use crate::hw_module::{HwModule, HwStates};
 
 #[derive(Default)]
