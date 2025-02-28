@@ -16,7 +16,6 @@ struct MemOutput<T: Clone + Default> {
 #[derive(Default)]
 struct SingleLocal<T: Clone + Default> {
     ram: Vec<T>,
-    holder: Register<T>,
 }
 
 /// Synchronous single port read-write memory
@@ -31,7 +30,6 @@ impl<T: Default + Clone> SinglePortMem<T> {
                 input: Default::default(),
                 local: SingleLocal {
                     ram: vec![T::default(); depth],
-                    holder: Default::default(),
                 },
                 output: Default::default(),
             },
@@ -46,17 +44,19 @@ impl<T: Default + Clone> HwModule for SinglePortMem<T> {
 
         if input.is_write {
             local.ram[input.addr] = input.din.clone();
-        } else {
-            local.holder.connect(&local.ram[input.addr]);
         }
     }
 
-    fn tick_children(&mut self) {
-        self.states.local.holder.tick();
-    }
+    fn tick_children(&mut self) {}
 
     fn gen_output(&mut self) {
-        self.states.output.dout = self.states.local.holder.value().clone();
+        let input = &self.states.input;
+        let local = &self.states.local;
+        let output = &mut self.states.output;
+
+        if !input.is_write {
+            output.dout = local.ram[input.addr].clone();
+        }
     }
 }
 
@@ -98,8 +98,6 @@ struct DualOutput<T: Clone + Default> {
 #[derive(Default)]
 struct DualLocal<T: Clone + Default> {
     ram: Vec<T>,
-    holder_a: Register<T>,
-    holder_b: Register<T>,
 }
 
 /// Synchronous dual port read-write memory.
@@ -115,8 +113,6 @@ impl<T: Clone + Default> DualPortMem<T> {
                 input: Default::default(),
                 local: DualLocal {
                     ram: vec![T::default(); depth],
-                    holder_a: Default::default(),
-                    holder_b: Default::default(),
                 },
                 output: Default::default(),
             },
@@ -136,8 +132,6 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
             "DualPortMem: writing on the same addr is not allowed."
         );
 
-        // A bit ugly, but read-after-write needs to be preserved...
-
         if input.port_a.is_write {
             local.ram[input.port_a.addr] = input.port_a.din.clone();
         }
@@ -145,24 +139,22 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
         if input.port_b.is_write {
             local.ram[input.port_b.addr] = input.port_b.din.clone();
         }
+    }
+
+    fn tick_children(&mut self) {}
+
+    fn gen_output(&mut self) {
+        let input = &self.states.input;
+        let local = &self.states.local;
+        let output = &mut self.states.output;
 
         if !input.port_a.is_write {
-            local.holder_a.connect(&local.ram[input.port_a.addr]);
+            output.port_a.dout = local.ram[input.port_a.addr].clone();
         }
 
         if !input.port_b.is_write {
-            local.holder_b.connect(&local.ram[input.port_b.addr]);
+            output.port_b.dout = local.ram[input.port_b.addr].clone();
         }
-    }
-
-    fn tick_children(&mut self) {
-        self.states.local.holder_a.tick();
-        self.states.local.holder_b.tick();
-    }
-
-    fn gen_output(&mut self) {
-        self.states.output.port_a.dout = self.states.local.holder_a.value().clone();
-        self.states.output.port_b.dout = self.states.local.holder_b.value().clone();
     }
 }
 

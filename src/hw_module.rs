@@ -10,7 +10,7 @@
 // To go to the next cycle, first use `link_input` to set `input` port values
 // at *this* cycle. Then use `tick` to update `local` and `output` to *next* cycle.
 
-// In `tick`, `output` from sub-modules are all available as they are  in *this*
+// In `tick`, `output` from sub-modules are all available as they are in *this*
 // cycle. At the end of `tick`, tick all sub-modules to turn them to *next* cycle.
 
 /// At a certain clock cycle, hardware contains THREE states:
