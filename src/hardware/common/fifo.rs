@@ -98,6 +98,16 @@ fn fifo_spec() {
             input.din = i;
             input.out_ready = true;
         });
+        // FIXME: need a way to express combinatory logic...
+        //        maybe using reference fields?
+        assert!(fire(
+            fifo.states.input.in_valid,
+            fifo.states.output.in_ready
+        ));
+        assert!(fire(
+            fifo.states.output.out_valid,
+            fifo.states.input.out_ready
+        ));
         fifo.tick();
         assert_eq!(fifo.states.output.dout, i - 3);
     }
