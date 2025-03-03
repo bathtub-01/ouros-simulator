@@ -18,13 +18,12 @@
 ///   * `local`: the module's local state
 ///   * `output`: state of its output ports
 #[derive(Default)]
-pub struct HwStates<I: Default, L: Default, O: Default> {
+pub struct HwStates<I: Default, L: Default> {
     pub input: I,
     pub local: L,
-    pub output: O,
 }
 
-impl<I: Default, L: Default, O: Default> HwStates<I, L, O> {
+impl<I: Default, L: Default> HwStates<I, L> {
     /// External world talks to the hw module through this.
     pub fn link_input(&mut self, new_input: impl FnOnce(&mut I)) {
         new_input(&mut self.input);
@@ -46,12 +45,12 @@ impl<I: Default, L: Default, O: Default> HwStates<I, L, O> {
 pub trait HwModule {
     fn update_local(&mut self);
     fn tick_children(&mut self);
-    fn gen_output(&mut self);
+    // fn gen_output(&mut self);
 
     /// After `input` get setup, use `tick` to update local states and outputs.
     fn tick(&mut self) {
         self.update_local();
         self.tick_children();
-        self.gen_output();
+        // self.gen_output();
     }
 }

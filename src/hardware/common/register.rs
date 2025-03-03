@@ -28,6 +28,4 @@ impl<V: Clone + Default> HwModule for Register<V> {
     }
 
     fn tick_children(&mut self) {}
-
-    fn gen_output(&mut self) {}
 }
