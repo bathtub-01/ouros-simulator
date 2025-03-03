@@ -6,17 +6,18 @@
 // all the modules concurrently.
 
 // Usage of a hardware module:
-// At each cycle, `local` and `output` represent states in *this* cycle.
+// At each cycle, `local` represent states in *this* cycle.
 // To go to the next cycle, first use `link_input` to set `input` port values
-// at *this* cycle. Then use `tick` to update `local` and `output` to *next* cycle.
+// at *this* cycle. Then use `tick` to update `local` to *next* cycle.
+//
+// At the end of `tick`, tick all sub-modules to turn them to *next* cycle.
+//
+// The outputs of hardware modules are implemented as methods. It is always
+// derived from current `input` and `local` states.
 
-// In `tick`, `output` from sub-modules are all available as they are in *this*
-// cycle. At the end of `tick`, tick all sub-modules to turn them to *next* cycle.
-
-/// At a certain clock cycle, hardware contains THREE states:
+/// At a certain clock cycle, hardware contains TWO states:
 ///   * `input`: state of its input ports
 ///   * `local`: the module's local state
-///   * `output`: state of its output ports
 #[derive(Default)]
 pub struct HwStates<I: Default, L: Default> {
     pub input: I,
@@ -38,19 +39,16 @@ impl<I: Default, L: Default> HwStates<I, L> {
 ///   * `update_local`: update its local `state` (`input` should first be setup
 ///     through `link_input`)
 ///   * `tick_children`: tick all the sub-modules (can run in parallel)
-///   * `gen_output`: `output` ports are derived from local states
 ///
 /// By calling `tick` at cycle `n`, the whole module is **updated**. The `local`
-/// and `output` states are now in cycle `n+1`.
+/// states are now in cycle `n+1`.
 pub trait HwModule {
     fn update_local(&mut self);
     fn tick_children(&mut self);
-    // fn gen_output(&mut self);
 
-    /// After `input` get setup, use `tick` to update local states and outputs.
+    /// After `input` get setup, use `tick` to update local states.
     fn tick(&mut self) {
         self.update_local();
         self.tick_children();
-        // self.gen_output();
     }
 }
