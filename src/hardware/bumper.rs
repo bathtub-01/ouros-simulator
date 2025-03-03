@@ -15,14 +15,8 @@ pub struct BumperLocal {
 }
 
 #[derive(Default)]
-pub struct BumperOutput {
-    res: u32,
-    stm: bool,
-}
-
-#[derive(Default)]
 pub struct Bumper {
-    states: HwStates<BumperInput, BumperLocal, BumperOutput>,
+    states: HwStates<BumperInput, BumperLocal>,
 }
 
 impl HwModule for Bumper {
@@ -42,16 +36,19 @@ impl HwModule for Bumper {
         self.states.local.counter.tick();
         self.states.local.running.tick();
     }
-
-    fn gen_output(&mut self) {
-        self.states.output.res = *self.states.local.counter.value();
-        self.states.output.stm = *self.states.local.running.value();
-    }
 }
 
 impl Bumper {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Default::default()
+    }
+
+    fn res(&self) -> u32 {
+        self.states.local.counter.value().clone()
+    }
+
+    fn stm(&self) -> bool {
+        self.states.local.running.value().clone()
     }
 }
 
@@ -64,20 +61,20 @@ fn bumper_spec() {
     });
 
     bumper.tick();
-    assert_eq!(bumper.states.output.stm, true);
+    assert_eq!(bumper.stm(), true);
     bumper.tick();
-    assert_eq!(bumper.states.output.res, 1);
+    assert_eq!(bumper.res(), 1);
     bumper.tick();
-    assert_eq!(bumper.states.output.res, 2);
+    assert_eq!(bumper.res(), 2);
 
     bumper.states.link_input(|input| {
         input.start = false;
     });
 
     bumper.tick();
-    assert_eq!(bumper.states.output.stm, false);
-    assert_eq!(bumper.states.output.res, 3);
+    assert_eq!(bumper.stm(), false);
+    assert_eq!(bumper.res(), 3);
 
     bumper.tick();
-    assert_eq!(bumper.states.output.res, 3);
+    assert_eq!(bumper.res(), 3);
 }

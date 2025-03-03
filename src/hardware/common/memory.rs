@@ -1,4 +1,5 @@
 use crate::hw_module::{HwModule, HwStates};
+use crate::{input, local};
 
 #[derive(Default)]
 struct MemInput<T: Clone + Default> {
@@ -8,18 +9,14 @@ struct MemInput<T: Clone + Default> {
 }
 
 #[derive(Default)]
-struct MemOutput<T: Clone + Default> {
-    dout: T,
-}
-
-#[derive(Default)]
 struct SingleLocal<T: Clone + Default> {
     ram: Vec<T>,
+    holder: T,
 }
 
 /// Synchronous single port read-write memory
 pub struct SinglePortMem<T: Clone + Default> {
-    states: HwStates<MemInput<T>, SingleLocal<T>, MemOutput<T>>,
+    states: HwStates<MemInput<T>, SingleLocal<T>>,
 }
 
 impl<T: Default + Clone> SinglePortMem<T> {
@@ -29,34 +26,27 @@ impl<T: Default + Clone> SinglePortMem<T> {
                 input: Default::default(),
                 local: SingleLocal {
                     ram: vec![T::default(); depth],
+                    holder: T::default(),
                 },
-                output: Default::default(),
             },
         }
+    }
+
+    fn dout(&self) -> &T {
+        &local!(self).holder
     }
 }
 
 impl<T: Default + Clone> HwModule for SinglePortMem<T> {
     fn update_local(&mut self) {
-        let input = &self.states.input;
-        let local = &mut self.states.local;
-
-        if input.is_write {
-            local.ram[input.addr] = input.din.clone();
+        if input!(self).is_write {
+            local!(self).ram[input!(self).addr] = input!(self).din.clone();
+        } else {
+            local!(self).holder = local!(self).ram[input!(self).addr].clone();
         }
     }
 
     fn tick_children(&mut self) {}
-
-    fn gen_output(&mut self) {
-        let input = &self.states.input;
-        let local = &self.states.local;
-        let output = &mut self.states.output;
-
-        if !input.is_write {
-            output.dout = local.ram[input.addr].clone();
-        }
-    }
 }
 
 #[test]
@@ -78,7 +68,7 @@ fn single_port_mem_spec() {
             input.is_write = false;
         });
         mem.tick();
-        assert_eq!(mem.states.output.dout, i as u32 + 100);
+        assert_eq!(mem.dout(), &(i as u32 + 100));
     }
 }
 
@@ -89,20 +79,16 @@ struct DualInput<T: Clone + Default> {
 }
 
 #[derive(Default)]
-struct DualOutput<T: Clone + Default> {
-    port_a: MemOutput<T>,
-    port_b: MemOutput<T>,
-}
-
-#[derive(Default)]
 struct DualLocal<T: Clone + Default> {
     ram: Vec<T>,
+    holder_a: T,
+    holder_b: T,
 }
 
 /// Synchronous dual port read-write memory.
 /// Read-after-write for the same address.
 pub struct DualPortMem<T: Clone + Default> {
-    states: HwStates<DualInput<T>, DualLocal<T>, DualOutput<T>>,
+    states: HwStates<DualInput<T>, DualLocal<T>>,
 }
 
 impl<T: Clone + Default> DualPortMem<T> {
@@ -112,49 +98,50 @@ impl<T: Clone + Default> DualPortMem<T> {
                 input: Default::default(),
                 local: DualLocal {
                     ram: vec![T::default(); depth],
+                    holder_a: T::default(),
+                    holder_b: T::default(),
                 },
-                output: Default::default(),
             },
         }
+    }
+
+    fn dout_a(&self) -> &T {
+        &local!(self).holder_a
+    }
+
+    fn dout_b(&self) -> &T {
+        &local!(self).holder_b
     }
 }
 
 impl<T: Clone + Default> HwModule for DualPortMem<T> {
     fn update_local(&mut self) {
-        let input = &self.states.input;
-        let local = &mut self.states.local;
-
         assert!(
-            !(input.port_a.is_write
-                && input.port_b.is_write
-                && input.port_a.addr == input.port_b.addr),
+            !(input!(self).port_a.is_write
+                && input!(self).port_b.is_write
+                && input!(self).port_a.addr == input!(self).port_b.addr),
             "DualPortMem: writing on the same addr is not allowed."
         );
 
-        if input.port_a.is_write {
-            local.ram[input.port_a.addr] = input.port_a.din.clone();
+        // A bit ugly, but maintains read-after-write
+        if input!(self).port_a.is_write {
+            local!(self).ram[input!(self).port_a.addr] = input!(self).port_a.din.clone();
         }
 
-        if input.port_b.is_write {
-            local.ram[input.port_b.addr] = input.port_b.din.clone();
+        if input!(self).port_b.is_write {
+            local!(self).ram[input!(self).port_b.addr] = input!(self).port_b.din.clone();
+        }
+
+        if !input!(self).port_a.is_write {
+            local!(self).holder_a = local!(self).ram[input!(self).port_a.addr].clone();
+        }
+
+        if !input!(self).port_b.is_write {
+            local!(self).holder_b = local!(self).ram[input!(self).port_b.addr].clone();
         }
     }
 
     fn tick_children(&mut self) {}
-
-    fn gen_output(&mut self) {
-        let input = &self.states.input;
-        let local = &self.states.local;
-        let output = &mut self.states.output;
-
-        if !input.port_a.is_write {
-            output.port_a.dout = local.ram[input.port_a.addr].clone();
-        }
-
-        if !input.port_b.is_write {
-            output.port_b.dout = local.ram[input.port_b.addr].clone();
-        }
-    }
 }
 
 #[test]
@@ -182,8 +169,8 @@ fn dual_port_mem_spec() {
             input.port_b.is_write = false;
         });
         mem.tick();
-        assert_eq!(mem.states.output.port_a.dout, i as u32 + 100);
-        assert_eq!(mem.states.output.port_b.dout, i as u32 + 100);
+        assert_eq!(mem.dout_a(), &(i as u32 + 100));
+        assert_eq!(mem.dout_b(), &(i as u32 + 100));
     }
 
     // Read-after-write
@@ -196,7 +183,7 @@ fn dual_port_mem_spec() {
             input.port_b.is_write = false;
         });
         mem.tick();
-        assert_eq!(mem.states.output.port_b.dout, i as u32 + 100);
+        assert_eq!(mem.dout_b(), &(i as u32 + 100));
     }
 
     for i in 500..600 {
@@ -208,6 +195,6 @@ fn dual_port_mem_spec() {
             input.port_a.is_write = false;
         });
         mem.tick();
-        assert_eq!(mem.states.output.port_a.dout, i as u32 - 100);
+        assert_eq!(mem.dout_a(), &(i as u32 - 100));
     }
 }
