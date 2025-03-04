@@ -12,7 +12,7 @@
 //
 // At the end of `tick`, tick all sub-modules to turn them to *next* cycle.
 //
-// The outputs of hardware modules are implemented as methods. It is always
+// The outputs of hardware modules are implemented as methods. They are always
 // derived from current `input` and `local` states.
 
 /// At a certain clock cycle, hardware contains TWO states:
