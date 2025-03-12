@@ -1,7 +1,7 @@
 use crate::hardware::ouros::combinator::{Arity, Idx, Pat};
 
-const HOLES: usize = 6;
-const APP_LENGTH: usize = 8;
+pub const HOLES: usize = 6;
+pub const APP_LENGTH: usize = 8;
 
 pub enum Atom {
     NOP,
@@ -13,4 +13,10 @@ pub enum Atom {
     ERR(u8),
 }
 
-type App = [Atom; APP_LENGTH];
+impl Default for Atom {
+    fn default() -> Self {
+        Atom::NOP
+    }
+}
+
+pub type App = [Atom; APP_LENGTH];

@@ -1,5 +1,4 @@
 use crate::hardware::common::Register;
-use crate::hardware::utils::fire;
 use crate::hw_module::{HwModule, HwStates};
 use crate::{input, local};
 

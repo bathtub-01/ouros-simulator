@@ -34,7 +34,7 @@ fn comprehension(ps1: Vec<Pat>, ps2: Vec<Pat>) -> Vec<Pat> {
         .collect()
 }
 
-fn all_patterns() -> Vec<Pat> {
+pub fn all_patterns() -> Vec<Pat> {
     use Pat::*;
     let x: Vec<Pat> = vec![X];
     let xx: Vec<Pat> = comprehension(x.clone(), x.clone());
