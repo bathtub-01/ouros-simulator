@@ -99,7 +99,7 @@ fn arbiter_spec() {
             });
             input.out_ready = true;
         });
-        println!("priority: {}", arbiter.states.local.priority.value());
+        // println!("priority: {}", arbiter.states.local.priority.value());
 
         let select = arbiter.select();
         assert_eq!(select, Some((i % 4) as usize));
