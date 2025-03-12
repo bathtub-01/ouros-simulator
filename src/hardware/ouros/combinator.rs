@@ -76,17 +76,6 @@ fn all_patterns() -> Vec<Pat> {
     all
 }
 
-#[test]
-fn all_patterns_spec() {
-    let all = all_patterns();
-
-    for p in all.iter() {
-        println!("{}", p);
-    }
-
-    println!("length: {}", all.len());
-}
-
 #[derive(Debug)]
 enum Hole {
     Empty,
@@ -109,7 +98,7 @@ pub struct ParseRes {
     app3: Vec<Hole>,
 }
 
-pub fn parse_pat(p: Pat) -> ParseRes {
+pub fn parse_pat(p: &Pat) -> ParseRes {
     let mut result = ParseRes::default();
     parse(p, Mode::Spine, &mut 0, &mut 0, &mut result);
     result
@@ -117,17 +106,17 @@ pub fn parse_pat(p: Pat) -> ParseRes {
 
 #[test]
 fn parse_pat_spec() {
-    use Pat::*;
-    let p0: Pat = At(Box::new(X), Box::new(X));
-    let p1: Pat = At(Box::new(X), Box::new(p0));
-    let p2: Pat = At(Box::new(p1), Box::new(X));
-    println!("{}", &p2);
-    println!("{:?}", parse_pat(p2));
+    let all = all_patterns();
+    let parsed = all.iter().map(|p| parse_pat(p));
+
+    for (pat, res) in all.iter().zip(parsed).into_iter() {
+        println!("{},{:?}", pat, res);
+    }
 }
 
-fn parse(p: Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut ParseRes) {
+fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut ParseRes) {
     let mut stack: Vec<Pat> = Vec::new();
-    let mut p_it = &p;
+    let mut p_it = p;
     let mut res: Vec<Hole> = Vec::new();
 
     // push all the branch
@@ -167,7 +156,7 @@ fn parse(p: Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut P
                     } else {
                         Mode::App3
                     };
-                    parse(v, next_mode, arg_count, ptr_count, acc);
+                    parse(&v, next_mode, arg_count, ptr_count, acc);
                 }
             },
         }
