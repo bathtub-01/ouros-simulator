@@ -77,8 +77,8 @@ pub fn all_patterns() -> Vec<Pat> {
 }
 
 #[derive(Debug)]
-enum Hole {
-    Empty,
+pub enum Hole {
+    // Empty,
     Arg(u8),
     Ptr(u8),
 }
@@ -92,10 +92,10 @@ enum Mode {
 
 #[derive(Default, Debug)]
 pub struct ParseRes {
-    spine: Vec<Hole>,
-    app1: Vec<Hole>,
-    app2: Vec<Hole>,
-    app3: Vec<Hole>,
+    pub spine: Vec<Hole>,
+    pub app1: Vec<Hole>,
+    pub app2: Vec<Hole>,
+    pub app3: Vec<Hole>,
 }
 
 pub fn parse_pat(p: &Pat) -> ParseRes {
@@ -178,16 +178,3 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
         }
     }
 }
-
-// Static with computed value using const fn
-static FIB_3: u64 = {
-    const fn fib(n: u32) -> u64 {
-        match n {
-            0 => 0,
-            1 => 1,
-            n => fib(n - 1) + fib(n - 2),
-        }
-    }
-
-    fib(3)
-};

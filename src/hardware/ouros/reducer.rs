@@ -1,6 +1,6 @@
 // Reducer for structured combinators:
 //          +-----------------+===> spine
-//          |                 |
+// addr <-->| >               |
 // input ==>|     Reducer     |===> app1
 //          |                 |===> app2
 //          +-----------------+===> app3
@@ -9,8 +9,9 @@
 // the reducer will be stalled if outputs fail to emit.
 
 use crate::hardware::common::Register;
-use crate::hardware::ouros::combinator::{all_patterns, parse_pat, ParseRes};
-use crate::hardware::ouros::program::{App, Atom, HOLES};
+use crate::hardware::ouros::combinator::{all_patterns, parse_pat, Hole, ParseRes};
+use crate::hardware::ouros::program::{App, Atom, APP_LENGTH, HOLES};
+use crate::hardware::utils::fire;
 use crate::hw_module::{HwModule, HwStates};
 use crate::{input, local};
 
@@ -28,10 +29,10 @@ struct ReducerInput {
 
 struct ReducerLocal {
     decode_table: [ParseRes; 64],
-    spine_holder: [Atom; HOLES],
-    app1_holder: [Atom; HOLES - 1],
-    app2_holder: [Atom; HOLES - 2],
-    app3_holder: [Atom; HOLES - 3],
+    spine_holder: (bool, [Atom; APP_LENGTH]), // to support over-applied apps, spine should be a full app length
+    app1_holder: (bool, [Atom; HOLES - 1]),
+    app2_holder: (bool, [Atom; HOLES - 2]),
+    app3_holder: (bool, [Atom; HOLES - 3]),
 }
 
 impl Default for ReducerLocal {
@@ -43,11 +44,129 @@ impl Default for ReducerLocal {
 
         Self {
             decode_table,
-            ..Default::default()
+            spine_holder: Default::default(),
+            app1_holder: Default::default(),
+            app2_holder: Default::default(),
+            app3_holder: Default::default(),
         }
     }
 }
 
 pub struct Reducer {
     states: HwStates<ReducerInput, ReducerLocal>,
+}
+
+impl Reducer {
+    fn new() -> Self {
+        Self {
+            states: Default::default(),
+        }
+    }
+
+    fn spine(&self) -> &(bool, [Atom; APP_LENGTH]) {
+        &local!(self).spine_holder
+    }
+
+    fn app1_valid(&self) -> &(bool, [Atom; HOLES - 1]) {
+        &local!(self).app1_holder
+    }
+
+    fn app2_valid(&self) -> &(bool, [Atom; HOLES - 2]) {
+        &local!(self).app2_holder
+    }
+
+    fn app3_valid(&self) -> &(bool, [Atom; HOLES - 3]) {
+        &local!(self).app3_holder
+    }
+
+    fn in_ready(&self) -> bool {
+        // all holder registers should be either (1) free or (2) firing in this cycle
+        let spine = local!(self).spine_holder.0;
+        let app1 = local!(self).app1_holder.0;
+        let app2 = local!(self).app2_holder.0;
+        let app3 = local!(self).app3_holder.0;
+
+        (!spine || fire(spine, input!(self).spine_ready))
+            && (!app1 || fire(app1, input!(self).app1_ready))
+            && (!app2 || fire(app2, input!(self).app2_ready))
+            && (!app3 || fire(app3, input!(self).app3_ready))
+    }
+
+    /// The number of heap cells will be consumed in this cycle
+    fn addr_consumed(&self) -> usize {
+        if fire(input!(self).in_valid, self.in_ready()) {
+            match input!(self).in_app[0] {
+                Atom::COM(_, code, _) => {
+                    let res = &local!(self).decode_table[code as usize];
+                    [
+                        res.app1.is_empty(),
+                        res.app2.is_empty(),
+                        res.app3.is_empty(),
+                    ]
+                    .iter()
+                    .filter(|&&x| !x)
+                    .count()
+                }
+                _ => panic!("reducer: app head is not combinator!"),
+            }
+        } else {
+            0
+        }
+    }
+}
+
+impl HwModule for Reducer {
+    fn update_local(&mut self) {
+        if fire(input!(self).in_valid, self.in_ready()) {
+            match input!(self).in_app[0] {
+                Atom::COM(arity, code, is) => {
+                    let res = &local!(self).decode_table[code as usize];
+                    let spine = &mut local!(self).spine_holder;
+                    let in_app = &input!(self).in_app;
+                    let app1 = &mut local!(self).app1_holder;
+                    let app2 = &mut local!(self).app2_holder;
+                    let app3 = &mut local!(self).app3_holder;
+                    let trans = |h: &Hole| match h {
+                        Hole::Arg(a) => in_app[is[*a as usize] as usize].clone(),
+                        Hole::Ptr(p) => Atom::PTR(*p as usize + input!(self).free_addr),
+                    };
+                    let gen_res = |v: &Vec<Hole>, a: &mut [Atom]| {
+                        for i in 0..a.len() {
+                            if i < v.len() {
+                                a[i] = trans(&v[i]);
+                            } else {
+                                a[i] = Atom::NOP;
+                            }
+                        }
+                    };
+                    gen_res(&res.spine, &mut spine.1);
+                    gen_res(&res.app1, &mut app1.1);
+                    gen_res(&res.app2, &mut app2.1);
+                    gen_res(&res.app3, &mut app3.1);
+                    // append the spine for over-applied cases:
+                    // e.g., S a b c x y = a c (b c) x y
+                    let before = arity as usize + 1;
+                    let after = res.spine.len();
+                    for i in 0..(APP_LENGTH - before) {
+                        if after + i < APP_LENGTH {
+                            spine.1[after + i] = in_app[before + i].clone();
+                        } else if before + i < APP_LENGTH && in_app[before + i] != Atom::NOP {
+                            // over-sized result will be a runtime error..
+                            panic!("reducer: over-sized over-applied app!");
+                        } else {
+                            break;
+                        }
+                    }
+                    // valid for output
+                    spine.0 = true;
+                    app1.0 = true;
+                    app2.0 = true;
+                    app3.0 = true;
+                }
+                _ => panic!("reducer: app head is not combinator!"),
+            }
+        }
+    }
+
+    fn tick_children(&mut self) {}
 }
