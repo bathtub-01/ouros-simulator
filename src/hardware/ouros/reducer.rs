@@ -8,7 +8,6 @@
 // clcok cycle. Inputs and Outputs has ready-valid signals,
 // the reducer will be stalled if outputs fail to emit.
 
-use crate::hardware::common::Register;
 use crate::hardware::ouros::combinator::{all_patterns, parse_pat, Hole, ParseRes};
 use crate::hardware::ouros::program::{App, Atom, APP_LENGTH, HOLES};
 use crate::hardware::utils::fire;
@@ -67,15 +66,15 @@ impl Reducer {
         &local!(self).spine_holder
     }
 
-    fn app1_valid(&self) -> &(bool, [Atom; HOLES - 1]) {
+    fn app1(&self) -> &(bool, [Atom; HOLES - 1]) {
         &local!(self).app1_holder
     }
 
-    fn app2_valid(&self) -> &(bool, [Atom; HOLES - 2]) {
+    fn app2(&self) -> &(bool, [Atom; HOLES - 2]) {
         &local!(self).app2_holder
     }
 
-    fn app3_valid(&self) -> &(bool, [Atom; HOLES - 3]) {
+    fn app3(&self) -> &(bool, [Atom; HOLES - 3]) {
         &local!(self).app3_holder
     }
 
@@ -127,7 +126,7 @@ impl HwModule for Reducer {
                     let app2 = &mut local!(self).app2_holder;
                     let app3 = &mut local!(self).app3_holder;
                     let trans = |h: &Hole| match h {
-                        Hole::Arg(a) => in_app[is[*a as usize] as usize].clone(),
+                        Hole::Arg(a) => in_app[is[*a as usize] as usize + 1].clone(),
                         Hole::Ptr(p) => Atom::PTR(*p as usize + input!(self).free_addr),
                     };
                     let gen_res = |v: &Vec<Hole>, a: &mut [Atom]| {
@@ -139,6 +138,7 @@ impl HwModule for Reducer {
                             }
                         }
                     };
+                    // perform reduction
                     gen_res(&res.spine, &mut spine.1);
                     gen_res(&res.app1, &mut app1.1);
                     gen_res(&res.app2, &mut app2.1);
@@ -159,9 +159,9 @@ impl HwModule for Reducer {
                     }
                     // valid for output
                     spine.0 = true;
-                    app1.0 = true;
-                    app2.0 = true;
-                    app3.0 = true;
+                    app1.0 = app1.1[0] != Atom::NOP;
+                    app2.0 = app2.1[0] != Atom::NOP;
+                    app3.0 = app3.1[0] != Atom::NOP;
                 }
                 _ => panic!("reducer: app head is not combinator!"),
             }
@@ -169,4 +169,60 @@ impl HwModule for Reducer {
     }
 
     fn tick_children(&mut self) {}
+}
+
+#[test]
+// for now just some test-by-printing...
+fn reducer_spec() {
+    use Atom::*;
+    let mut reducer = Reducer::new();
+    let print_res = |r: &Reducer| {
+        println!("spine: {:?}", r.spine());
+        println!("app1: {:?}", r.app1());
+        println!("app2: {:?}", r.app2());
+        println!("app3: {:?}", r.app3());
+        println!("==========================");
+    };
+
+    reducer.tick();
+
+    reducer.states.link_input(|input| {
+        input.spine_ready = true;
+        input.app1_ready = true;
+        input.app2_ready = true;
+        input.app3_ready = true;
+        input.free_addr = 42;
+
+        input.in_valid = true;
+        input.in_app = [
+            COM(6, 48, [2, 0, 1, 3, 4, 5]), // XX(XX(XX))
+            PTR(0),
+            PTR(1),
+            PTR(2),
+            INT(3),
+            INT(4),
+            INT(5),
+            Y,
+        ];
+    });
+    reducer.tick();
+    print_res(&reducer);
+
+    reducer.states.link_input(|input| {
+        input.free_addr = 44;
+
+        input.in_valid = true;
+        input.in_app = [
+            COM(3, 6, [0, 2, 1, 2, 0, 0]), // XX(XX)
+            PTR(0),
+            PTR(1),
+            PTR(2),
+            INT(3),
+            INT(4),
+            INT(5),
+            Y,
+        ];
+    });
+    reducer.tick();
+    print_res(&reducer);
 }
