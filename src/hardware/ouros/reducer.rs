@@ -116,6 +116,19 @@ impl Reducer {
 
 impl HwModule for Reducer {
     fn update_local(&mut self) {
+        if fire(self.spine().0, input!(self).spine_ready) {
+            local!(self).spine_holder.0 = false;
+        }
+        if fire(self.app1().0, input!(self).app1_ready) {
+            local!(self).app1_holder.0 = false;
+        }
+        if fire(self.app2().0, input!(self).app2_ready) {
+            local!(self).app2_holder.0 = false;
+        }
+        if fire(self.app3().0, input!(self).app3_ready) {
+            local!(self).app3_holder.0 = false;
+        }
+
         if fire(input!(self).in_valid, self.in_ready()) {
             match input!(self).in_app[0] {
                 Atom::COM(arity, code, is) => {
@@ -205,12 +218,12 @@ fn reducer_spec() {
             Y,
         ];
     });
+
     reducer.tick();
     print_res(&reducer);
 
     reducer.states.link_input(|input| {
         input.free_addr = 44;
-
         input.in_valid = true;
         input.in_app = [
             COM(3, 6, [0, 2, 1, 2, 0, 0]), // XX(XX)
@@ -222,6 +235,12 @@ fn reducer_spec() {
             INT(5),
             Y,
         ];
+    });
+    reducer.tick();
+    print_res(&reducer);
+
+    reducer.states.link_input(|input| {
+        input.in_valid = false;
     });
     reducer.tick();
     print_res(&reducer);
