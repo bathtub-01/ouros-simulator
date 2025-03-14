@@ -21,3 +21,4 @@ impl Default for Atom {
 }
 
 pub type App = [Atom; APP_LENGTH];
+pub type DataFlowLink<T> = (u8, T);

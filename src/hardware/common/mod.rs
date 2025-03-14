@@ -8,3 +8,5 @@ pub mod fifo;
 pub use fifo::FIFO;
 
 pub mod arbiter;
+
+pub mod stack;
