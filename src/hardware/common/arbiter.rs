@@ -1,6 +1,5 @@
 use crate::hardware::common::Register;
-use crate::hw_module::{HwModule, HwStates};
-use crate::{input, local};
+use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
 struct ArbiterInput<T: Clone + Default> {
@@ -9,33 +8,29 @@ struct ArbiterInput<T: Clone + Default> {
     out_ready: bool,
 }
 
-#[derive(Default)]
-struct ArbiterLocal {
-    priority: Register<usize>,
-}
+impl<T: Clone + Default> HwInput for ArbiterInput<T> {}
 
 /// N:1 round-robin arbiter.
 #[derive(Default)]
 pub struct Arbiter<T: Clone + Default, const N: usize> {
-    states: HwStates<ArbiterInput<T>, ArbiterLocal>,
+    input: ArbiterInput<T>,
+    priority: Register<usize>,
 }
 
 impl<T: Clone + Default, const N: usize> Arbiter<T, N> {
     fn new() -> Self {
         Self {
-            states: HwStates {
-                input: ArbiterInput {
-                    in_valid: vec![false; N],
-                    in_bits: vec![T::default(); N],
-                    out_ready: true,
-                },
-                local: Default::default(),
+            input: ArbiterInput {
+                in_valid: vec![false; N],
+                in_bits: vec![T::default(); N],
+                out_ready: true,
             },
+            priority: Default::default(),
         }
     }
 
     fn in_ready(&self, n: usize, select: Option<usize>) -> bool {
-        if input!(self).out_ready {
+        if self.input.out_ready {
             match select {
                 None => false,
                 Some(p) => p == n,
@@ -48,19 +43,19 @@ impl<T: Clone + Default, const N: usize> Arbiter<T, N> {
     fn out_bits(&self, select: Option<usize>) -> Option<&T> {
         match select {
             None => None,
-            Some(p) => Some(&input!(self).in_bits[p]),
+            Some(p) => Some(&self.input.in_bits[p]),
         }
     }
 
     fn out_valid(&self) -> bool {
-        input!(self).in_valid.iter().any(|&x| x)
+        self.input.in_valid.iter().any(|&x| x)
     }
 
     fn select(&self) -> Option<usize> {
-        if input!(self).out_ready {
+        if self.input.out_ready {
             for i in 0..N {
-                let port = (i + local!(self).priority.value()) % N;
-                if input!(self).in_valid[port] {
+                let port = (i + self.priority.value()) % N;
+                if self.input.in_valid[port] {
                     return Some(port);
                 }
             }
@@ -73,12 +68,12 @@ impl<T: Clone + Default, const N: usize> HwModule for Arbiter<T, N> {
     fn update_local(&mut self) {
         match self.select() {
             None => {}
-            Some(p) => local!(self).priority.connect(&((p + 1) % N)),
+            Some(p) => self.priority.connect(&((p + 1) % N)),
         }
     }
 
     fn tick_children(&mut self) {
-        local!(self).priority.tick();
+        self.priority.tick();
     }
 }
 
@@ -89,7 +84,7 @@ fn arbiter_spec() {
     arbiter.tick();
 
     for i in 0..50 {
-        arbiter.states.link_input(|input| {
+        arbiter.input.link(|input| {
             input.in_bits.iter_mut().zip(0..4).for_each(|(b, idx)| {
                 *b = idx + 10;
             });

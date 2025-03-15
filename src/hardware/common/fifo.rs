@@ -1,6 +1,5 @@
 use crate::hardware::utils::fire;
-use crate::hw_module::{HwModule, HwStates};
-use crate::{input, local};
+use crate::hw_module::{HwInput, HwModule};
 use std::collections::VecDeque;
 
 #[derive(Default)]
@@ -10,38 +9,32 @@ struct FIFOInput<T: Clone + Default> {
     din: T,
 }
 
-#[derive(Default)]
-struct FIFOLocal<T: Clone + Default> {
-    queue: VecDeque<T>,
-}
+impl<T: Clone + Default> HwInput for FIFOInput<T> {}
 
 /// FIFO, with size N. Supports pipelining when full.
 pub struct FIFO<T: Clone + Default, const N: usize> {
-    states: HwStates<FIFOInput<T>, FIFOLocal<T>>,
+    input: FIFOInput<T>,
+    queue: VecDeque<T>,
 }
 
 impl<T: Clone + Default, const N: usize> FIFO<T, N> {
     fn new() -> Self {
         Self {
-            states: HwStates {
-                input: Default::default(),
-                local: FIFOLocal {
-                    queue: VecDeque::with_capacity(N),
-                },
-            },
+            input: Default::default(),
+            queue: VecDeque::with_capacity(N),
         }
     }
 
     fn in_ready(&self) -> bool {
-        self.states.local.queue.len() < N || fire(self.states.input.out_ready, self.out_valid())
+        self.queue.len() < N || fire(self.input.out_ready, self.out_valid())
     }
 
     fn out_valid(&self) -> bool {
-        !local!(self).queue.is_empty()
+        !self.queue.is_empty()
     }
 
     fn dout(&self) -> Option<&T> {
-        match self.states.local.queue.front() {
+        match self.queue.front() {
             None => None,
             Some(v) => Some(&v),
         }
@@ -50,13 +43,13 @@ impl<T: Clone + Default, const N: usize> FIFO<T, N> {
 
 impl<T: Clone + Default, const N: usize> HwModule for FIFO<T, N> {
     fn update_local(&mut self) {
-        if fire(self.out_valid(), input!(self).out_ready) {
-            local!(self).queue.pop_front();
+        if fire(self.out_valid(), self.input.out_ready) {
+            self.queue.pop_front();
         }
 
         // to allow pipelining
-        if fire(input!(self).in_valid, self.in_ready()) {
-            local!(self).queue.push_back(input!(self).din.clone());
+        if fire(self.input.in_valid, self.in_ready()) {
+            self.queue.push_back(self.input.din.clone());
         }
     }
 
@@ -71,7 +64,7 @@ fn fifo_spec() {
 
     // fill the fifo (1,2,3,4)
     for i in 1..10 {
-        fifo.states.link_input(|input| {
+        fifo.input.link(|input| {
             input.in_valid = true;
             input.din = i;
             input.out_ready = false;
@@ -81,13 +74,13 @@ fn fifo_spec() {
 
     // pipelining
     for i in 5..20 {
-        fifo.states.link_input(|input| {
+        fifo.input.link(|input| {
             input.in_valid = true;
             input.din = i;
             input.out_ready = true;
         });
-        assert!(fire(fifo.states.input.in_valid, fifo.in_ready()));
-        assert!(fire(fifo.out_valid(), fifo.states.input.out_ready));
+        assert!(fire(fifo.input.in_valid, fifo.in_ready()));
+        assert!(fire(fifo.out_valid(), fifo.input.out_ready));
         assert_eq!(fifo.dout(), Some(&(i - 4)));
         fifo.tick();
     }

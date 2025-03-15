@@ -1,5 +1,4 @@
-use crate::hw_module::{HwModule, HwStates};
-use crate::{input, local};
+use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
 struct MemInput<T: Clone + Default> {
@@ -8,41 +7,35 @@ struct MemInput<T: Clone + Default> {
     din: T,
 }
 
-#[derive(Default)]
-struct SingleLocal<T: Clone + Default> {
-    ram: Vec<T>,
-    holder: T,
-}
+impl<T: Clone + Default> HwInput for MemInput<T> {}
 
 /// Synchronous single port read-write memory
 pub struct SinglePortMem<T: Clone + Default> {
-    states: HwStates<MemInput<T>, SingleLocal<T>>,
+    input: MemInput<T>,
+    ram: Vec<T>,
+    holder: T,
 }
 
 impl<T: Default + Clone> SinglePortMem<T> {
     fn new(depth: usize) -> Self {
         Self {
-            states: HwStates {
-                input: Default::default(),
-                local: SingleLocal {
-                    ram: vec![T::default(); depth],
-                    holder: T::default(),
-                },
-            },
+            input: Default::default(),
+            ram: vec![T::default(); depth],
+            holder: T::default(),
         }
     }
 
     fn dout(&self) -> &T {
-        &local!(self).holder
+        &self.holder
     }
 }
 
 impl<T: Default + Clone> HwModule for SinglePortMem<T> {
     fn update_local(&mut self) {
-        if input!(self).is_write {
-            local!(self).ram[input!(self).addr] = input!(self).din.clone();
+        if self.input.is_write {
+            self.ram[self.input.addr] = self.input.din.clone();
         } else {
-            local!(self).holder = local!(self).ram[input!(self).addr].clone();
+            self.holder = self.ram[self.input.addr].clone();
         }
     }
 
@@ -54,7 +47,7 @@ fn single_port_mem_spec() {
     let mut mem: SinglePortMem<u32> = SinglePortMem::new(1024);
 
     for i in 50..100 {
-        mem.states.link_input(|input| {
+        mem.input.link(|input| {
             input.addr = i;
             input.is_write = true;
             input.din = i as u32 + 100;
@@ -63,7 +56,7 @@ fn single_port_mem_spec() {
     }
 
     for i in 50..100 {
-        mem.states.link_input(|input| {
+        mem.input.link(|input| {
             input.addr = i;
             input.is_write = false;
         });
@@ -78,66 +71,60 @@ struct DualInput<T: Clone + Default> {
     port_b: MemInput<T>,
 }
 
-#[derive(Default)]
-struct DualLocal<T: Clone + Default> {
+impl<T: Clone + Default> HwInput for DualInput<T> {}
+
+/// Synchronous dual port read-write memory.
+/// Read-after-write for the same address.
+pub struct DualPortMem<T: Clone + Default> {
+    input: DualInput<T>,
     ram: Vec<T>,
     holder_a: T,
     holder_b: T,
 }
 
-/// Synchronous dual port read-write memory.
-/// Read-after-write for the same address.
-pub struct DualPortMem<T: Clone + Default> {
-    states: HwStates<DualInput<T>, DualLocal<T>>,
-}
-
 impl<T: Clone + Default> DualPortMem<T> {
     fn new(depth: usize) -> Self {
         Self {
-            states: HwStates {
-                input: Default::default(),
-                local: DualLocal {
-                    ram: vec![T::default(); depth],
-                    holder_a: T::default(),
-                    holder_b: T::default(),
-                },
-            },
+            input: Default::default(),
+            ram: vec![T::default(); depth],
+            holder_a: T::default(),
+            holder_b: T::default(),
         }
     }
 
     fn dout_a(&self) -> &T {
-        &local!(self).holder_a
+        &self.holder_a
     }
 
     fn dout_b(&self) -> &T {
-        &local!(self).holder_b
+        &self.holder_b
     }
 }
 
 impl<T: Clone + Default> HwModule for DualPortMem<T> {
     fn update_local(&mut self) {
         assert!(
-            !(input!(self).port_a.is_write
-                && input!(self).port_b.is_write
-                && input!(self).port_a.addr == input!(self).port_b.addr),
+            !(self.input.port_a.is_write
+                && self.input.port_b.is_write
+                && self.input.port_a.addr == self.input.port_b.addr),
             "DualPortMem: writing on the same addr is not allowed."
         );
 
         // A bit ugly, but maintains read-after-write
-        if input!(self).port_a.is_write {
-            local!(self).ram[input!(self).port_a.addr] = input!(self).port_a.din.clone();
+        if self.input.port_a.is_write {
+            self.ram[self.input.port_a.addr] = self.input.port_a.din.clone();
         }
 
-        if input!(self).port_b.is_write {
-            local!(self).ram[input!(self).port_b.addr] = input!(self).port_b.din.clone();
+        if self.input.port_b.is_write {
+            self.ram[self.input.port_b.addr] = self.input.port_b.din.clone();
         }
 
-        if !input!(self).port_a.is_write {
-            local!(self).holder_a = local!(self).ram[input!(self).port_a.addr].clone();
+        if !self.input.port_a.is_write {
+            self.holder_a = self.ram[self.input.port_a.addr].clone();
         }
 
-        if !input!(self).port_b.is_write {
-            local!(self).holder_b = local!(self).ram[input!(self).port_b.addr].clone();
+        if !self.input.port_b.is_write {
+            self.holder_b = self.ram[self.input.port_b.addr].clone();
         }
     }
 
@@ -150,7 +137,7 @@ fn dual_port_mem_spec() {
 
     // Common read/write
     for i in 50..100 {
-        mem.states.link_input(|input| {
+        mem.input.link(|input| {
             input.port_a.addr = i;
             input.port_a.is_write = true;
             input.port_a.din = i as u32 + 100;
@@ -162,7 +149,7 @@ fn dual_port_mem_spec() {
     }
 
     for i in 50..100 {
-        mem.states.link_input(|input| {
+        mem.input.link(|input| {
             input.port_a.addr = i;
             input.port_a.is_write = false;
             input.port_b.addr = i + 200;
@@ -175,7 +162,7 @@ fn dual_port_mem_spec() {
 
     // Read-after-write
     for i in 500..600 {
-        mem.states.link_input(|input| {
+        mem.input.link(|input| {
             input.port_a.addr = i;
             input.port_a.is_write = true;
             input.port_a.din = i as u32 + 100;
@@ -187,7 +174,7 @@ fn dual_port_mem_spec() {
     }
 
     for i in 500..600 {
-        mem.states.link_input(|input| {
+        mem.input.link(|input| {
             input.port_b.addr = i;
             input.port_b.is_write = true;
             input.port_b.din = i as u32 - 100;

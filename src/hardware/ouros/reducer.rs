@@ -11,8 +11,7 @@
 use crate::hardware::ouros::combinator::{all_patterns, parse_pat, Hole, ParseRes};
 use crate::hardware::ouros::program::{App, Atom, APP_LENGTH, HOLES};
 use crate::hardware::utils::fire;
-use crate::hw_module::{HwModule, HwStates};
-use crate::{input, local};
+use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
 struct ReducerInput {
@@ -26,7 +25,10 @@ struct ReducerInput {
     free_addr: usize,
 }
 
-struct ReducerLocal {
+impl HwInput for ReducerInput {}
+
+pub struct Reducer {
+    input: ReducerInput,
     decode_table: [ParseRes; 64],
     spine_holder: (bool, [Atom; APP_LENGTH]), // to support over-applied apps, spine should be a full app length
     app1_holder: (bool, [Atom; HOLES - 1]),
@@ -34,14 +36,15 @@ struct ReducerLocal {
     app3_holder: (bool, [Atom; HOLES - 3]),
 }
 
-impl Default for ReducerLocal {
-    fn default() -> Self {
+impl Reducer {
+    fn new() -> Self {
         let parsed: Vec<ParseRes> = all_patterns().iter().map(|p| parse_pat(p)).collect();
         let decode_table: [ParseRes; 64] = parsed
             .try_into()
             .expect("pattern decode table size should match");
 
         Self {
+            input: Default::default(),
             decode_table,
             spine_holder: Default::default(),
             app1_holder: Default::default(),
@@ -49,54 +52,42 @@ impl Default for ReducerLocal {
             app3_holder: Default::default(),
         }
     }
-}
-
-pub struct Reducer {
-    states: HwStates<ReducerInput, ReducerLocal>,
-}
-
-impl Reducer {
-    fn new() -> Self {
-        Self {
-            states: Default::default(),
-        }
-    }
 
     fn spine(&self) -> &(bool, [Atom; APP_LENGTH]) {
-        &local!(self).spine_holder
+        &self.spine_holder
     }
 
     fn app1(&self) -> &(bool, [Atom; HOLES - 1]) {
-        &local!(self).app1_holder
+        &self.app1_holder
     }
 
     fn app2(&self) -> &(bool, [Atom; HOLES - 2]) {
-        &local!(self).app2_holder
+        &self.app2_holder
     }
 
     fn app3(&self) -> &(bool, [Atom; HOLES - 3]) {
-        &local!(self).app3_holder
+        &self.app3_holder
     }
 
     fn in_ready(&self) -> bool {
         // all holder registers should be either (1) free or (2) firing in this cycle
-        let spine = local!(self).spine_holder.0;
-        let app1 = local!(self).app1_holder.0;
-        let app2 = local!(self).app2_holder.0;
-        let app3 = local!(self).app3_holder.0;
+        let spine = self.spine_holder.0;
+        let app1 = self.app1_holder.0;
+        let app2 = self.app2_holder.0;
+        let app3 = self.app3_holder.0;
 
-        (!spine || fire(spine, input!(self).spine_ready))
-            && (!app1 || fire(app1, input!(self).app1_ready))
-            && (!app2 || fire(app2, input!(self).app2_ready))
-            && (!app3 || fire(app3, input!(self).app3_ready))
+        (!spine || fire(spine, self.input.spine_ready))
+            && (!app1 || fire(app1, self.input.app1_ready))
+            && (!app2 || fire(app2, self.input.app2_ready))
+            && (!app3 || fire(app3, self.input.app3_ready))
     }
 
     /// The number of heap cells will be consumed in this cycle
     fn addr_consumed(&self) -> usize {
-        if fire(input!(self).in_valid, self.in_ready()) {
-            match input!(self).in_app[0] {
+        if fire(self.input.in_valid, self.in_ready()) {
+            match self.input.in_app[0] {
                 Atom::COM(_, code, _) => {
-                    let res = &local!(self).decode_table[code as usize];
+                    let res = &self.decode_table[code as usize];
                     [
                         res.app1.is_empty(),
                         res.app2.is_empty(),
@@ -116,31 +107,31 @@ impl Reducer {
 
 impl HwModule for Reducer {
     fn update_local(&mut self) {
-        if fire(self.spine().0, input!(self).spine_ready) {
-            local!(self).spine_holder.0 = false;
+        if fire(self.spine().0, self.input.spine_ready) {
+            self.spine_holder.0 = false;
         }
-        if fire(self.app1().0, input!(self).app1_ready) {
-            local!(self).app1_holder.0 = false;
+        if fire(self.app1().0, self.input.app1_ready) {
+            self.app1_holder.0 = false;
         }
-        if fire(self.app2().0, input!(self).app2_ready) {
-            local!(self).app2_holder.0 = false;
+        if fire(self.app2().0, self.input.app2_ready) {
+            self.app2_holder.0 = false;
         }
-        if fire(self.app3().0, input!(self).app3_ready) {
-            local!(self).app3_holder.0 = false;
+        if fire(self.app3().0, self.input.app3_ready) {
+            self.app3_holder.0 = false;
         }
 
-        if fire(input!(self).in_valid, self.in_ready()) {
-            match input!(self).in_app[0] {
+        if fire(self.input.in_valid, self.in_ready()) {
+            match self.input.in_app[0] {
                 Atom::COM(arity, code, is) => {
-                    let res = &local!(self).decode_table[code as usize];
-                    let spine = &mut local!(self).spine_holder;
-                    let in_app = &input!(self).in_app;
-                    let app1 = &mut local!(self).app1_holder;
-                    let app2 = &mut local!(self).app2_holder;
-                    let app3 = &mut local!(self).app3_holder;
+                    let res = &self.decode_table[code as usize];
+                    let spine = &mut self.spine_holder;
+                    let in_app = &self.input.in_app;
+                    let app1 = &mut self.app1_holder;
+                    let app2 = &mut self.app2_holder;
+                    let app3 = &mut self.app3_holder;
                     let trans = |h: &Hole| match h {
                         Hole::Arg(a) => in_app[is[*a as usize] as usize + 1].clone(),
-                        Hole::Ptr(p) => Atom::PTR(*p as usize + input!(self).free_addr),
+                        Hole::Ptr(p) => Atom::PTR(*p as usize + self.input.free_addr),
                     };
                     let gen_res = |v: &Vec<Hole>, a: &mut [Atom]| {
                         for i in 0..a.len() {
@@ -199,7 +190,7 @@ fn reducer_spec() {
 
     reducer.tick();
 
-    reducer.states.link_input(|input| {
+    reducer.input.link(|input| {
         input.spine_ready = true;
         input.app1_ready = true;
         input.app2_ready = true;
@@ -222,7 +213,7 @@ fn reducer_spec() {
     reducer.tick();
     print_res(&reducer);
 
-    reducer.states.link_input(|input| {
+    reducer.input.link(|input| {
         input.free_addr = 44;
         input.in_valid = true;
         input.in_app = [
@@ -239,7 +230,7 @@ fn reducer_spec() {
     reducer.tick();
     print_res(&reducer);
 
-    reducer.states.link_input(|input| {
+    reducer.input.link(|input| {
         input.in_valid = false;
     });
     reducer.tick();

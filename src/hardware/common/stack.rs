@@ -1,6 +1,5 @@
 use crate::hardware::utils::fire;
-use crate::hw_module::{HwModule, HwStates};
-use crate::{input, local};
+use crate::hw_module::{HwInput, HwModule};
 
 enum StackOp {
     NOP,  // non-op
@@ -21,13 +20,11 @@ struct StackInput<T: Clone + Default> {
     din: T,
 }
 
-#[derive(Default)]
-struct StackLocal<T: Clone + Default> {
-    mem: Vec<T>,
-}
+impl<T: Clone + Default> HwInput for StackInput<T> {}
 
 /// A simple stack that enables asynchronise read and synchronise write
 /// of its top element.
 pub struct Stack<T: Clone + Default, const N: usize> {
-    states: HwStates<StackInput<T>, StackLocal<T>>,
+    input: StackInput<T>,
+    mem: Vec<T>,
 }

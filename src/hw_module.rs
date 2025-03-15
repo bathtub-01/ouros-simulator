@@ -6,37 +6,24 @@
 // all the modules concurrently.
 
 // Usage of a hardware module:
-// At each cycle, `local` represent states in *this* cycle.
-// To go to the next cycle, first use `link_input` to set `input` port values
-// at *this* cycle. Then use `tick` to update `local` to *next* cycle.
+// At each cycle, hw module fields represent states in *this* cycle.
+// To go to the next cycle, first use `link` to set `input` port values
+// at *this* cycle. Then use `tick` to update states to *next* cycle.
 //
 // At the end of `tick`, tick all sub-modules to turn them to *next* cycle.
 //
 // The outputs of hardware modules are implemented as methods. They are always
-// derived from current `input` and `local` states.
+// derived from current states.
 
-/// At a certain clock cycle, hardware contains TWO states:
-///   * `input`: state of its input ports
-///   * `local`: the module's local state
-#[derive(Default)]
-pub struct HwStates<I: Default, L: Default> {
-    pub input: I,
-    pub local: L,
-}
-
-impl<I: Default, L: Default> HwStates<I, L> {
-    /// External world talks to the hw module through this.
-    pub fn link_input(&mut self, new_input: impl FnOnce(&mut I)) {
-        new_input(&mut self.input);
-    }
-
-    pub fn new() -> Self {
-        Default::default()
+/// At a certain clock cycle, it contains states of the input ports
+pub trait HwInput {
+    fn link(&mut self, new_input: impl FnOnce(&mut Self)) {
+        new_input(self);
     }
 }
 
 /// The behavior of a hardware module at each clock cycle:
-///   * `update_local`: update its local `state` (`input` should first be setup
+///   * `update_local`: update its local states (`input` should first be setup
 ///     through `link_input`)
 ///   * `tick_children`: tick all the sub-modules (can run in parallel)
 ///

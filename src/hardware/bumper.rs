@@ -1,40 +1,35 @@
 // Example module to demonstrate the framework's usage.
 
 use crate::hardware::common::Register;
-use crate::hw_module::{HwModule, HwStates};
+use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
 pub struct BumperInput {
     start: bool,
 }
 
-#[derive(Default)]
-pub struct BumperLocal {
-    running: Register<bool>,
-    counter: Register<u32>,
-}
+impl HwInput for BumperInput {}
 
 #[derive(Default)]
 pub struct Bumper {
-    states: HwStates<BumperInput, BumperLocal>,
+    input: BumperInput,
+    running: Register<bool>,
+    counter: Register<u32>,
 }
 
 impl HwModule for Bumper {
     fn update_local(&mut self) {
         // Update local state based on input
-        let input = &self.states.input;
-        let local = &mut self.states.local;
+        self.running.connect(&self.input.start);
 
-        local.running.connect(&input.start);
-
-        if *local.running.value() {
-            local.counter.connect(&(local.counter.value() + 1));
+        if *self.running.value() {
+            self.counter.connect(&(self.counter.value() + 1));
         }
     }
 
     fn tick_children(&mut self) {
-        self.states.local.counter.tick();
-        self.states.local.running.tick();
+        self.counter.tick();
+        self.running.tick();
     }
 }
 
@@ -44,11 +39,11 @@ impl Bumper {
     }
 
     fn res(&self) -> u32 {
-        self.states.local.counter.value().clone()
+        self.counter.value().clone()
     }
 
     fn stm(&self) -> bool {
-        self.states.local.running.value().clone()
+        self.running.value().clone()
     }
 }
 
@@ -56,7 +51,7 @@ impl Bumper {
 fn bumper_spec() {
     let mut bumper = Bumper::new();
 
-    bumper.states.link_input(|input| {
+    bumper.input.link(|input| {
         input.start = true;
     });
 
@@ -67,7 +62,7 @@ fn bumper_spec() {
     bumper.tick();
     assert_eq!(bumper.res(), 2);
 
-    bumper.states.link_input(|input| {
+    bumper.input.link(|input| {
         input.start = false;
     });
 
