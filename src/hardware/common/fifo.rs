@@ -36,7 +36,7 @@ impl<T: Clone + Default, const N: usize> FIFO<T, N> {
     fn dout(&self) -> Option<&T> {
         match self.queue.front() {
             None => None,
-            Some(v) => Some(&v),
+            Some(v) => Some(v),
         }
     }
 }
