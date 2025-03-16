@@ -9,7 +9,8 @@
 // the reducer will be stalled if outputs fail to emit.
 
 use crate::hardware::ouros::combinator::{all_patterns, parse_pat, Hole, ParseRes};
-use crate::hardware::ouros::program::{App, Atom, APP_LENGTH, HOLES};
+use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
+use crate::hardware::ouros::program::{App, Atom};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 

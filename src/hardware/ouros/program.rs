@@ -1,7 +1,5 @@
-use crate::hardware::ouros::combinator::{Arity, Idx, Pat};
-
-pub const HOLES: usize = 6;
-pub const APP_LENGTH: usize = 8;
+use crate::hardware::ouros::combinator::{Arity, Idx};
+use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Atom {

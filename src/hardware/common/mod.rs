@@ -10,3 +10,4 @@ pub use fifo::FIFO;
 pub mod arbiter;
 
 pub mod stack;
+pub use stack::Stack;

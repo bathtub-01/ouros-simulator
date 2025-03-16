@@ -1,4 +1,3 @@
-use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
 enum StackOp {
