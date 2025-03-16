@@ -83,7 +83,7 @@ pub struct DualPortMem<T: Clone + Default> {
 }
 
 impl<T: Clone + Default> DualPortMem<T> {
-    fn new(depth: usize) -> Self {
+    pub fn new(depth: usize) -> Self {
         Self {
             input: Default::default(),
             ram: vec![T::default(); depth],

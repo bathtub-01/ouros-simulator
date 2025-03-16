@@ -1,16 +1,12 @@
 use crate::hw_module::{HwInput, HwModule};
 
+#[derive(Default)]
 enum StackOp {
-    NOP,  // non-op
+    #[default]
+    NOP, // non-op
     PUSH, // push one
     POP,  // pop one
     MOD,  // modify top
-}
-
-impl Default for StackOp {
-    fn default() -> Self {
-        StackOp::NOP
-    }
 }
 
 #[derive(Default)]
@@ -29,7 +25,7 @@ pub struct Stack<T: Clone + Default, const N: usize> {
 }
 
 impl<T: Clone + Default, const N: usize> Stack<T, N> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             input: Default::default(),
             mem: Vec::with_capacity(N),

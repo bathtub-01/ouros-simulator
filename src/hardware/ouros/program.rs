@@ -19,4 +19,9 @@ impl Default for Atom {
 }
 
 pub type App = [Atom; APP_LENGTH];
-pub type DataFlowLink<T> = (u8, T);
+
+#[derive(Default, Clone)]
+pub struct DataFlowPkt<T: Default + Clone> {
+    stack_idx: u8,
+    load: T,
+}
