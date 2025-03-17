@@ -1,10 +1,10 @@
 use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
-struct MemInput<T: Clone + Default> {
-    is_write: bool,
-    addr: usize,
-    din: T,
+pub struct MemInput<T: Clone + Default> {
+    pub is_write: bool,
+    pub addr: usize,
+    pub din: T,
 }
 
 impl<T: Clone + Default> HwInput for MemInput<T> {}
@@ -66,9 +66,9 @@ fn single_port_mem_spec() {
 }
 
 #[derive(Default)]
-struct DualInput<T: Clone + Default> {
-    port_a: MemInput<T>,
-    port_b: MemInput<T>,
+pub struct DualInput<T: Clone + Default> {
+    pub port_a: MemInput<T>,
+    pub port_b: MemInput<T>,
 }
 
 impl<T: Clone + Default> HwInput for DualInput<T> {}
@@ -76,7 +76,7 @@ impl<T: Clone + Default> HwInput for DualInput<T> {}
 /// Synchronous dual port read-write memory.
 /// Read-after-write for the same address.
 pub struct DualPortMem<T: Clone + Default> {
-    input: DualInput<T>,
+    pub input: DualInput<T>,
     ram: Vec<T>,
     holder_a: T,
     holder_b: T,

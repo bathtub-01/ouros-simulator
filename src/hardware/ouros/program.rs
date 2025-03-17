@@ -21,7 +21,13 @@ impl Default for Atom {
 pub type App = [Atom; APP_LENGTH];
 
 #[derive(Default, Clone)]
-pub struct DataFlowPkt<T: Default + Clone> {
-    stack_idx: u8,
-    load: T,
+pub struct ActiveApp {
+    pub stack_idx: u8,
+    pub load: App,
+}
+
+#[derive(Default, Clone)]
+pub struct FrozenApp {
+    pub heap_addr: usize,
+    pub load: [Atom; HOLES - 1],
 }
