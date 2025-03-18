@@ -67,6 +67,10 @@ impl DrfHeap {
         }
     }
 
+    fn port_a_fire(&self) -> bool {
+        fire(self.input.port_a_valid, self.port_a_ready())
+    }
+
     fn output_fire(&self) -> bool {
         fire(self.to_reducer_valid(), self.input.to_reducer_ready)
             || fire(self.to_self_valid(), self.input.to_self_ready)
@@ -134,24 +138,39 @@ fn is_whnf(app: &App) -> bool {
 impl HwModule for DrfHeap {
     fn update_local(&mut self) {
         // handle port_a
+
+        /// handle new input based on its shape, and jump to next state
+        fn handle_new_input(h: &mut DrfHeap) {
+            h.stm.connect(&Stm::IDLE);
+        }
+
         match *self.stm.value() {
-            stm if stm == Stm::IDLE || (stm == Stm::WAIT && self.output_fire()) => {
-                // Code for both IDLE and WAIT when predicate p is true
+            Stm::IDLE => {
+                if self.port_a_fire() {
+                    handle_new_input(self);
+                }
             }
             Stm::WAIT => {
-                // Code for WAIT when predicate p is false
+                if self.output_fire() {
+                    if self.port_a_fire() {
+                        handle_new_input(self);
+                    } else {
+                        self.stm.connect(&Stm::IDLE);
+                    }
+                }
             }
         }
 
         // handle port_b
+
         // always write frozen applications
         if fire(self.input.port_b_valid, self.port_b_ready()) {
             self.heap_mem.input.link(|input| {
                 input.port_b.is_write = true;
-                input.port_b.addr = self.input.port_b_bits.heap_addr; // idx is heap address
+                input.port_b.addr = self.input.port_b_bits.heap_addr;
                 input.port_b.din = HeapCell {
                     working: false,
-                    stack_idx: 0, // idx is stack index
+                    stack_idx: 0,
                     app: {
                         let mut extended: [Atom; APP_LENGTH] = std::array::from_fn(|_| Atom::NOP);
                         for (i, a) in self.input.port_b_bits.load.iter().enumerate() {
