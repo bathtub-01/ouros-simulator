@@ -1,7 +1,7 @@
 use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
-enum StackOp {
+pub enum StackOp {
     #[default]
     NOP, // non-op
     PUSH, // push one
@@ -10,17 +10,17 @@ enum StackOp {
 }
 
 #[derive(Default)]
-struct StackInput<T: Clone + Default> {
-    op: StackOp,
-    din: T,
+pub struct StackInput<T: Clone + Default> {
+    pub op: StackOp,
+    pub din: T,
 }
 
 impl<T: Clone + Default> HwInput for StackInput<T> {}
 
 /// A simple stack that enables asynchronise read and synchronise write
-/// of its top element.
+/// of its top element. Also allows reading top-1 element.
 pub struct Stack<T: Clone + Default, const N: usize> {
-    input: StackInput<T>,
+    pub input: StackInput<T>,
     mem: Vec<T>,
 }
 
@@ -32,8 +32,17 @@ impl<T: Clone + Default, const N: usize> Stack<T, N> {
         }
     }
 
-    fn dout(&self) -> Option<&T> {
+    /// top element of the stack
+    pub fn top(&self) -> Option<&T> {
         match self.mem.last() {
+            None => None,
+            Some(v) => Some(v),
+        }
+    }
+
+    /// second element of the stack
+    pub fn second(&self) -> Option<&T> {
+        match self.mem.get(self.mem.len() - 2) {
             None => None,
             Some(v) => Some(v),
         }
@@ -75,14 +84,14 @@ fn stack_spec() {
     }
 
     for i in 0..64 {
-        assert_eq!(stack.dout(), Some(&(63 - i)));
+        assert_eq!(stack.top(), Some(&(63 - i)));
 
         stack.input.link(|input| {
             input.op = StackOp::MOD;
             input.din = i;
         });
         stack.tick();
-        assert_eq!(stack.dout(), Some(&i));
+        assert_eq!(stack.top(), Some(&i));
 
         stack.input.link(|input| {
             input.op = StackOp::POP;

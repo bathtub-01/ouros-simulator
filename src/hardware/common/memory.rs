@@ -25,7 +25,7 @@ impl<T: Default + Clone> SinglePortMem<T> {
         }
     }
 
-    fn dout(&self) -> &T {
+    pub fn dout(&self) -> &T {
         &self.holder
     }
 }
@@ -92,11 +92,11 @@ impl<T: Clone + Default> DualPortMem<T> {
         }
     }
 
-    fn dout_a(&self) -> &T {
+    pub fn dout_a(&self) -> &T {
         &self.holder_a
     }
 
-    fn dout_b(&self) -> &T {
+    pub fn dout_b(&self) -> &T {
         &self.holder_b
     }
 }
