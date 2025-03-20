@@ -99,6 +99,12 @@ impl<T: Clone + Default> DualPortMem<T> {
         }
     }
 
+    /// Set default contents in the ram.
+    pub fn image(&mut self, img: &Vec<T>) {
+        assert!(self.ram.len() >= img.len());
+        self.ram.splice(0..img.len(), img.clone());
+    }
+
     pub fn dout_a(&self) -> &T {
         &self.holder_a
     }

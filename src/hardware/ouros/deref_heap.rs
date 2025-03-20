@@ -8,7 +8,7 @@
 use crate::hardware::common::stack::StackOp;
 use crate::hardware::common::{DualPortMem, Register, Stack};
 use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
-use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
+use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp, Program};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
@@ -69,6 +69,26 @@ impl DrfHeap {
             heap_mem: DualPortMem::new(heap_size),
             holder_out: Default::default(),
         }
+    }
+
+    /// When creating a `DrfHeap`, put a compiled program into the heap memory.
+    pub fn program(mut self, prog: &Program) -> Self {
+        fn convert(atms: &Vec<Atom>) -> HeapCell {
+            assert!(atms.len() <= APP_LENGTH);
+            let mut app: App = std::array::from_fn(|_| Atom::NOP);
+            for (i, atm) in atms.iter().enumerate() {
+                app[i] = atm.clone();
+            }
+            HeapCell {
+                working: false,
+                stack_idx: 0,
+                app,
+            }
+        }
+        // convert Vec<Vec<Atom>> to Vec<HeapCell>
+        let img: Vec<HeapCell> = prog.iter().map(convert).collect();
+        self.heap_mem.image(&img);
+        self
     }
 
     fn port_a_fire(&self) -> bool {

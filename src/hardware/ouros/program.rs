@@ -32,4 +32,6 @@ pub struct FrozenApp {
     pub load: [Atom; HOLES - 1],
 }
 
-pub type Program = Vec<App>;
+/// For compiler generated programs. Using `Vec<Vec<Atom>>` instead of
+/// `Vec<App>` will make the compiler side easier..
+pub type Program = Vec<Vec<Atom>>;
