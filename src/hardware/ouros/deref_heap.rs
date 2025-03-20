@@ -394,3 +394,10 @@ impl HwModule for DrfHeap {
         self.heap_mem.tick();
     }
 }
+
+#[test]
+fn drfheap_spec() {
+    let mut drfheap = DrfHeap::new(128);
+
+    // drfheap.heap_mem.ram
+}

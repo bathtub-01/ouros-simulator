@@ -31,3 +31,5 @@ pub struct FrozenApp {
     pub heap_addr: usize,
     pub load: [Atom; HOLES - 1],
 }
+
+pub type Program = Vec<App>;
