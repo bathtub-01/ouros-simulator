@@ -17,9 +17,13 @@
 
 /// At a certain clock cycle, it contains states of the input ports
 pub trait HwInput {
+    /// Update the input state at this cycle.
     fn link(&mut self, new_input: impl FnOnce(&mut Self)) {
         new_input(self);
     }
+
+    /// Default input of this module
+    fn default_input(&mut self) {}
 }
 
 /// The behavior of a hardware module at each clock cycle:

@@ -7,7 +7,14 @@ pub struct MemInput<T: Clone + Default> {
     pub din: T,
 }
 
-impl<T: Clone + Default> HwInput for MemInput<T> {}
+impl<T: Clone + Default> HwInput for MemInput<T> {
+    fn default_input(&mut self) {
+        self.link(|input| {
+            input.is_write = false;
+            // Don't care default input.din and input.addr
+        });
+    }
+}
 
 /// Synchronous single port read-write memory
 pub struct SinglePortMem<T: Clone + Default> {
@@ -17,7 +24,7 @@ pub struct SinglePortMem<T: Clone + Default> {
 }
 
 impl<T: Default + Clone> SinglePortMem<T> {
-    fn new(depth: usize) -> Self {
+    pub fn new(depth: usize) -> Self {
         Self {
             input: Default::default(),
             ram: vec![T::default(); depth],

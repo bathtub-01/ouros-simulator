@@ -15,7 +15,14 @@ pub struct StackInput<T: Clone + Default> {
     pub din: T,
 }
 
-impl<T: Clone + Default> HwInput for StackInput<T> {}
+impl<T: Clone + Default> HwInput for StackInput<T> {
+    fn default_input(&mut self) {
+        self.link(|input| {
+            input.op = StackOp::NOP;
+            // Don't care default input.din
+        });
+    }
+}
 
 /// A simple stack that enables asynchronise read and synchronise write
 /// of its top element. Also allows reading top-1 element.
