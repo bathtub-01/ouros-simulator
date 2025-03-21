@@ -14,6 +14,7 @@ use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
 struct DrfHeapInput {
+    start: bool,
     port_a_valid: bool,
     port_a_bits: ActiveApp,
     port_b_valid: bool,
@@ -57,6 +58,7 @@ pub struct DrfHeap {
     thread_stack: [Stack<StackCell, 128>; 8],
     heap_mem: DualPortMem<HeapCell>,
     holder_out: (Dest, bool, ActiveApp), // output-reg: (destination, valid, app)
+    working: Register<bool>,             // track whether the machine is working
 }
 
 impl DrfHeap {
@@ -68,6 +70,7 @@ impl DrfHeap {
             thread_stack: std::array::from_fn(|_| Stack::new()),
             heap_mem: DualPortMem::new(heap_size),
             holder_out: Default::default(),
+            working: Default::default(),
         }
     }
 
@@ -130,6 +133,11 @@ impl DrfHeap {
 
     pub fn to_self_bits(&self) -> &ActiveApp {
         &self.holder_out.2
+    }
+
+    /// machine's work has been finished
+    pub fn done(&self) -> bool {
+        !self.working.value()
     }
 }
 
@@ -229,6 +237,40 @@ impl HwModule for DrfHeap {
         self.heap_mem.input.default_input();
         for stk in &mut self.thread_stack {
             stk.input.default_input();
+        }
+
+        // start the machine
+        if !self.working.value() {
+            if self.input.start {
+                self.working.connect(&true);
+                // push to stack
+                self.thread_stack[0].input.link(|input| {
+                    input.op = StackOp::PUSH;
+                    input.din = 0;
+                });
+                // put output register
+                let main = &self.heap_mem.dout_a().app;
+                self.holder_out = (
+                    which_dest(main),
+                    true,
+                    ActiveApp {
+                        stack_idx: 0,
+                        load: main.clone(),
+                    },
+                );
+            }
+            return;
+        }
+        // stop the machine when finished
+        if self.port_a_fire() {
+            // if its main in WHNF
+            if self.thread_stack[0].elements() == 1
+                && self.input.port_a_bits.stack_idx == 0
+                && is_whnf(&self.input.port_a_bits.load)
+            {
+                self.working.connect(&false);
+                return;
+            }
         }
 
         // handle port_a
@@ -417,7 +459,8 @@ impl HwModule for DrfHeap {
 
 #[test]
 fn drfheap_spec() {
-    let mut drfheap = DrfHeap::new(128);
+    use super::benchmarks::playground;
+    let mut drfheap = DrfHeap::new(128).program(&playground::BOOL_AND);
 
     // drfheap.heap_mem.ram
 }

@@ -54,6 +54,11 @@ impl<T: Clone + Default, const N: usize> Stack<T, N> {
             Some(v) => Some(v),
         }
     }
+
+    /// current depth of the stack
+    pub fn elements(&self) -> usize {
+        self.mem.len()
+    }
 }
 
 impl<T: Clone + Default, const N: usize> HwModule for Stack<T, N> {
