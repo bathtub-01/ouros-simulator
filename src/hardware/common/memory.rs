@@ -9,10 +9,7 @@ pub struct MemInput<T: Clone + Default> {
 
 impl<T: Clone + Default> HwInput for MemInput<T> {
     fn default_input(&mut self) {
-        self.link(|input| {
-            input.is_write = false;
-            // Don't care default input.din and input.addr
-        });
+        self.is_write = false;
     }
 }
 
@@ -78,7 +75,12 @@ pub struct DualInput<T: Clone + Default> {
     pub port_b: MemInput<T>,
 }
 
-impl<T: Clone + Default> HwInput for DualInput<T> {}
+impl<T: Clone + Default> HwInput for DualInput<T> {
+    fn default_input(&mut self) {
+        self.port_a.is_write = false;
+        self.port_b.is_write = false;
+    }
+}
 
 /// Synchronous dual port read-write memory.
 /// Read-after-write for the same address.

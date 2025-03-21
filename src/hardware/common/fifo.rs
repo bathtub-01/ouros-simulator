@@ -9,7 +9,12 @@ struct FIFOInput<T: Clone + Default> {
     din: T,
 }
 
-impl<T: Clone + Default> HwInput for FIFOInput<T> {}
+impl<T: Clone + Default> HwInput for FIFOInput<T> {
+    fn default_input(&mut self) {
+        self.in_valid = false;
+        self.out_ready = false;
+    }
+}
 
 /// FIFO, with size N. Supports pipelining when full.
 pub struct FIFO<T: Clone + Default, const N: usize> {
@@ -18,7 +23,7 @@ pub struct FIFO<T: Clone + Default, const N: usize> {
 }
 
 impl<T: Clone + Default, const N: usize> FIFO<T, N> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             input: Default::default(),
             queue: VecDeque::with_capacity(N),

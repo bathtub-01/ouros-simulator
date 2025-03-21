@@ -13,7 +13,7 @@ use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
-struct DrfHeapInput {
+pub struct DrfHeapInput {
     start: bool,
     port_a_valid: bool,
     port_a_bits: ActiveApp,
@@ -51,8 +51,9 @@ struct HeapCell {
     app: App,
 }
 
+// TODO: enable stack depth configuration
 pub struct DrfHeap {
-    input: DrfHeapInput,
+    pub input: DrfHeapInput,
     stm: Register<Stm>,
     holder_in: ActiveApp,
     thread_stack: [Stack<StackCell, 128>; 8],

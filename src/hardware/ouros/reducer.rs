@@ -38,7 +38,7 @@ pub struct Reducer {
 }
 
 impl Reducer {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let parsed: Vec<ParseRes> = all_patterns().iter().map(|p| parse_pat(p)).collect();
         let decode_table: [ParseRes; 64] = parsed
             .try_into()

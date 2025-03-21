@@ -17,10 +17,7 @@ pub struct StackInput<T: Clone + Default> {
 
 impl<T: Clone + Default> HwInput for StackInput<T> {
     fn default_input(&mut self) {
-        self.link(|input| {
-            input.op = StackOp::NOP;
-            // Don't care default input.din
-        });
+        self.op = StackOp::NOP;
     }
 }
 
