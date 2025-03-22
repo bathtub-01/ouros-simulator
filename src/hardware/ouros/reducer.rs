@@ -10,31 +10,31 @@
 
 use crate::hardware::ouros::combinator::{all_patterns, parse_pat, Hole, ParseRes};
 use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
-use crate::hardware::ouros::program::{App, Atom};
+use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
-struct ReducerInput {
-    in_valid: bool,
-    in_app: App,
-    spine_ready: bool,
-    app1_ready: bool,
-    app2_ready: bool,
-    app3_ready: bool,
+pub struct ReducerInput {
+    pub in_valid: bool,
+    pub in_app: ActiveApp,
+    pub spine_ready: bool,
+    pub app1_ready: bool,
+    pub app2_ready: bool,
+    pub app3_ready: bool,
     // receive free address from GC
-    free_addr: usize,
+    pub free_addr: usize,
 }
 
 impl HwInput for ReducerInput {}
 
 pub struct Reducer {
-    input: ReducerInput,
+    pub input: ReducerInput,
     decode_table: [ParseRes; 64],
-    spine_holder: (bool, [Atom; APP_LENGTH]), // to support over-applied apps, spine should be a full app length
-    app1_holder: (bool, [Atom; HOLES - 1]),
-    app2_holder: (bool, [Atom; HOLES - 2]),
-    app3_holder: (bool, [Atom; HOLES - 3]),
+    spine_holder: (bool, ActiveApp),
+    app1_holder: (bool, FrozenApp),
+    app2_holder: (bool, FrozenApp),
+    app3_holder: (bool, FrozenApp),
 }
 
 impl Reducer {
@@ -54,23 +54,23 @@ impl Reducer {
         }
     }
 
-    fn spine(&self) -> &(bool, [Atom; APP_LENGTH]) {
+    pub fn spine(&self) -> &(bool, ActiveApp) {
         &self.spine_holder
     }
 
-    fn app1(&self) -> &(bool, [Atom; HOLES - 1]) {
+    pub fn app1(&self) -> &(bool, FrozenApp) {
         &self.app1_holder
     }
 
-    fn app2(&self) -> &(bool, [Atom; HOLES - 2]) {
+    pub fn app2(&self) -> &(bool, FrozenApp) {
         &self.app2_holder
     }
 
-    fn app3(&self) -> &(bool, [Atom; HOLES - 3]) {
+    pub fn app3(&self) -> &(bool, FrozenApp) {
         &self.app3_holder
     }
 
-    fn in_ready(&self) -> bool {
+    pub fn in_ready(&self) -> bool {
         // all holder registers should be either (1) free or (2) firing in this cycle
         let spine = self.spine_holder.0;
         let app1 = self.app1_holder.0;
@@ -84,9 +84,9 @@ impl Reducer {
     }
 
     /// The number of heap cells will be consumed in this cycle
-    fn addr_consumed(&self) -> usize {
+    pub fn addr_consumed(&self) -> usize {
         if fire(self.input.in_valid, self.in_ready()) {
-            match self.input.in_app[0] {
+            match self.input.in_app.load[0] {
                 Atom::COM(_, code, _) => {
                     let res = &self.decode_table[code as usize];
                     [
@@ -122,7 +122,7 @@ impl HwModule for Reducer {
         }
 
         if fire(self.input.in_valid, self.in_ready()) {
-            match self.input.in_app[0] {
+            match self.input.in_app.load[0] {
                 Atom::COM(arity, code, is) => {
                     let res = &self.decode_table[code as usize];
                     let spine = &mut self.spine_holder;
@@ -131,7 +131,7 @@ impl HwModule for Reducer {
                     let app2 = &mut self.app2_holder;
                     let app3 = &mut self.app3_holder;
                     let trans = |h: &Hole| match h {
-                        Hole::Arg(a) => in_app[is[*a as usize] as usize + 1].clone(),
+                        Hole::Arg(a) => in_app.load[is[*a as usize] as usize + 1].clone(),
                         Hole::Ptr(p) => Atom::PTR(*p as usize + self.input.free_addr),
                     };
                     let gen_res = |v: &Vec<Hole>, a: &mut [Atom]| {
@@ -144,29 +144,34 @@ impl HwModule for Reducer {
                         }
                     };
                     // perform reduction
-                    gen_res(&res.spine, &mut spine.1);
-                    gen_res(&res.app1, &mut app1.1);
-                    gen_res(&res.app2, &mut app2.1);
-                    gen_res(&res.app3, &mut app3.1);
+                    gen_res(&res.spine, &mut spine.1.load);
+                    gen_res(&res.app1, &mut app1.1.load);
+                    gen_res(&res.app2, &mut app2.1.load);
+                    gen_res(&res.app3, &mut app3.1.load);
                     // append the spine for over-applied cases:
                     // e.g., S a b c x y = a c (b c) x y
                     let before = arity as usize + 1;
                     let after = res.spine.len();
                     for i in 0..(APP_LENGTH - before) {
                         if after + i < APP_LENGTH {
-                            spine.1[after + i] = in_app[before + i].clone();
-                        } else if before + i < APP_LENGTH && in_app[before + i] != Atom::NOP {
+                            spine.1.load[after + i] = in_app.load[before + i].clone();
+                        } else if before + i < APP_LENGTH && in_app.load[before + i] != Atom::NOP {
                             // over-sized result will be a runtime error..
                             panic!("reducer: over-sized over-applied app!");
                         } else {
                             break;
                         }
                     }
+                    // pass the stack idx for the spine; heap addr for nested apps
+                    spine.1.stack_idx = in_app.stack_idx;
+                    app1.1.heap_addr = self.input.free_addr;
+                    app2.1.heap_addr = self.input.free_addr + 1;
+                    app3.1.heap_addr = self.input.free_addr + 2;
                     // valid for output
                     spine.0 = true;
-                    app1.0 = app1.1[0] != Atom::NOP;
-                    app2.0 = app2.1[0] != Atom::NOP;
-                    app3.0 = app3.1[0] != Atom::NOP;
+                    app1.0 = app1.1.load[0] != Atom::NOP;
+                    app2.0 = app2.1.load[0] != Atom::NOP;
+                    app3.0 = app3.1.load[0] != Atom::NOP;
                 }
                 _ => panic!("reducer: app head is not combinator!"),
             }
@@ -199,7 +204,8 @@ fn reducer_spec() {
         input.free_addr = 42;
 
         input.in_valid = true;
-        input.in_app = [
+        input.in_app.stack_idx = 101;
+        input.in_app.load = [
             COM(6, 48, [2, 0, 1, 3, 4, 5]), // XX(XX(XX))
             PTR(0),
             PTR(1),
@@ -217,7 +223,8 @@ fn reducer_spec() {
     reducer.input.link(|input| {
         input.free_addr = 44;
         input.in_valid = true;
-        input.in_app = [
+        input.in_app.stack_idx = 202;
+        input.in_app.load = [
             COM(3, 6, [0, 2, 1, 2, 0, 0]), // XX(XX)
             PTR(0),
             PTR(1),

@@ -2,10 +2,10 @@ use crate::hardware::common::Register;
 use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
-struct ArbiterInput<T: Clone + Default> {
-    in_valid: Vec<bool>,
-    in_bits: Vec<T>,
-    out_ready: bool,
+pub struct ArbiterInput<T: Clone + Default> {
+    pub in_valid: Vec<bool>,
+    pub in_bits: Vec<T>,
+    pub out_ready: bool,
 }
 
 impl<T: Clone + Default> HwInput for ArbiterInput<T> {}
@@ -13,7 +13,7 @@ impl<T: Clone + Default> HwInput for ArbiterInput<T> {}
 /// N:1 round-robin arbiter.
 #[derive(Default)]
 pub struct Arbiter<T: Clone + Default, const N: usize> {
-    input: ArbiterInput<T>,
+    pub input: ArbiterInput<T>,
     priority: Register<usize>,
 }
 

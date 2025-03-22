@@ -20,13 +20,13 @@ impl Default for Atom {
 
 pub type App = [Atom; APP_LENGTH];
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct ActiveApp {
     pub stack_idx: u8,
     pub load: App,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct FrozenApp {
     pub heap_addr: usize,
     pub load: [Atom; HOLES - 1],

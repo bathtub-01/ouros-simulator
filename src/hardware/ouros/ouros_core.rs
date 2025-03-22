@@ -1,3 +1,5 @@
+// Top level module of the Ouros core.
+
 use crate::hardware::common::{Arbiter, FIFO};
 use crate::hw_module::{HwInput, HwModule};
 
@@ -60,7 +62,14 @@ impl OurosCore {
 }
 
 impl HwModule for OurosCore {
-    fn update_local(&mut self) {}
+    fn update_local(&mut self) {
+        // connect buffers to arbiters
+        self.arbiter_dheap_a.input.link(|input| {
+            input.in_bits[0] = self.dheap.to_self_bits().clone();
+            input.in_valid[0] = self.dheap.to_self_valid();
+            input.in_bits[1] = self.reducer.spine().1.clone();
+        });
+    }
 
     fn tick_children(&mut self) {
         self.dheap.tick();
