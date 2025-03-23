@@ -3,10 +3,10 @@ use crate::hw_module::{HwInput, HwModule};
 use std::collections::VecDeque;
 
 #[derive(Default)]
-struct FIFOInput<T: Clone + Default> {
-    in_valid: bool,
-    out_ready: bool,
-    din: T,
+pub struct FIFOInput<T: Clone + Default> {
+    pub in_valid: bool,
+    pub out_ready: bool,
+    pub din: T,
 }
 
 impl<T: Clone + Default> HwInput for FIFOInput<T> {
@@ -18,7 +18,7 @@ impl<T: Clone + Default> HwInput for FIFOInput<T> {
 
 /// FIFO, with size N. Supports pipelining when full.
 pub struct FIFO<T: Clone + Default, const N: usize> {
-    input: FIFOInput<T>,
+    pub input: FIFOInput<T>,
     queue: VecDeque<T>,
 }
 
@@ -30,15 +30,15 @@ impl<T: Clone + Default, const N: usize> FIFO<T, N> {
         }
     }
 
-    fn in_ready(&self) -> bool {
+    pub fn in_ready(&self) -> bool {
         self.queue.len() < N || fire(self.input.out_ready, self.out_valid())
     }
 
-    fn out_valid(&self) -> bool {
+    pub fn out_valid(&self) -> bool {
         !self.queue.is_empty()
     }
 
-    fn dout(&self) -> Option<&T> {
+    pub fn dout(&self) -> Option<&T> {
         match self.queue.front() {
             None => None,
             Some(v) => Some(v),

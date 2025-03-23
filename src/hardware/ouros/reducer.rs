@@ -22,8 +22,7 @@ pub struct ReducerInput {
     pub app1_ready: bool,
     pub app2_ready: bool,
     pub app3_ready: bool,
-    // receive free address from GC
-    pub free_addr: usize,
+    pub free_addr: usize, // receive free address from GC
 }
 
 impl HwInput for ReducerInput {}

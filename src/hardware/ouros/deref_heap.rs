@@ -14,15 +14,14 @@ use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
 pub struct DrfHeapInput {
-    start: bool,
-    port_a_valid: bool,
-    port_a_bits: ActiveApp,
-    port_b_valid: bool,
-    port_b_bits: FrozenApp,
-    to_reducer_ready: bool,
-    to_self_ready: bool,
-    // address request from reducer (for GC)
-    addr_consumed: usize,
+    pub start: bool,
+    pub port_a_valid: bool,
+    pub port_a_bits: ActiveApp,
+    pub port_b_valid: bool,
+    pub port_b_bits: FrozenApp,
+    pub to_reducer_ready: bool,
+    pub to_self_ready: bool,
+    pub addr_consumed: usize, // address request from reducer (for GC)
 }
 
 impl HwInput for DrfHeapInput {}

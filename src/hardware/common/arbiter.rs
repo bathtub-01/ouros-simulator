@@ -10,15 +10,15 @@ pub struct ArbiterInput<T: Clone + Default> {
 
 impl<T: Clone + Default> HwInput for ArbiterInput<T> {}
 
-/// N:1 round-robin arbiter.
-#[derive(Default)]
+/// N:1 round-robin arbiter. As this is mainly a combinatory circuit,
+/// always give the inputs before use its outputs.
 pub struct Arbiter<T: Clone + Default, const N: usize> {
     pub input: ArbiterInput<T>,
     priority: Register<usize>,
 }
 
 impl<T: Clone + Default, const N: usize> Arbiter<T, N> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             input: ArbiterInput {
                 in_valid: vec![false; N],
@@ -29,7 +29,7 @@ impl<T: Clone + Default, const N: usize> Arbiter<T, N> {
         }
     }
 
-    fn in_ready(&self, n: usize, select: Option<usize>) -> bool {
+    pub fn in_ready(&self, n: usize, select: Option<usize>) -> bool {
         if self.input.out_ready {
             match select {
                 None => false,
@@ -40,18 +40,18 @@ impl<T: Clone + Default, const N: usize> Arbiter<T, N> {
         }
     }
 
-    fn out_bits(&self, select: Option<usize>) -> Option<&T> {
+    pub fn out_bits(&self, select: Option<usize>) -> Option<&T> {
         match select {
             None => None,
             Some(p) => Some(&self.input.in_bits[p]),
         }
     }
 
-    fn out_valid(&self) -> bool {
+    pub fn out_valid(&self) -> bool {
         self.input.in_valid.iter().any(|&x| x)
     }
 
-    fn select(&self) -> Option<usize> {
+    pub fn select(&self) -> Option<usize> {
         if self.input.out_ready {
             for i in 0..N {
                 let port = (i + self.priority.value()) % N;

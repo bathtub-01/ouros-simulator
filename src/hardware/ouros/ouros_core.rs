@@ -43,16 +43,16 @@ impl OurosCore {
 
             buffers_dheap_a_0: FIFO::new(),
             buffers_dheap_a_1: FIFO::new(),
-            arbiter_dheap_a: Default::default(),
+            arbiter_dheap_a: Arbiter::new(),
 
             buffers_dheap_b_0: FIFO::new(),
             buffers_dheap_b_1: FIFO::new(),
             buffers_dheap_b_2: FIFO::new(),
-            arbiter_dheap_b: Default::default(),
+            arbiter_dheap_b: Arbiter::new(),
 
             buffers_reducer_0: FIFO::new(),
             buffers_reducer_1: FIFO::new(),
-            arbiter_reducer: Default::default(),
+            arbiter_reducer: Arbiter::new(),
         }
     }
 
@@ -61,14 +61,56 @@ impl OurosCore {
     }
 }
 
+fn assign_some<T: Clone>(sink: &mut T, source: Option<&T>) {
+    match source {
+        None => {}
+        Some(v) => {
+            *sink = v.clone();
+        }
+    }
+}
+
+/// Connects input buffers of the arbiter
+fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize>(
+    buffers: [&mut FIFO<T, N>; A],
+    arbiter: &mut Arbiter<T, A>,
+) {
+    // first handle arbiter's inputs
+    arbiter.input.link(|input| {
+        for (i, b) in buffers.iter().enumerate() {
+            assign_some(&mut input.in_bits[i], b.dout());
+            input.in_valid[i] = b.out_valid();
+        }
+    });
+    let select = arbiter.select();
+    for (i, b) in buffers.into_iter().enumerate() {
+        b.input.out_ready = arbiter.in_ready(i, select);
+    }
+}
+
 impl HwModule for OurosCore {
     fn update_local(&mut self) {
         // connect buffers to arbiters
-        self.arbiter_dheap_a.input.link(|input| {
-            input.in_bits[0] = self.dheap.to_self_bits().clone();
-            input.in_valid[0] = self.dheap.to_self_valid();
-            input.in_bits[1] = self.reducer.spine().1.clone();
-        });
+        buffers_arbiter(
+            [&mut self.buffers_dheap_a_0, &mut self.buffers_dheap_a_1],
+            &mut self.arbiter_dheap_a,
+        );
+        buffers_arbiter(
+            [
+                &mut self.buffers_dheap_b_0,
+                &mut self.buffers_dheap_b_1,
+                &mut self.buffers_dheap_b_2,
+            ],
+            &mut self.arbiter_dheap_b,
+        );
+        buffers_arbiter(
+            [&mut self.buffers_reducer_0, &mut self.buffers_reducer_1],
+            &mut self.arbiter_reducer,
+        );
+
+        // connect arbiters as components' input
+
+        // connect components' output to buffers
     }
 
     fn tick_children(&mut self) {
