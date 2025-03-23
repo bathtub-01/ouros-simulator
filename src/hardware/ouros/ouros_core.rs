@@ -4,7 +4,7 @@ use crate::hardware::common::{Arbiter, FIFO};
 use crate::hw_module::{HwInput, HwModule};
 
 use super::deref_heap::DrfHeap;
-use super::program::{ActiveApp, FrozenApp};
+use super::program::{is_whnf, ActiveApp, FrozenApp, Program};
 use super::reducer::Reducer;
 
 #[derive(Default)]
@@ -35,10 +35,10 @@ struct OurosCore {
 }
 
 impl OurosCore {
-    pub fn new() -> Self {
+    pub fn new(prog: Program) -> Self {
         Self {
             input: Default::default(),
-            dheap: DrfHeap::new(128),
+            dheap: DrfHeap::new(128).program(&prog),
             reducer: Reducer::new(),
 
             buffers_dheap_a_0: FIFO::new(),
@@ -70,7 +70,7 @@ fn assign_some<T: Clone>(sink: &mut T, source: Option<&T>) {
     }
 }
 
-/// Connects input buffers of the arbiter
+/// Connect input buffers of the arbiter
 fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize>(
     buffers: [&mut FIFO<T, N>; A],
     arbiter: &mut Arbiter<T, A>,
@@ -90,6 +90,25 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize>(
 
 impl HwModule for OurosCore {
     fn update_local(&mut self) {
+        /*
+        NOTICE: there is a combinatory logic ring in the whole cicuit,
+        which is critical to allow pipelining when buffers are full.
+        Due to the combinatory logic ring, the order of assigning inputs
+        matters and might be buggy here. Keep this in mind if anything
+        strange occurs in the future..
+         */
+        // set default inputs
+        self.buffers_dheap_a_1.input.default_input();
+        self.buffers_reducer_0.input.default_input();
+
+        // connect start signal
+        self.dheap.input.start = self.input.start;
+
+        // connect arbiters as components' input (arbiter first)
+        self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
+        self.arbiter_dheap_b.input.out_ready = self.dheap.port_b_ready();
+        self.arbiter_reducer.input.out_ready = self.reducer.in_ready();
+
         // connect buffers to arbiters
         buffers_arbiter(
             [&mut self.buffers_dheap_a_0, &mut self.buffers_dheap_a_1],
@@ -109,8 +128,70 @@ impl HwModule for OurosCore {
         );
 
         // connect arbiters as components' input
+        self.dheap.input.link(|input| {
+            input.port_a_valid = self.arbiter_dheap_a.out_valid();
+            match self.arbiter_dheap_a.out_bits(self.arbiter_dheap_a.select()) {
+                None => {}
+                Some(v) => {
+                    input.port_a_bits = v.clone();
+                }
+            }
+            input.port_b_valid = self.arbiter_dheap_b.out_valid();
+            match self.arbiter_dheap_b.out_bits(self.arbiter_dheap_b.select()) {
+                None => {}
+                Some(v) => {
+                    input.port_b_bits = v.clone();
+                }
+            }
+        });
+        self.reducer.input.link(|input| {
+            input.in_valid = self.arbiter_reducer.out_valid();
+            match self.arbiter_reducer.out_bits(self.arbiter_reducer.select()) {
+                None => {}
+                Some(v) => {
+                    input.in_app = v.clone();
+                }
+            }
+        });
 
         // connect components' output to buffers
+        self.buffers_dheap_a_0.input.in_valid = self.dheap.to_self_valid();
+        self.buffers_dheap_a_0.input.din = self.dheap.to_self_bits().clone();
+        self.dheap.input.to_self_ready = self.buffers_dheap_a_0.in_ready();
+
+        self.buffers_reducer_1.input.in_valid = self.dheap.to_reducer_valid();
+        self.buffers_reducer_1.input.din = self.dheap.to_reducer_bits().clone();
+        self.dheap.input.to_reducer_ready = self.buffers_reducer_1.in_ready();
+
+        self.buffers_dheap_b_0.input.in_valid = self.reducer.app1().0;
+        self.buffers_dheap_b_0.input.din = self.reducer.app1().1.clone();
+        self.reducer.input.app1_ready = self.buffers_dheap_b_0.in_ready();
+
+        self.buffers_dheap_b_1.input.in_valid = self.reducer.app2().0;
+        self.buffers_dheap_b_1.input.din = self.reducer.app2().1.clone();
+        self.reducer.input.app2_ready = self.buffers_dheap_b_1.in_ready();
+
+        self.buffers_dheap_b_2.input.in_valid = self.reducer.app3().0;
+        self.buffers_dheap_b_2.input.din = self.reducer.app3().1.clone();
+        self.reducer.input.app3_ready = self.buffers_dheap_b_2.in_ready();
+
+        if self.reducer.spine().0 {
+            if is_whnf(&self.reducer.spine().1.load) {
+                // connect to dheap
+                self.buffers_dheap_a_1.input.in_valid = true;
+                self.buffers_dheap_a_1.input.din = self.reducer.spine().1.clone();
+                self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
+            } else {
+                // connect to reducer
+                self.buffers_reducer_0.input.in_valid = true;
+                self.buffers_reducer_0.input.din = self.reducer.spine().1.clone();
+                self.reducer.input.spine_ready = self.buffers_reducer_0.in_ready();
+            }
+        }
+
+        // gc control signals
+        self.reducer.input.free_addr = self.dheap.free_addr();
+        self.dheap.input.addr_consumed = self.reducer.addr_consumed();
     }
 
     fn tick_children(&mut self) {

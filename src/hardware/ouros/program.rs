@@ -35,3 +35,38 @@ pub struct FrozenApp {
 /// For compiler generated programs. Using `Vec<Vec<Atom>>` instead of
 /// `Vec<App>` will make the compiler side easier..
 pub type Program = Vec<Vec<Atom>>;
+
+fn arity_of(atom: &Atom) -> u8 {
+    use Atom::*;
+    match atom {
+        COM(a, _, _) => *a,
+        PRM(_) => 2,
+        Y => 1,
+        _ => 0,
+    }
+}
+
+/// The length of an application, stripping off NOPs.
+pub fn app_length(app: &App) -> usize {
+    let found = app.iter().enumerate().find(|&(_, atom)| *atom == Atom::NOP);
+    match found {
+        Some((idx, _)) => idx,
+        None => APP_LENGTH,
+    }
+}
+
+#[test]
+fn app_length_spec() {
+    use Atom::*;
+    let a: App = [PTR(0), INT(1), INT(2), INT(3), NOP, NOP, NOP, NOP];
+    let b: App = [Y, Y, Y, Y, Y, Y, Y, Y];
+    assert_eq!(app_length(&a), 4);
+    assert_eq!(app_length(&b), APP_LENGTH);
+}
+
+/// Determine whether an Application is in Weak-Head-Normal-Form.
+pub fn is_whnf(app: &App) -> bool {
+    // +, a, b --- false
+    // +, a    --- true
+    arity_of(&app[0]) >= app_length(app) as u8
+}

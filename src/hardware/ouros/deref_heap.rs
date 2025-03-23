@@ -8,7 +8,9 @@
 use crate::hardware::common::stack::StackOp;
 use crate::hardware::common::{DualPortMem, Register, Stack};
 use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
-use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp, Program};
+use crate::hardware::ouros::program::{
+    app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program,
+};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
@@ -59,6 +61,7 @@ pub struct DrfHeap {
     heap_mem: DualPortMem<HeapCell>,
     holder_out: (Dest, bool, ActiveApp), // output-reg: (destination, valid, app)
     working: Register<bool>,             // track whether the machine is working
+    addr_bumper: Register<usize>,
 }
 
 impl DrfHeap {
@@ -71,6 +74,7 @@ impl DrfHeap {
             heap_mem: DualPortMem::new(heap_size),
             holder_out: Default::default(),
             working: Default::default(),
+            addr_bumper: Default::default(),
         }
     }
 
@@ -139,41 +143,10 @@ impl DrfHeap {
     pub fn done(&self) -> bool {
         !self.working.value()
     }
-}
 
-fn arity_of(atom: &Atom) -> u8 {
-    use Atom::*;
-    match atom {
-        COM(a, _, _) => *a,
-        PRM(_) => 2,
-        Y => 1,
-        _ => 0,
+    pub fn free_addr(&self) -> usize {
+        *self.addr_bumper.value()
     }
-}
-
-/// The length of an application, stripping off NOPs.
-fn app_length(app: &App) -> usize {
-    let found = app.iter().enumerate().find(|&(_, atom)| *atom == Atom::NOP);
-    match found {
-        Some((idx, _)) => idx,
-        None => APP_LENGTH,
-    }
-}
-
-#[test]
-fn app_length_spec() {
-    use Atom::*;
-    let a: App = [PTR(0), INT(1), INT(2), INT(3), NOP, NOP, NOP, NOP];
-    let b: App = [Y, Y, Y, Y, Y, Y, Y, Y];
-    assert_eq!(app_length(&a), 4);
-    assert_eq!(app_length(&b), APP_LENGTH);
-}
-
-/// Determine whether an Application is in Weak-Head-Normal-Form.
-fn is_whnf(app: &App) -> bool {
-    // +, a, b --- false
-    // +, a    --- true
-    arity_of(&app[0]) >= app_length(app) as u8
 }
 
 /// Determine the destination of an output application
@@ -238,6 +211,10 @@ impl HwModule for DrfHeap {
         for stk in &mut self.thread_stack {
             stk.input.default_input();
         }
+
+        // rise addr bumper
+        self.addr_bumper
+            .connect(&(self.addr_bumper.value() + self.input.addr_consumed));
 
         // start the machine
         if !self.working.value() {
@@ -454,6 +431,8 @@ impl HwModule for DrfHeap {
             stk.tick();
         }
         self.heap_mem.tick();
+        self.working.tick();
+        self.addr_bumper.tick();
     }
 }
 
