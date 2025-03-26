@@ -7,7 +7,7 @@
 
 use crate::hardware::common::stack::StackOp;
 use crate::hardware::common::{DualPortMem, Register, Stack};
-use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
+use crate::hardware::ouros::config::APP_LENGTH;
 use crate::hardware::ouros::program::{
     app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program,
 };
@@ -52,6 +52,11 @@ struct HeapCell {
     app: App,
 }
 
+#[derive(Default)]
+pub struct DrfHeapStat {
+    pub holder_contents: Vec<Option<App>>,
+}
+
 // TODO: enable stack depth configuration
 pub struct DrfHeap {
     pub input: DrfHeapInput,
@@ -62,6 +67,7 @@ pub struct DrfHeap {
     holder_out: (Dest, bool, ActiveApp), // output-reg: (destination, valid, app)
     working: Register<bool>,             // track whether the machine is working
     addr_bumper: Register<usize>,
+    stat: DrfHeapStat,
 }
 
 impl DrfHeap {
@@ -75,6 +81,7 @@ impl DrfHeap {
             holder_out: Default::default(),
             working: Default::default(),
             addr_bumper: Default::default(),
+            stat: Default::default(),
         }
     }
 
@@ -146,6 +153,10 @@ impl DrfHeap {
 
     pub fn free_addr(&self) -> usize {
         *self.addr_bumper.value()
+    }
+
+    pub fn get_stat(&self) -> &DrfHeapStat {
+        &self.stat
     }
 }
 
@@ -248,6 +259,11 @@ impl HwModule for DrfHeap {
                 self.working.connect(&false);
                 return;
             }
+        }
+
+        // clear holder when output fires
+        if self.output_fire() {
+            self.holder_out.1 = false;
         }
 
         // handle port_a
@@ -357,6 +373,7 @@ impl HwModule for DrfHeap {
                         // target is fresh
 
                         // FIXME: also need to write the control info of the target
+
                         // write incoming demander (suspend it)
                         self.heap_mem.input.link(|input| {
                             input.port_a.is_write = true;
@@ -399,10 +416,6 @@ impl HwModule for DrfHeap {
             }
         }
 
-        if self.output_fire() {
-            self.holder_out.1 = false;
-        }
-
         // handle port_b
         // TODO: combinatory check when an app in demand in entering port_b
         // always write frozen applications
@@ -425,6 +438,16 @@ impl HwModule for DrfHeap {
         }
     }
 
+    fn update_stat(&mut self) {
+        if self.holder_out.1 {
+            self.stat
+                .holder_contents
+                .push(Some(self.holder_out.2.load.clone()));
+        } else {
+            self.stat.holder_contents.push(None);
+        }
+    }
+
     fn tick_children(&mut self) {
         self.stm.tick();
         for stk in &mut self.thread_stack {
@@ -434,12 +457,4 @@ impl HwModule for DrfHeap {
         self.working.tick();
         self.addr_bumper.tick();
     }
-}
-
-#[test]
-fn drfheap_spec() {
-    use super::benchmarks::playground;
-    let mut drfheap = DrfHeap::new(128).program(&playground::BOOL_AND);
-
-    // drfheap.heap_mem.ram
 }

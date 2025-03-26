@@ -26,6 +26,13 @@ pub trait HwInput {
     fn default_input(&mut self) {}
 }
 
+// TODO: a stat framework might be a bit over-exaggerated for now.
+//       Leave it to future..
+pub trait HwStat {
+    /// Detailed level of this stat
+    const DETAIL_LV: u8;
+}
+
 /// The behavior of a hardware module at each clock cycle:
 ///   * `update_local`: update its local states (`input` should first be setup
 ///     through `link_input`)
@@ -35,10 +42,12 @@ pub trait HwInput {
 /// states are now in cycle `n+1`.
 pub trait HwModule {
     fn update_local(&mut self);
+    fn update_stat(&mut self) {}
     fn tick_children(&mut self);
 
     /// After `input` get setup, use `tick` to update local states.
     fn tick(&mut self) {
+        self.update_stat(); // now `input` and `local` are in the same cycle
         self.update_local();
         self.tick_children();
     }

@@ -5,10 +5,11 @@ use Atom::*;
 /**
 A minimal Haskell program:
 
+-- T => COM(2,0,[0,0,0,0,0,0])
+-- F =>  COM(2,0,[1,0,0,0,0,0])
 data TF = T | F
 
 tfAnd T b = b
-
 tfAnd F _ = F
 
 main = tfAnd T F
@@ -26,6 +27,41 @@ pub static BOOL_AND: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 1
             COM(3,2,[1,2,0,0,0,0]), // XXX
             COM(2,0,[1,0,0,0,0,0]), // X
+        ],
+    ]
+});
+
+/**
+-- the computation in a should be shared
+main = let a = tfAnd T T
+           b = ftAnd a a
+       in tfAnd T b
+ */
+#[rustfmt::skip]
+pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
+    vec![
+        // main
+        vec![ // 0
+            PTR(1),
+            COM(2,0,[0,0,0,0,0,0]), // X
+            PTR(2)
+        ],
+        // tfAnd
+        vec![ // 1
+            COM(3,2,[1,2,0,0,0,0]), // XXX
+            COM(2,0,[1,0,0,0,0,0]), // X
+        ],
+        // b
+        vec![ // 2
+            PTR(1),
+            PTR(3),
+            PTR(3)
+        ],
+        // a
+        vec![ // 3
+            PTR(1),
+            COM(2,0,[0,0,0,0,0,0]), // X
+            COM(2,0,[0,0,0,0,0,0]), // X
         ],
     ]
 });

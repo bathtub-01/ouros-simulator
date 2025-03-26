@@ -27,6 +27,12 @@ pub struct ReducerInput {
 
 impl HwInput for ReducerInput {}
 
+#[derive(Default)]
+pub struct ReducerStat {
+    pub busy_cycles: u8,
+    pub holder_contents: Vec<Option<App>>,
+}
+
 pub struct Reducer {
     pub input: ReducerInput,
     decode_table: [ParseRes; 64],
@@ -34,6 +40,7 @@ pub struct Reducer {
     app1_holder: (bool, FrozenApp),
     app2_holder: (bool, FrozenApp),
     app3_holder: (bool, FrozenApp),
+    stat: ReducerStat,
 }
 
 impl Reducer {
@@ -50,6 +57,7 @@ impl Reducer {
             app1_holder: Default::default(),
             app2_holder: Default::default(),
             app3_holder: Default::default(),
+            stat: Default::default(),
         }
     }
 
@@ -102,6 +110,10 @@ impl Reducer {
         } else {
             0
         }
+    }
+
+    pub fn get_stat(&self) -> &ReducerStat {
+        &self.stat
     }
 }
 
@@ -174,6 +186,20 @@ impl HwModule for Reducer {
                 }
                 _ => panic!("reducer: app head is not combinator!"),
             }
+        }
+    }
+
+    fn update_stat(&mut self) {
+        if fire(self.input.in_valid, self.in_ready()) {
+            self.stat.busy_cycles += 1;
+        }
+
+        if self.spine_holder.0 {
+            self.stat
+                .holder_contents
+                .push(Some(self.spine_holder.1.load.clone()));
+        } else {
+            self.stat.holder_contents.push(None);
         }
     }
 

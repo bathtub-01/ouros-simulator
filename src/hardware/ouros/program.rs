@@ -1,5 +1,6 @@
 use crate::hardware::ouros::combinator::{Arity, Idx};
 use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
+use std::fmt;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Atom {
@@ -15,6 +16,28 @@ pub enum Atom {
 impl Default for Atom {
     fn default() -> Self {
         Atom::NOP
+    }
+}
+
+impl fmt::Display for Atom {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Atom::NOP => write!(f, "NOP"),
+            Atom::PTR(p) => write!(f, "PTR({})", p),
+            Atom::COM(arity, pat, holes) => {
+                // Format the array of Idx values as a comma-separated list
+                let holes_str = holes
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "COM({}, {}, [{}])", arity, pat, holes_str)
+            }
+            Atom::INT(n) => write!(f, "INT({})", n),
+            Atom::PRM(p) => write!(f, "PRM({})", p),
+            Atom::Y => write!(f, "Y"),
+            Atom::ERR(e) => write!(f, "ERR({})", e),
+        }
     }
 }
 

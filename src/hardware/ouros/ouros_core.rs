@@ -1,10 +1,11 @@
 // Top level module of the Ouros core.
 
 use crate::hardware::common::{Arbiter, FIFO};
+use crate::hardware::ouros::program::app_length;
 use crate::hw_module::{HwInput, HwModule};
 
 use super::deref_heap::DrfHeap;
-use super::program::{is_whnf, ActiveApp, FrozenApp, Program};
+use super::program::{is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use super::reducer::Reducer;
 
 #[derive(Default)]
@@ -35,10 +36,10 @@ struct OurosCore {
 }
 
 impl OurosCore {
-    pub fn new(prog: Program) -> Self {
+    pub fn new(prog: &Program) -> Self {
         Self {
             input: Default::default(),
-            dheap: DrfHeap::new(128).program(&prog),
+            dheap: DrfHeap::new(128).program(prog),
             reducer: Reducer::new(),
 
             buffers_dheap_a_0: FIFO::new(),
@@ -85,6 +86,13 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize>(
     let select = arbiter.select();
     for (i, b) in buffers.into_iter().enumerate() {
         b.input.out_ready = arbiter.in_ready(i, select);
+    }
+}
+
+fn is_ptr(atom: &Atom) -> bool {
+    match atom {
+        Atom::PTR(_) => true,
+        _ => false,
     }
 }
 
@@ -176,7 +184,7 @@ impl HwModule for OurosCore {
         self.reducer.input.app3_ready = self.buffers_dheap_b_2.in_ready();
 
         if self.reducer.spine().0 {
-            if is_whnf(&self.reducer.spine().1.load) {
+            if is_whnf(&self.reducer.spine().1.load) || is_ptr(&self.reducer.spine().1.load[0]) {
                 // connect to dheap
                 self.buffers_dheap_a_1.input.in_valid = true;
                 self.buffers_dheap_a_1.input.din = self.reducer.spine().1.clone();
@@ -210,5 +218,56 @@ impl HwModule for OurosCore {
         self.buffers_reducer_0.tick();
         self.buffers_reducer_1.tick();
         self.arbiter_reducer.tick();
+    }
+}
+
+#[test]
+fn ouros_core_spec() {
+    use super::benchmarks::*;
+    let mut ouros = OurosCore::new(&BOOL_NEST);
+    let mut cycle: i32 = 0;
+
+    ouros.tick();
+
+    // kick start the machine
+    ouros.input.start = true;
+    ouros.tick();
+    ouros.input.start = false;
+
+    loop {
+        assert!(cycle < 1000);
+        if ouros.done() {
+            println!("Program finished, taking {} cycles.", cycle);
+            break;
+        }
+        ouros.tick();
+        cycle = cycle + 1;
+    }
+
+    let dheap_stat = &ouros.dheap.get_stat();
+    let reducer_stat = &ouros.reducer.get_stat();
+
+    fn compress(oapp: &Option<App>) -> String {
+        match oapp {
+            None => "empty".to_string(),
+            Some(app) => {
+                let app_str = app
+                    .iter()
+                    .take(app_length(app))
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                format!("[{}]", app_str)
+            }
+        }
+    }
+
+    for (i, p) in dheap_stat
+        .holder_contents
+        .iter()
+        .zip(&reducer_stat.holder_contents)
+        .enumerate()
+    {
+        println!("{} dheap: {} reducer: {}", i, compress(p.0), compress(p.1));
     }
 }
