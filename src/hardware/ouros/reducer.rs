@@ -35,7 +35,7 @@ pub struct ReducerStat {
 
 pub struct Reducer {
     pub input: ReducerInput,
-    decode_table: [ParseRes; 64],
+    decode_table: &'static [ParseRes; 64],
     spine_holder: (bool, ActiveApp),
     app1_holder: (bool, FrozenApp),
     app2_holder: (bool, FrozenApp),
@@ -45,11 +45,9 @@ pub struct Reducer {
 
 impl Reducer {
     pub fn new() -> Self {
-        let decode_table: [ParseRes; 64] = DECODE_TABLE.clone();
-
         Self {
             input: Default::default(),
-            decode_table,
+            decode_table: &DECODE_TABLE,
             spine_holder: Default::default(),
             app1_holder: Default::default(),
             app2_holder: Default::default(),

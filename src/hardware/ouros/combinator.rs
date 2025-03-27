@@ -129,9 +129,7 @@ pub static DECODE_TABLE: LazyLock<[ParseRes; 64]> = LazyLock::new(|| {
 
 #[test]
 fn parse_pat_spec() {
-    let parsed = ALL_PATTERNS.iter().map(|p| parse_pat(p));
-
-    for (pat, res) in ALL_PATTERNS.iter().zip(parsed).into_iter() {
+    for (pat, res) in ALL_PATTERNS.iter().zip(DECODE_TABLE.iter()).into_iter() {
         println!("{},{:?}", pat, res);
     }
 }
