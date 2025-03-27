@@ -8,7 +8,7 @@
 // clcok cycle. Inputs and Outputs has ready-valid signals,
 // the reducer will be stalled if outputs fail to emit.
 
-use crate::hardware::ouros::combinator::{all_patterns, parse_pat, Hole, ParseRes};
+use crate::hardware::ouros::combinator::{parse_pat, Hole, ParseRes, ALL_PATTERNS, DECODE_TABLE};
 use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
 use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
 use crate::hardware::utils::fire;
@@ -45,10 +45,7 @@ pub struct Reducer {
 
 impl Reducer {
     pub fn new() -> Self {
-        let parsed: Vec<ParseRes> = all_patterns().iter().map(|p| parse_pat(p)).collect();
-        let decode_table: [ParseRes; 64] = parsed
-            .try_into()
-            .expect("pattern decode table size should match");
+        let decode_table: [ParseRes; 64] = DECODE_TABLE.clone();
 
         Self {
             input: Default::default(),

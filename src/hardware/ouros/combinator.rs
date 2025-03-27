@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::LazyLock;
 
 pub type Arity = u8;
 
@@ -34,7 +35,7 @@ fn comprehension(ps1: Vec<Pat>, ps2: Vec<Pat>) -> Vec<Pat> {
         .collect()
 }
 
-pub fn all_patterns() -> Vec<Pat> {
+pub static ALL_PATTERNS: LazyLock<Vec<Pat>> = LazyLock::new(|| {
     use Pat::*;
     let x: Vec<Pat> = vec![X];
     let xx: Vec<Pat> = comprehension(x.clone(), x.clone());
@@ -74,9 +75,23 @@ pub fn all_patterns() -> Vec<Pat> {
     all.extend(xxxxxx.iter().take(xxxxxx.len() - 1).cloned());
 
     all
+});
+
+pub fn holes_of(code: u8) -> usize {
+    match code {
+        0 => 1,
+        1 => 2,
+        2..=3 => 3,
+        4..=8 => 4,
+        9..=22 => 5,
+        23..=63 => 6,
+        _ => {
+            panic!("Unknown code!");
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Hole {
     // Empty,
     Arg(u8),
@@ -90,7 +105,7 @@ enum Mode {
     App3,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct ParseRes {
     pub spine: Vec<Hole>,
     pub app1: Vec<Hole>,
@@ -104,12 +119,19 @@ pub fn parse_pat(p: &Pat) -> ParseRes {
     result
 }
 
+pub static DECODE_TABLE: LazyLock<[ParseRes; 64]> = LazyLock::new(|| {
+    let parsed: Vec<ParseRes> = ALL_PATTERNS.iter().map(|p| parse_pat(p)).collect();
+    let res: [ParseRes; 64] = parsed
+        .try_into()
+        .expect("pattern decode table size should match");
+    res
+});
+
 #[test]
 fn parse_pat_spec() {
-    let all = all_patterns();
-    let parsed = all.iter().map(|p| parse_pat(p));
+    let parsed = ALL_PATTERNS.iter().map(|p| parse_pat(p));
 
-    for (pat, res) in all.iter().zip(parsed).into_iter() {
+    for (pat, res) in ALL_PATTERNS.iter().zip(parsed).into_iter() {
         println!("{},{:?}", pat, res);
     }
 }

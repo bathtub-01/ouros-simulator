@@ -1,4 +1,4 @@
-use crate::hardware::ouros::combinator::{Arity, Idx};
+use crate::hardware::ouros::combinator::{holes_of, Arity, Idx};
 use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
 use std::fmt;
 
@@ -28,6 +28,7 @@ impl fmt::Display for Atom {
                 // Format the array of Idx values as a comma-separated list
                 let holes_str = holes
                     .iter()
+                    .take(holes_of(*pat))
                     .map(|x| x.to_string())
                     .collect::<Vec<String>>()
                     .join(", ");
