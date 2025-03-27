@@ -5,12 +5,10 @@
 // port_b ==>|       Heap      |===> to_self
 //           +-----------------+
 
+use super::config::APP_LENGTH;
+use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use crate::hardware::common::stack::StackOp;
 use crate::hardware::common::{DualPortMem, Register, Stack};
-use crate::hardware::ouros::config::APP_LENGTH;
-use crate::hardware::ouros::program::{
-    app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program,
-};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 

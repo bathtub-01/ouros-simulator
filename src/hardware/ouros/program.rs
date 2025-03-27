@@ -3,12 +3,22 @@ use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
 use std::fmt;
 
 #[derive(Clone, PartialEq, Debug)]
+pub enum AluOp {
+    EQ,
+    LE,
+    LT,
+    ADD,
+    SUB,
+    MUL,
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub enum Atom {
     NOP,
     PTR(usize),
     COM(Arity, u8, [Idx; HOLES]), // represent Pat with an u8
     INT(i32),
-    PRM(u8),
+    PRM(AluOp, bool), // (operator, conditon revert bit)
     Y,
     ERR(u8),
 }
@@ -35,7 +45,7 @@ impl fmt::Display for Atom {
                 write!(f, "COM({}, {}, [{}])", arity, pat, holes_str)
             }
             Atom::INT(n) => write!(f, "INT({})", n),
-            Atom::PRM(p) => write!(f, "PRM({})", p),
+            Atom::PRM(p, inv) => write!(f, "PRM({:?}, {})", p, inv),
             Atom::Y => write!(f, "Y"),
             Atom::ERR(e) => write!(f, "ERR({})", e),
         }
@@ -64,7 +74,7 @@ fn arity_of(atom: &Atom) -> u8 {
     use Atom::*;
     match atom {
         COM(a, _, _) => *a,
-        PRM(_) => 2,
+        PRM(_, _) => 2,
         Y => 1,
         _ => 0,
     }

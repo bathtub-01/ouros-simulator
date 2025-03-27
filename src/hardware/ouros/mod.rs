@@ -6,6 +6,8 @@ pub mod reducer;
 
 pub mod deref_heap;
 
+pub mod alu;
+
 pub mod config;
 
 pub mod benchmarks;
