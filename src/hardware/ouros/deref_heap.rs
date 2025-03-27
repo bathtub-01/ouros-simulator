@@ -102,6 +102,8 @@ impl DrfHeap {
         // convert Vec<Vec<Atom>> to Vec<HeapCell>
         let img: Vec<HeapCell> = prog.iter().map(convert).collect();
         self.heap_mem.image(&img);
+        self.addr_bumper.connect(&img.len());
+        self.addr_bumper.tick();
         self
     }
 
