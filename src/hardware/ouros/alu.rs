@@ -4,7 +4,7 @@
 //           +------------+
 
 use crate::{
-    hardware::ouros::program::App,
+    hardware::ouros::program::{AluOp, App},
     hw_module::{HwInput, HwModule},
 };
 
@@ -39,7 +39,7 @@ impl Alu {
     }
 
     pub fn input_ready(&self) -> bool {
-        self.holder.0 || self.output_fire()
+        !self.holder.0 || self.output_fire()
     }
 
     pub fn output_valid(&self) -> bool {
@@ -118,4 +118,30 @@ impl HwModule for Alu {
     }
 
     fn tick_children(&mut self) {}
+}
+
+#[test]
+fn alu_spec() {
+    use Atom::*;
+    let mut alu = Alu::new();
+
+    alu.tick();
+    alu.input.link(|input| {
+        input.output_ready = true;
+        input.input_valid = true;
+        input.input_bits.stack_idx = 2;
+        input.input_bits.load = [
+            PRM(AluOp::LE, false),
+            INT(7),
+            INT(7),
+            NOP,
+            NOP,
+            NOP,
+            NOP,
+            NOP,
+        ];
+    });
+    alu.tick();
+
+    println!("{:?}", alu.output_bits());
 }
