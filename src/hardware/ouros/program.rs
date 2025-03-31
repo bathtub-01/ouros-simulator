@@ -18,7 +18,8 @@ pub enum Atom {
     PTR(usize),
     COM(Arity, u8, [Idx; HOLES]), // represent Pat with an u8
     INT(i32),
-    PRM(AluOp, bool), // (operator, conditon revert bit)
+    /// (operator, conditon revert bit)
+    PRM(AluOp, bool),
     Y,
     ERR(u8),
 }
