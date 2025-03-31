@@ -343,7 +343,7 @@ impl HwModule for DrfHeap {
                                                 input.port_a.is_write = false;
                                                 input.port_a.addr = p;
                                             });
-                                            // need this?
+                                            // OPb need this
                                             self.addr_holder = p;
                                             // jump to next state
                                             self.stm.connect(&Stm::OPb);
@@ -504,6 +504,7 @@ impl HwModule for DrfHeap {
                                 input.port_a.addr = p;
                             });
                             self.holder_in.load[1] = Atom::INT(a);
+                            self.addr_holder = p;
                             // jump to next state
                             self.stm.connect(&Stm::OPb);
                         }
@@ -529,7 +530,7 @@ impl HwModule for DrfHeap {
                         _ => panic!("dheap: unknown PRM argument `b` type!"),
                     }
                 } else {
-                    // emit `a`
+                    // `a` not in WHNF, emit `a`
 
                     let target = self.heap_mem.dout_a().app.clone();
                     // write the updated target info.
@@ -539,7 +540,7 @@ impl HwModule for DrfHeap {
                         input.port_a.din = HeapCell {
                             working: true,
                             stack_idx: self.holder_in.stack_idx,
-                            app: target,
+                            app: target.clone(),
                         };
                     });
 
@@ -551,12 +552,18 @@ impl HwModule for DrfHeap {
                             input.din = self.addr_holder;
                         });
 
+                    // put register
+                    self.holder_out = (
+                        Dest::ToReducer,
+                        true,
+                        ActiveApp {
+                            stack_idx: self.holder_in.stack_idx,
+                            load: target,
+                        },
+                    );
+
                     // jump to next state
-                    match self.holder_in.load[2] {
-                        Atom::PTR(_) => self.stm.connect(&Stm::OPaw),
-                        Atom::INT(_) => self.stm.connect(&Stm::IDLE),
-                        _ => panic!("dheap: unknown PRM argument `b` type!"),
-                    }
+                    self.stm.connect(&Stm::OPaw);
                 }
             }
             Stm::OPaw => {
@@ -567,8 +574,27 @@ impl HwModule for DrfHeap {
                             input.port_a.is_write = false;
                             input.port_a.addr = p;
                         });
+                        self.addr_holder = p;
                         // jump to next state
                         self.stm.connect(&Stm::OPb);
+                    }
+                    Atom::INT(_) => {
+                        // store the demander
+                        self.heap_mem.input.link(|input| {
+                            input.port_a.is_write = true;
+                            match self.thread_stack[self.holder_in.stack_idx as usize].second() {
+                                Some(addr) => input.port_a.addr = *addr,
+                                None => panic!("dheap: ill stack!"),
+                            }
+                            input.port_a.din = HeapCell {
+                                working: true,
+                                stack_idx: self.holder_in.stack_idx,
+                                app: self.holder_in.load.clone(),
+                            };
+                        });
+
+                        // jump to next state
+                        self.stm.connect(&Stm::IDLE);
                     }
                     _ => panic!("dheap: unknown PRM argument `b` type!"),
                 }
@@ -583,45 +609,147 @@ impl HwModule for DrfHeap {
                             _ => panic!("dheap: PRM argument `b` must be an Int!"),
                         }
                     };
-                } else {
+                    self.holder_in.load[2] = Atom::INT(b);
+
+                    // put register
+                    self.holder_out = (
+                        Dest::ToReducer,
+                        true,
+                        ActiveApp {
+                            stack_idx: self.holder_in.stack_idx,
+                            load: self.holder_in.load.clone(),
+                        },
+                    );
+
+                    // jump to next state
+                    self.stm.connect(&Stm::IDLE);
+                } else if self.output_fire() || !self.holder_out.1 {
                     // whether to spark a new thread for `b`
+                    let target = self.heap_mem.dout_a().app.clone();
                     match self.holder_in.load[1] {
                         Atom::INT(_) => {
-                            // create thread for `b` in-place
+                            // create a thread for `b` in-place
+
+                            // write the updated target info.
+                            self.heap_mem.input.link(|input| {
+                                input.port_a.is_write = true;
+                                input.port_a.addr = self.addr_holder;
+                                input.port_a.din = HeapCell {
+                                    working: true,
+                                    stack_idx: self.holder_in.stack_idx,
+                                    app: target.clone(),
+                                };
+                            });
+
+                            // push `b` to the stack
+                            self.thread_stack[self.holder_in.stack_idx as usize]
+                                .input
+                                .link(|input| {
+                                    input.op = StackOp::PUSH;
+                                    input.din = self.addr_holder;
+                                });
+
+                            // put register
+                            self.holder_out = (
+                                Dest::ToReducer,
+                                true,
+                                ActiveApp {
+                                    stack_idx: self.holder_in.stack_idx,
+                                    load: target,
+                                },
+                            );
+
+                            // jump to next state
+                            self.stm.connect(&Stm::OPbw);
                         }
                         _ => {
                             // spark a new thread for `b`
 
-                            // match pick_stack() {
-                            //     Some(stk_idx) => {
-                            //         // spark a new thread on an empty stack
-                            //         // read the target
-                            //         self.heap_mem.input.link(|input| {
-                            //             input.port_a.is_write = false;
-                            //             input.port_a.addr = p;
-                            //         });
-                            //         self.holder_in.load[1] = Atom::INT(a);
-                            //         // push the stack
-                            //         self.thread_stack[stk_idx].input.link(|input| {
-                            //             input.op = StackOp::PUSH;
-                            //             input.din = p;
-                            //         });
-                            //         // jump to next state
-                            //         self.stm.connect(&Stm::OPb);
-                            //     }
-                            //     None => {
-                            //         // unable to spark a new thread, back to IDLE
-                            //     }
-                            // }
+                            match pick_stack() {
+                                Some(stk_idx) => {
+                                    // spark a new thread on an empty stack
+
+                                    // write the updated target info.
+                                    self.heap_mem.input.link(|input| {
+                                        input.port_a.is_write = true;
+                                        input.port_a.addr = self.addr_holder;
+                                        input.port_a.din = HeapCell {
+                                            working: true,
+                                            stack_idx: stk_idx as u8,
+                                            app: target.clone(),
+                                        };
+                                    });
+
+                                    // push the stack
+                                    self.thread_stack[stk_idx].input.link(|input| {
+                                        input.op = StackOp::PUSH;
+                                        input.din = self.addr_holder;
+                                    });
+
+                                    // put register
+                                    self.holder_out = (
+                                        Dest::ToReducer,
+                                        true,
+                                        ActiveApp {
+                                            stack_idx: stk_idx as u8,
+                                            load: target,
+                                        },
+                                    );
+
+                                    // jump to next state
+                                    self.stm.connect(&Stm::OPbw);
+                                }
+                                None => {
+                                    // unable to spark a new thread, back to IDLE
+
+                                    // store the demander
+                                    self.heap_mem.input.link(|input| {
+                                        input.port_a.is_write = true;
+                                        match self.thread_stack[self.holder_in.stack_idx as usize]
+                                            .second()
+                                        {
+                                            Some(addr) => input.port_a.addr = *addr,
+                                            None => panic!("dheap: ill stack!"),
+                                        }
+                                        input.port_a.din = HeapCell {
+                                            working: true,
+                                            stack_idx: self.holder_in.stack_idx,
+                                            app: self.holder_in.load.clone(),
+                                        };
+                                    });
+
+                                    // jump to next state
+                                    self.stm.connect(&Stm::IDLE);
+                                }
+                            }
                         }
                     }
                 }
             }
-            Stm::OPbw => {}
+            Stm::OPbw => {
+                // store the demander
+                self.heap_mem.input.link(|input| {
+                    input.port_a.is_write = true;
+                    match self.thread_stack[self.holder_in.stack_idx as usize].second() {
+                        Some(addr) => input.port_a.addr = *addr,
+                        None => panic!("dheap: ill stack!"),
+                    }
+                    input.port_a.din = HeapCell {
+                        working: true,
+                        stack_idx: self.holder_in.stack_idx,
+                        app: self.holder_in.load.clone(),
+                    };
+                });
+
+                // jump to next state
+                self.stm.connect(&Stm::IDLE);
+            }
         }
 
         // handle port_b
         // TODO: combinatory check when an app in demand in entering port_b
+        // read-after-write is good, but what if we are reading something
+        // that is not yet enter the heap?
         // always write frozen applications
         if fire(self.input.port_b_valid, self.port_b_ready()) {
             self.heap_mem.input.link(|input| {

@@ -3,14 +3,13 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*;
 
-// FIXME: operator is not infixed here!
 #[rustfmt::skip]
 pub static FIB: LazyLock<Program> = LazyLock::new(|| {
     vec![
         // main
         vec![ // 0
             PTR(1),
-            INT(5),
+            INT(8),
         ],
         // fib
         vec![ // 1
@@ -21,14 +20,14 @@ pub static FIB: LazyLock<Program> = LazyLock::new(|| {
             INT(1)
         ],
         vec![ // 2
-            COM(5, 12, [0,4,1,2,3,0]), // X(XXX)X
+            COM(5, 21, [0,1,2,4,3,0]), // X(X(XXX))
+            PRM(ADD, false),
             PTR(1),
             PRM(SUB, false),
-            INT(2),
-            PRM(ADD, false)
+            INT(2),            
         ],
         vec![ // 3
-            COM(5, 49, [0,4,1,4,2,3]), // // XX(X(XXX))
+            COM(5, 49, [0,4,1,2,4,3]), // // XX(X(XXX))
             PTR(2),
             PTR(1),
             PRM(SUB, false),
