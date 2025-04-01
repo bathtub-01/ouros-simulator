@@ -123,7 +123,8 @@ impl DrfHeap {
 
     pub fn port_a_ready(&self) -> bool {
         // port_a is ready to handle a new application in this cycle
-        !self.holder_out.1 || self.output_fire()
+        // TODO: add an OR condition here to allow bypass?
+        (!self.holder_out.1 || self.output_fire()) && *self.stm.value() == Stm::IDLE
     }
 
     pub fn port_b_ready(&self) -> bool {
@@ -366,38 +367,64 @@ impl HwModule for DrfHeap {
 
                 // no more sharer
                 let target = &self.holder_in.load;
-                // write incoming WHNF
-                self.heap_mem.input.link(|input| {
-                    input.port_a.is_write = true;
-                    match stk.top() {
-                        None => panic!("dheap: thread stack error!"),
-                        Some(addr) => {
-                            input.port_a.addr = *addr;
+                match self.heap_mem.dout_a().app[0] {
+                    Atom::PRM(_, _) => {
+                        let arg = {
+                            match target[0] {
+                                Atom::INT(i) => i,
+                                _ => panic!("dheap: PRM argument must be an Int!"),
+                            }
+                        };
+                        let mut demander = self.heap_mem.dout_a().app.clone();
+                        // this WHNF belongs to the first non-literal argument
+                        match self.heap_mem.dout_a().app[1] {
+                            Atom::PTR(_) => {
+                                demander[1] = Atom::INT(arg);
+                                // emit demander
+                            }
+                            Atom::INT(_) => {
+                                // argument `b` must be a PTR in this case
+                                demander[2] = Atom::INT(arg);
+                                // emit demander
+                            }
+                            _ => panic!("dheap: strange PRM argument `a`!"),
                         }
                     }
-                    input.port_a.din = HeapCell {
-                        working: false, // already in WHNF
-                        stack_idx: self.holder_in.stack_idx,
-                        app: target.clone(),
-                    };
-                });
-                // pop the stack
-                stk.input.link(|input| {
-                    input.op = StackOp::POP;
-                });
-                // put output register
-                let demander = &self.heap_mem.dout_a().app;
-                let deref_res = deref(demander, target);
-                self.holder_out = (
-                    which_dest(&deref_res),
-                    true,
-                    ActiveApp {
-                        stack_idx: self.heap_mem.dout_a().stack_idx,
-                        load: deref_res,
-                    },
-                );
-                // jump to next state
-                self.stm.connect(&Stm::IDLE);
+                    _ => {
+                        // write incoming WHNF
+                        self.heap_mem.input.link(|input| {
+                            input.port_a.is_write = true;
+                            match stk.top() {
+                                None => panic!("dheap: thread stack error!"),
+                                Some(addr) => {
+                                    input.port_a.addr = *addr;
+                                }
+                            }
+                            input.port_a.din = HeapCell {
+                                working: false, // already in WHNF
+                                stack_idx: self.holder_in.stack_idx,
+                                app: target.clone(),
+                            };
+                        });
+                        // pop the stack
+                        stk.input.link(|input| {
+                            input.op = StackOp::POP;
+                        });
+                        // put output register
+                        let demander = &self.heap_mem.dout_a().app;
+                        let deref_res = deref(demander, target);
+                        self.holder_out = (
+                            which_dest(&deref_res),
+                            true,
+                            ActiveApp {
+                                stack_idx: self.heap_mem.dout_a().stack_idx,
+                                load: deref_res,
+                            },
+                        );
+                        // jump to next state
+                        self.stm.connect(&Stm::IDLE);
+                    }
+                }
             }
             Stm::IA => {
                 let target = &self.heap_mem.dout_a().app;
@@ -554,7 +581,7 @@ impl HwModule for DrfHeap {
 
                     // put register
                     self.holder_out = (
-                        Dest::ToReducer,
+                        which_dest(&target),
                         true,
                         ActiveApp {
                             stack_idx: self.holder_in.stack_idx,
@@ -651,7 +678,7 @@ impl HwModule for DrfHeap {
 
                             // put register
                             self.holder_out = (
-                                Dest::ToReducer,
+                                which_dest(&target),
                                 true,
                                 ActiveApp {
                                     stack_idx: self.holder_in.stack_idx,
@@ -688,7 +715,7 @@ impl HwModule for DrfHeap {
 
                                     // put register
                                     self.holder_out = (
-                                        Dest::ToReducer,
+                                        which_dest(&target),
                                         true,
                                         ActiveApp {
                                             stack_idx: stk_idx as u8,
