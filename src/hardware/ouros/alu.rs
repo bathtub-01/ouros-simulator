@@ -1,10 +1,14 @@
-// ALU, simply takes an application and produce the result:
+// ALU, simply takes an application and produce the result.
+// It allows over-applied applications, e.g., ((=) 1 2 a b) = (FALSE a b)
 //           +------------+
 //  input ==>|     ALU    |===> output
 //           +------------+
 
 use crate::{
-    hardware::ouros::program::{AluOp, App},
+    hardware::ouros::{
+        config::APP_LENGTH,
+        program::{AluOp, App},
+    },
     hw_module::{HwInput, HwModule},
 };
 
@@ -112,6 +116,13 @@ impl HwModule for Alu {
             self.holder.1.load = {
                 let mut arr: App = Default::default();
                 arr[0] = res;
+                for i in 3..APP_LENGTH {
+                    if self.input.input_bits.load[i] != NOP {
+                        arr[i - 2] = self.input.input_bits.load[i].clone();
+                    } else {
+                        break;
+                    }
+                }
                 arr
             }
         }
@@ -127,21 +138,27 @@ fn alu_spec() {
 
     alu.tick();
     alu.input.link(|input| {
-        input.output_ready = true;
+        input.output_ready = false;
         input.input_valid = true;
         input.input_bits.stack_idx = 2;
         input.input_bits.load = [
             PRM(AluOp::LE, false),
             INT(7),
             INT(7),
-            NOP,
-            NOP,
+            PTR(11),
+            PTR(22),
             NOP,
             NOP,
             NOP,
         ];
     });
     alu.tick();
+    println!("{:?}, valid: {}", alu.output_bits(), alu.output_valid());
 
-    println!("{:?}", alu.output_bits());
+    alu.input.link(|input| {
+        input.output_ready = true;
+        input.input_valid = false;
+    });
+    alu.tick();
+    println!("{:?}, valid: {}", alu.output_bits(), alu.output_valid());
 }
