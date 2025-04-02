@@ -722,6 +722,14 @@ impl HwModule for DrfHeap {
                         Atom::INT(_) => {
                             // create a thread for `b` in-place
 
+                            // push `b` to the stack
+                            self.thread_stack[self.holder_in.stack_idx as usize]
+                                .input
+                                .link(|input| {
+                                    input.op = StackOp::PUSH;
+                                    input.din = self.addr_holder;
+                                });
+
                             // write the updated target info.
                             self.heap_mem.input.link(|input| {
                                 input.port_a.is_write = true;
@@ -733,26 +741,23 @@ impl HwModule for DrfHeap {
                                 };
                             });
 
-                            // push `b` to the stack
-                            self.thread_stack[self.holder_in.stack_idx as usize]
-                                .input
-                                .link(|input| {
-                                    input.op = StackOp::PUSH;
-                                    input.din = self.addr_holder;
-                                });
+                            if !self.heap_mem.dout_a().working {
+                                // put register
+                                self.holder_out = (
+                                    which_dest(&target),
+                                    true,
+                                    ActiveApp {
+                                        stack_idx: self.holder_in.stack_idx,
+                                        load: target,
+                                    },
+                                );
 
-                            // put register
-                            self.holder_out = (
-                                which_dest(&target),
-                                true,
-                                ActiveApp {
-                                    stack_idx: self.holder_in.stack_idx,
-                                    load: target,
-                                },
-                            );
-
-                            // jump to next state
-                            self.stm.connect(&Stm::OPbw);
+                                // jump to next state
+                                self.stm.connect(&Stm::OPbw);
+                            } else {
+                                // `b` is already in computation
+                                self.stm.connect(&Stm::IDLE);
+                            }
                         }
                         _ => {
                             // spark a new thread for `b`
