@@ -9,7 +9,7 @@ pub static FIB: LazyLock<Program> = LazyLock::new(|| {
         // main
         vec![ // 0
             PTR(1),
-            INT(8),
+            INT(10),
         ],
         // fib
         vec![ // 1

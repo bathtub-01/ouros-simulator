@@ -125,7 +125,9 @@ impl DrfHeap {
     pub fn port_a_ready(&self) -> bool {
         // port_a is ready to handle a new application in this cycle
         // TODO: add an OR condition here to allow bypass?
-        (!self.holder_out.1 || self.output_fire()) && *self.stm.value() == Stm::IDLE
+        (!self.holder_out.1 || self.output_fire())
+            && *self.stm.value() == Stm::IDLE
+            && !self.input.port_b_valid // ad-hoc fix
     }
 
     pub fn port_b_ready(&self) -> bool {

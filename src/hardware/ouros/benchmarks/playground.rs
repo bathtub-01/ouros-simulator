@@ -54,7 +54,7 @@ pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
         ],
         // b
         vec![ // 2
-            COM(4,15,[0,1,2,1,3,0]),
+            COM(4,15,[0,1,2,1,3,0]), // X(XX)(XX)
             PTR(1),
             PTR(3), // a
             COM(2,0,[0,0,0,0,0,0]), // T

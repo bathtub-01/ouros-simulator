@@ -28,7 +28,7 @@ impl HwInput for AluInput {}
 
 #[derive(Default)]
 pub struct AluStat {
-    pub busy_cycles: u8,
+    pub busy_cycles: u32,
     pub holder_contents: Vec<Option<App>>,
 }
 

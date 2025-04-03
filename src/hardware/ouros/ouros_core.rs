@@ -153,140 +153,143 @@ impl HwModule for OurosCore {
         // connect start signal
         self.dheap.input.start = self.input.start;
 
-        // connect arbiters as components' input (arbiter first)
-        self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
-        self.arbiter_dheap_b.input.out_ready = self.dheap.port_b_ready();
-        self.arbiter_reducer.input.out_ready = self.reducer.in_ready();
-        self.arbiter_alu.input.out_ready = self.alu.input_ready();
+        for _ in 0..3 {
+            // connect arbiters as components' input (arbiter first)
+            // FIXME: what if dheap.port_a_ready depends on dheap.port_b_valid?
+            self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
+            self.arbiter_dheap_b.input.out_ready = self.dheap.port_b_ready();
+            self.arbiter_reducer.input.out_ready = self.reducer.in_ready();
+            self.arbiter_alu.input.out_ready = self.alu.input_ready();
 
-        // connect buffers to arbiters
-        buffers_arbiter(
-            [
-                &mut self.buffers_dheap_a_0,
-                &mut self.buffers_dheap_a_1,
-                &mut self.buffers_dheap_a_2,
-            ],
-            &mut self.arbiter_dheap_a,
-        );
-        buffers_arbiter(
-            [
-                &mut self.buffers_dheap_b_0,
-                &mut self.buffers_dheap_b_1,
-                &mut self.buffers_dheap_b_2,
-            ],
-            &mut self.arbiter_dheap_b,
-        );
-        buffers_arbiter(
-            [
-                &mut self.buffers_reducer_0,
-                &mut self.buffers_reducer_1,
-                &mut self.buffers_reducer_2,
-            ],
-            &mut self.arbiter_reducer,
-        );
-        buffers_arbiter(
-            [&mut self.buffers_alu_0, &mut self.buffers_alu_1],
-            &mut self.arbiter_alu,
-        );
+            // connect buffers to arbiters
+            buffers_arbiter(
+                [
+                    &mut self.buffers_dheap_a_0,
+                    &mut self.buffers_dheap_a_1,
+                    &mut self.buffers_dheap_a_2,
+                ],
+                &mut self.arbiter_dheap_a,
+            );
+            buffers_arbiter(
+                [
+                    &mut self.buffers_dheap_b_0,
+                    &mut self.buffers_dheap_b_1,
+                    &mut self.buffers_dheap_b_2,
+                ],
+                &mut self.arbiter_dheap_b,
+            );
+            buffers_arbiter(
+                [
+                    &mut self.buffers_reducer_0,
+                    &mut self.buffers_reducer_1,
+                    &mut self.buffers_reducer_2,
+                ],
+                &mut self.arbiter_reducer,
+            );
+            buffers_arbiter(
+                [&mut self.buffers_alu_0, &mut self.buffers_alu_1],
+                &mut self.arbiter_alu,
+            );
 
-        // connect arbiters as components' input
-        self.dheap.input.link(|input| {
-            input.port_a_valid = self.arbiter_dheap_a.out_valid();
-            match self.arbiter_dheap_a.out_bits(self.arbiter_dheap_a.select()) {
-                None => {}
-                Some(v) => {
-                    input.port_a_bits = v.clone();
+            // connect arbiters as components' input
+            self.dheap.input.link(|input| {
+                input.port_a_valid = self.arbiter_dheap_a.out_valid();
+                match self.arbiter_dheap_a.out_bits(self.arbiter_dheap_a.select()) {
+                    None => {}
+                    Some(v) => {
+                        input.port_a_bits = v.clone();
+                    }
+                }
+                input.port_b_valid = self.arbiter_dheap_b.out_valid();
+                match self.arbiter_dheap_b.out_bits(self.arbiter_dheap_b.select()) {
+                    None => {}
+                    Some(v) => {
+                        input.port_b_bits = v.clone();
+                    }
+                }
+            });
+            self.reducer.input.link(|input| {
+                input.in_valid = self.arbiter_reducer.out_valid();
+                match self.arbiter_reducer.out_bits(self.arbiter_reducer.select()) {
+                    None => {}
+                    Some(v) => {
+                        input.in_app = v.clone();
+                    }
+                }
+            });
+            self.alu.input.link(|input| {
+                input.input_valid = self.arbiter_alu.out_valid();
+                match self.arbiter_alu.out_bits(self.arbiter_alu.select()) {
+                    None => {}
+                    Some(v) => {
+                        input.input_bits = v.clone();
+                    }
+                }
+            });
+
+            // connect components' output to buffers
+            self.buffers_dheap_a_0.input.in_valid = self.dheap.to_self_valid();
+            self.buffers_dheap_a_0.input.din = self.dheap.to_self_bits().clone();
+            self.dheap.input.to_self_ready = self.buffers_dheap_a_0.in_ready();
+
+            if self.dheap.to_reducer_valid() {
+                if is_comb(&self.dheap.to_reducer_bits().load[0]) {
+                    self.buffers_reducer_1.input.in_valid = true;
+                    self.buffers_reducer_1.input.din = self.dheap.to_reducer_bits().clone();
+                    self.dheap.input.to_reducer_ready = self.buffers_reducer_1.in_ready();
+                } else {
+                    self.buffers_alu_1.input.in_valid = true;
+                    self.buffers_alu_1.input.din = self.dheap.to_reducer_bits().clone();
+                    self.dheap.input.to_reducer_ready = self.buffers_alu_1.in_ready();
                 }
             }
-            input.port_b_valid = self.arbiter_dheap_b.out_valid();
-            match self.arbiter_dheap_b.out_bits(self.arbiter_dheap_b.select()) {
-                None => {}
-                Some(v) => {
-                    input.port_b_bits = v.clone();
+
+            self.buffers_dheap_b_0.input.in_valid = self.reducer.app1().0;
+            self.buffers_dheap_b_0.input.din = self.reducer.app1().1.clone();
+            self.reducer.input.app1_ready = self.buffers_dheap_b_0.in_ready();
+
+            self.buffers_dheap_b_1.input.in_valid = self.reducer.app2().0;
+            self.buffers_dheap_b_1.input.din = self.reducer.app2().1.clone();
+            self.reducer.input.app2_ready = self.buffers_dheap_b_1.in_ready();
+
+            self.buffers_dheap_b_2.input.in_valid = self.reducer.app3().0;
+            self.buffers_dheap_b_2.input.din = self.reducer.app3().1.clone();
+            self.reducer.input.app3_ready = self.buffers_dheap_b_2.in_ready();
+
+            if self.reducer.spine().0 {
+                if is_prm(&self.reducer.spine().1.load[0])
+                    && is_int(&self.reducer.spine().1.load[1])
+                    && is_int(&self.reducer.spine().1.load[2])
+                {
+                    // connect to alu
+                    self.buffers_alu_0.input.in_valid = true;
+                    self.buffers_alu_0.input.din = self.reducer.spine().1.clone();
+                    self.reducer.input.spine_ready = self.buffers_alu_0.in_ready();
+                } else if !is_whnf(&self.reducer.spine().1.load)
+                    && is_comb(&self.reducer.spine().1.load[0])
+                {
+                    // connect to reducer
+                    self.buffers_reducer_0.input.in_valid = true;
+                    self.buffers_reducer_0.input.din = self.reducer.spine().1.clone();
+                    self.reducer.input.spine_ready = self.buffers_reducer_0.in_ready();
+                } else {
+                    // connect to dheap
+                    self.buffers_dheap_a_1.input.in_valid = true;
+                    self.buffers_dheap_a_1.input.din = self.reducer.spine().1.clone();
+                    self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
                 }
             }
-        });
-        self.reducer.input.link(|input| {
-            input.in_valid = self.arbiter_reducer.out_valid();
-            match self.arbiter_reducer.out_bits(self.arbiter_reducer.select()) {
-                None => {}
-                Some(v) => {
-                    input.in_app = v.clone();
+
+            if self.alu.output_valid() {
+                if !is_whnf(&self.alu.output_bits().load) {
+                    self.buffers_reducer_2.input.in_valid = true;
+                    self.buffers_reducer_2.input.din = self.alu.output_bits().clone();
+                    self.alu.input.output_ready = self.buffers_reducer_2.in_ready();
+                } else {
+                    self.buffers_dheap_a_2.input.in_valid = true;
+                    self.buffers_dheap_a_2.input.din = self.alu.output_bits().clone();
+                    self.alu.input.output_ready = self.buffers_dheap_a_2.in_ready();
                 }
-            }
-        });
-        self.alu.input.link(|input| {
-            input.input_valid = self.arbiter_alu.out_valid();
-            match self.arbiter_alu.out_bits(self.arbiter_alu.select()) {
-                None => {}
-                Some(v) => {
-                    input.input_bits = v.clone();
-                }
-            }
-        });
-
-        // connect components' output to buffers
-        self.buffers_dheap_a_0.input.in_valid = self.dheap.to_self_valid();
-        self.buffers_dheap_a_0.input.din = self.dheap.to_self_bits().clone();
-        self.dheap.input.to_self_ready = self.buffers_dheap_a_0.in_ready();
-
-        if self.dheap.to_reducer_valid() {
-            if is_comb(&self.dheap.to_reducer_bits().load[0]) {
-                self.buffers_reducer_1.input.in_valid = true;
-                self.buffers_reducer_1.input.din = self.dheap.to_reducer_bits().clone();
-                self.dheap.input.to_reducer_ready = self.buffers_reducer_1.in_ready();
-            } else {
-                self.buffers_alu_1.input.in_valid = true;
-                self.buffers_alu_1.input.din = self.dheap.to_reducer_bits().clone();
-                self.dheap.input.to_reducer_ready = self.buffers_alu_1.in_ready();
-            }
-        }
-
-        self.buffers_dheap_b_0.input.in_valid = self.reducer.app1().0;
-        self.buffers_dheap_b_0.input.din = self.reducer.app1().1.clone();
-        self.reducer.input.app1_ready = self.buffers_dheap_b_0.in_ready();
-
-        self.buffers_dheap_b_1.input.in_valid = self.reducer.app2().0;
-        self.buffers_dheap_b_1.input.din = self.reducer.app2().1.clone();
-        self.reducer.input.app2_ready = self.buffers_dheap_b_1.in_ready();
-
-        self.buffers_dheap_b_2.input.in_valid = self.reducer.app3().0;
-        self.buffers_dheap_b_2.input.din = self.reducer.app3().1.clone();
-        self.reducer.input.app3_ready = self.buffers_dheap_b_2.in_ready();
-
-        if self.reducer.spine().0 {
-            if is_prm(&self.reducer.spine().1.load[0])
-                && is_int(&self.reducer.spine().1.load[1])
-                && is_int(&self.reducer.spine().1.load[2])
-            {
-                // connect to alu
-                self.buffers_alu_0.input.in_valid = true;
-                self.buffers_alu_0.input.din = self.reducer.spine().1.clone();
-                self.reducer.input.spine_ready = self.buffers_alu_0.in_ready();
-            } else if !is_whnf(&self.reducer.spine().1.load)
-                && is_comb(&self.reducer.spine().1.load[0])
-            {
-                // connect to reducer
-                self.buffers_reducer_0.input.in_valid = true;
-                self.buffers_reducer_0.input.din = self.reducer.spine().1.clone();
-                self.reducer.input.spine_ready = self.buffers_reducer_0.in_ready();
-            } else {
-                // connect to dheap
-                self.buffers_dheap_a_1.input.in_valid = true;
-                self.buffers_dheap_a_1.input.din = self.reducer.spine().1.clone();
-                self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
-            }
-        }
-
-        if self.alu.output_valid() {
-            if !is_whnf(&self.alu.output_bits().load) {
-                self.buffers_reducer_2.input.in_valid = true;
-                self.buffers_reducer_2.input.din = self.alu.output_bits().clone();
-                self.alu.input.output_ready = self.buffers_reducer_2.in_ready();
-            } else {
-                self.buffers_dheap_a_2.input.in_valid = true;
-                self.buffers_dheap_a_2.input.din = self.alu.output_bits().clone();
-                self.alu.input.output_ready = self.buffers_dheap_a_2.in_ready();
             }
         }
 
@@ -324,7 +327,7 @@ impl HwModule for OurosCore {
 #[test]
 fn ouros_core_spec() {
     use super::benchmarks::*;
-    let mut ouros = OurosCore::new(&ALU_OP);
+    let mut ouros = OurosCore::new(&FIB);
     let mut cycle: i32 = 0;
 
     ouros.tick();
@@ -335,7 +338,7 @@ fn ouros_core_spec() {
     ouros.input.start = false;
 
     loop {
-        assert!(cycle < 1000);
+        assert!(cycle < 100_000);
         if ouros.done() {
             println!("Program finished, taking {} cycles.", cycle);
             break;
