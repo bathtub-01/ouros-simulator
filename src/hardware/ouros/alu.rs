@@ -94,9 +94,9 @@ impl HwModule for Alu {
 
             fn comb_bool(b: bool, inv: &bool) -> Atom {
                 if b ^ inv {
-                    COM(2, 0, [0, 0, 0, 0, 0, 0])
+                    COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
                 } else {
-                    COM(2, 0, [1, 0, 0, 0, 0, 0])
+                    COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
                 }
             }
 

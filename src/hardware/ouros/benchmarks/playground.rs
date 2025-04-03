@@ -87,8 +87,8 @@ pub static ALU_OP: LazyLock<Program> = LazyLock::new(|| {
             PRM(EQ, false),
             INT(42),
             INT(42),
-            PTR(1),
-            PTR(2)
+            PTR(2),
+            PTR(1)
         ],
         // a * b
         vec![ // 1

@@ -47,7 +47,7 @@ impl OurosCore {
     pub fn new(prog: &Program) -> Self {
         Self {
             input: Default::default(),
-            dheap: DrfHeap::new(128).program(prog),
+            dheap: DrfHeap::new(1024).program(prog),
             reducer: Reducer::new(),
             alu: Alu::new(),
 
