@@ -5,9 +5,12 @@
 //           +------------+
 
 use crate::{
-    hardware::ouros::{
-        config::APP_LENGTH,
-        program::{AluOp, App},
+    hardware::{
+        ouros::{
+            config::APP_LENGTH,
+            program::{AluOp, App},
+        },
+        utils::fire,
     },
     hw_module::{HwInput, HwModule},
 };
@@ -24,9 +27,16 @@ pub struct AluInput {
 impl HwInput for AluInput {}
 
 #[derive(Default)]
+pub struct AluStat {
+    pub busy_cycles: u8,
+    pub holder_contents: Vec<Option<App>>,
+}
+
+#[derive(Default)]
 pub struct Alu {
     pub input: AluInput,
     holder: (bool, ActiveApp),
+    stat: AluStat,
 }
 
 impl Alu {
@@ -52,6 +62,10 @@ impl Alu {
 
     pub fn output_bits(&self) -> &ActiveApp {
         &self.holder.1
+    }
+
+    pub fn get_stat(&self) -> &AluStat {
+        &self.stat
     }
 }
 
@@ -125,6 +139,20 @@ impl HwModule for Alu {
                 }
                 arr
             }
+        }
+    }
+
+    fn update_stat(&mut self) {
+        if fire(self.input.input_valid, self.input_ready()) {
+            self.stat.busy_cycles += 1;
+        }
+
+        if self.holder.0 {
+            self.stat
+                .holder_contents
+                .push(Some(self.holder.1.load.clone()));
+        } else {
+            self.stat.holder_contents.push(None);
         }
     }
 

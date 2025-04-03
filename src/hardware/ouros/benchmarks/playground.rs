@@ -1,5 +1,6 @@
-use crate::hardware::ouros::program::{Atom, Program};
+use crate::hardware::ouros::program::{AluOp, Atom, Program};
 use std::sync::LazyLock;
+use AluOp::*;
 use Atom::*;
 
 /**
@@ -68,6 +69,50 @@ pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 4
             COM(2,1,[1,0,0,0,0,0]), // XX
             COM(2,0,[0,0,0,0,0,0]), // T
+        ],
+    ]
+});
+
+/**
+main = let a = 4 + 5
+           b = a * 2
+       in
+          if 42 == 42 then a * b else a - b
+*/
+#[rustfmt::skip]
+pub static ALU_OP: LazyLock<Program> = LazyLock::new(|| {
+    vec![
+        // main
+        vec![ // 0
+            PRM(EQ, false),
+            INT(42),
+            INT(42),
+            PTR(1),
+            PTR(2)
+        ],
+        // a * b
+        vec![ // 1
+            PRM(MUL, false),
+            PTR(3),
+            PTR(4)
+        ],
+        // a - b
+        vec![ // 2
+            PRM(SUB, false),
+            PTR(3),
+            PTR(4)
+        ],
+        // a
+        vec![ // 3
+            PRM(ADD, false),
+            INT(4),
+            INT(5)
+        ],
+        // b
+        vec![ // 4
+            PRM(MUL, false),
+            PTR(3),
+            INT(2)
         ],
     ]
 });

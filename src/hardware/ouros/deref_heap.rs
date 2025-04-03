@@ -730,18 +730,17 @@ impl HwModule for DrfHeap {
                                     input.din = self.addr_holder;
                                 });
 
-                            // write the updated target info.
-                            self.heap_mem.input.link(|input| {
-                                input.port_a.is_write = true;
-                                input.port_a.addr = self.addr_holder;
-                                input.port_a.din = HeapCell {
-                                    working: true,
-                                    stack_idx: self.holder_in.stack_idx,
-                                    app: target.clone(),
-                                };
-                            });
-
                             if !self.heap_mem.dout_a().working {
+                                // write the updated target info.
+                                self.heap_mem.input.link(|input| {
+                                    input.port_a.is_write = true;
+                                    input.port_a.addr = self.addr_holder;
+                                    input.port_a.din = HeapCell {
+                                        working: true,
+                                        stack_idx: self.holder_in.stack_idx,
+                                        app: target.clone(),
+                                    };
+                                });
                                 // put register
                                 self.holder_out = (
                                     which_dest(&target),
@@ -756,6 +755,21 @@ impl HwModule for DrfHeap {
                                 self.stm.connect(&Stm::OPbw);
                             } else {
                                 // `b` is already in computation
+
+                                // write the demander (suspend)
+                                self.heap_mem.input.link(|input| {
+                                    input.port_a.is_write = true;
+                                    input.port_a.addr = *self.thread_stack
+                                        [self.holder_in.stack_idx as usize]
+                                        .top()
+                                        .unwrap();
+                                    input.port_a.din = HeapCell {
+                                        working: true,
+                                        stack_idx: self.holder_in.stack_idx,
+                                        app: self.holder_in.load.clone(),
+                                    };
+                                });
+
                                 self.stm.connect(&Stm::IDLE);
                             }
                         }

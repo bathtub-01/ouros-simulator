@@ -38,17 +38,15 @@ impl<T: Clone + Default, const N: usize> Stack<T, N> {
 
     /// top element of the stack
     pub fn top(&self) -> Option<&T> {
-        match self.mem.last() {
-            None => None,
-            Some(v) => Some(v),
-        }
+        self.mem.last()
     }
 
     /// second element of the stack
     pub fn second(&self) -> Option<&T> {
-        match self.mem.get(self.mem.len() - 2) {
-            None => None,
-            Some(v) => Some(v),
+        if self.mem.len() <= 1 {
+            None
+        } else {
+            self.mem.get(self.mem.len() - 2)
         }
     }
 

@@ -76,6 +76,7 @@ fn arity_of(atom: &Atom) -> u8 {
     match atom {
         COM(a, _, _) => *a,
         PRM(_, _) => 2,
+        INT(_) => 1,
         Y => 1,
         _ => 0,
     }

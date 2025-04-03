@@ -118,6 +118,20 @@ fn is_comb(atom: &Atom) -> bool {
     }
 }
 
+fn is_int(atom: &Atom) -> bool {
+    match atom {
+        Atom::INT(_) => true,
+        _ => false,
+    }
+}
+
+fn is_prm(atom: &Atom) -> bool {
+    match atom {
+        Atom::PRM(_, _) => true,
+        _ => false,
+    }
+}
+
 impl HwModule for OurosCore {
     fn update_local(&mut self) {
         /*
@@ -241,26 +255,31 @@ impl HwModule for OurosCore {
         self.reducer.input.app3_ready = self.buffers_dheap_b_2.in_ready();
 
         if self.reducer.spine().0 {
-            if is_whnf(&self.reducer.spine().1.load) || is_ptr(&self.reducer.spine().1.load[0]) {
-                // connect to dheap
-                self.buffers_dheap_a_1.input.in_valid = true;
-                self.buffers_dheap_a_1.input.din = self.reducer.spine().1.clone();
-                self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
-            } else if is_comb(&self.reducer.spine().1.load[0]) {
+            if is_prm(&self.reducer.spine().1.load[0])
+                && is_int(&self.reducer.spine().1.load[1])
+                && is_int(&self.reducer.spine().1.load[2])
+            {
+                // connect to alu
+                self.buffers_alu_0.input.in_valid = true;
+                self.buffers_alu_0.input.din = self.reducer.spine().1.clone();
+                self.reducer.input.spine_ready = self.buffers_alu_0.in_ready();
+            } else if !is_whnf(&self.reducer.spine().1.load)
+                && is_comb(&self.reducer.spine().1.load[0])
+            {
                 // connect to reducer
                 self.buffers_reducer_0.input.in_valid = true;
                 self.buffers_reducer_0.input.din = self.reducer.spine().1.clone();
                 self.reducer.input.spine_ready = self.buffers_reducer_0.in_ready();
             } else {
-                // connect to alu
-                self.buffers_alu_0.input.in_valid = true;
-                self.buffers_alu_0.input.din = self.reducer.spine().1.clone();
-                self.reducer.input.spine_ready = self.buffers_alu_0.in_ready();
+                // connect to dheap
+                self.buffers_dheap_a_1.input.in_valid = true;
+                self.buffers_dheap_a_1.input.din = self.reducer.spine().1.clone();
+                self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
             }
         }
 
         if self.alu.output_valid() {
-            if is_whnf(&self.alu.output_bits().load) {
+            if !is_whnf(&self.alu.output_bits().load) {
                 self.buffers_reducer_2.input.in_valid = true;
                 self.buffers_reducer_2.input.din = self.alu.output_bits().clone();
                 self.alu.input.output_ready = self.buffers_reducer_2.in_ready();
@@ -279,9 +298,11 @@ impl HwModule for OurosCore {
     fn tick_children(&mut self) {
         self.dheap.tick();
         self.reducer.tick();
+        self.alu.tick();
 
         self.buffers_dheap_a_0.tick();
         self.buffers_dheap_a_1.tick();
+        self.buffers_dheap_a_2.tick();
         self.arbiter_dheap_a.tick();
 
         self.buffers_dheap_b_0.tick();
@@ -291,6 +312,7 @@ impl HwModule for OurosCore {
 
         self.buffers_reducer_0.tick();
         self.buffers_reducer_1.tick();
+        self.buffers_reducer_2.tick();
         self.arbiter_reducer.tick();
 
         self.buffers_alu_0.tick();
@@ -302,7 +324,7 @@ impl HwModule for OurosCore {
 #[test]
 fn ouros_core_spec() {
     use super::benchmarks::*;
-    let mut ouros = OurosCore::new(&BOOL_NEST);
+    let mut ouros = OurosCore::new(&ALU_OP);
     let mut cycle: i32 = 0;
 
     ouros.tick();
@@ -319,11 +341,12 @@ fn ouros_core_spec() {
             break;
         }
         ouros.tick();
-        cycle = cycle + 1;
+        cycle += 1;
     }
 
-    let dheap_stat = &ouros.dheap.get_stat();
-    let reducer_stat = &ouros.reducer.get_stat();
+    let dheap_stat = ouros.dheap.get_stat();
+    let reducer_stat = ouros.reducer.get_stat();
+    let alu_stat = ouros.alu.get_stat();
 
     fn compress(oapp: &Option<App>) -> String {
         match oapp {
@@ -344,8 +367,21 @@ fn ouros_core_spec() {
         .holder_contents
         .iter()
         .zip(&reducer_stat.holder_contents)
+        .zip(&alu_stat.holder_contents)
+        .map(|((x, y), z)| (x, y, z))
         .enumerate()
     {
-        println!("{} dheap: {} reducer: {}", i, compress(p.0), compress(p.1));
+        println!(
+            "{} dheap: {} reducer: {} alu: {}",
+            i,
+            compress(p.0),
+            compress(p.1),
+            compress(p.2)
+        );
     }
+
+    println!(
+        "reducer busy cycles: {}, alu busy cycles: {}",
+        reducer_stat.busy_cycles, alu_stat.busy_cycles
+    );
 }
