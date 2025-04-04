@@ -4,21 +4,21 @@ use crate::hardware::common::{Arbiter, FIFO};
 use crate::hardware::ouros::program::app_length;
 use crate::hw_module::{HwInput, HwModule};
 
-use super::alu::Alu;
-use super::deref_heap::DrfHeap;
+use super::alu::{Alu, AluStat};
+use super::deref_heap::{DrfHeap, DrfHeapStat};
 use super::program::{is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
-use super::reducer::Reducer;
+use super::reducer::{Reducer, ReducerStat};
 
 #[derive(Default)]
-struct OurosCoreInput {
-    start: bool,
+pub struct OurosCoreInput {
+    pub start: bool,
 }
 
 impl HwInput for OurosCoreInput {}
 
 // TODO: add more detailed FIFO depth configuration.
-struct OurosCore {
-    input: OurosCoreInput,
+pub struct OurosCore {
+    pub input: OurosCoreInput,
     dheap: DrfHeap,
     reducer: Reducer,
     alu: Alu,
@@ -74,6 +74,14 @@ impl OurosCore {
 
     pub fn done(&self) -> bool {
         self.dheap.done()
+    }
+
+    pub fn get_stat(&self) -> (&DrfHeapStat, &ReducerStat, &AluStat) {
+        (
+            self.dheap.get_stat(),
+            self.reducer.get_stat(),
+            self.alu.get_stat(),
+        )
     }
 }
 
@@ -371,15 +379,17 @@ fn ouros_core_spec() {
         .iter()
         .zip(&reducer_stat.holder_contents)
         .zip(&alu_stat.holder_contents)
-        .map(|((x, y), z)| (x, y, z))
+        .zip(&dheap_stat.work_threads)
+        .map(|(((a, b), c), d)| (a, b, c, d))
         .enumerate()
     {
         println!(
-            "{} dheap: {} reducer: {} alu: {}",
+            "{} dheap: {} reducer: {} alu: {} threads: {}",
             i,
             compress(p.0),
             compress(p.1),
-            compress(p.2)
+            compress(p.2),
+            p.3
         );
     }
 

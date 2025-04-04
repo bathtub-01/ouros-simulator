@@ -29,6 +29,7 @@ impl HwInput for AluInput {}
 #[derive(Default)]
 pub struct AluStat {
     pub busy_cycles: u32,
+    pub busy_per_cycle: Vec<bool>,
     pub holder_contents: Vec<Option<App>>,
 }
 
@@ -145,6 +146,9 @@ impl HwModule for Alu {
     fn update_stat(&mut self) {
         if fire(self.input.input_valid, self.input_ready()) {
             self.stat.busy_cycles += 1;
+            self.stat.busy_per_cycle.push(true);
+        } else {
+            self.stat.busy_per_cycle.push(false);
         }
 
         if self.holder.0 {

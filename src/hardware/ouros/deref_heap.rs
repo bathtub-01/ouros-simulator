@@ -58,6 +58,7 @@ struct HeapCell {
 
 #[derive(Default)]
 pub struct DrfHeapStat {
+    pub work_threads: Vec<u8>,
     pub holder_contents: Vec<Option<App>>,
 }
 
@@ -891,6 +892,13 @@ impl HwModule for DrfHeap {
         } else {
             self.stat.holder_contents.push(None);
         }
+
+        let threads = self
+            .thread_stack
+            .iter()
+            .filter(|stk| stk.elements() != 0)
+            .count();
+        self.stat.work_threads.push(threads as u8);
     }
 
     fn tick_children(&mut self) {

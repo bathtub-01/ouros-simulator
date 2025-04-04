@@ -30,6 +30,7 @@ impl HwInput for ReducerInput {}
 #[derive(Default)]
 pub struct ReducerStat {
     pub busy_cycles: u32,
+    pub busy_per_cycle: Vec<bool>,
     pub holder_contents: Vec<Option<App>>,
 }
 
@@ -187,6 +188,9 @@ impl HwModule for Reducer {
     fn update_stat(&mut self) {
         if fire(self.input.in_valid, self.in_ready()) {
             self.stat.busy_cycles += 1;
+            self.stat.busy_per_cycle.push(true);
+        } else {
+            self.stat.busy_per_cycle.push(false);
         }
 
         if self.spine_holder.0 {
