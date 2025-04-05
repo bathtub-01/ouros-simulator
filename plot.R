@@ -1,5 +1,6 @@
 # library
 library(ggplot2)
+library(tidyr)
 
 # Define your color palette (for continuous scale)
 my_palette4 <- c("#bf616a", "#5e81ac", "#ebcb8b", "#a3be8c")
@@ -76,3 +77,16 @@ plot <- ggplot(combined_data, aes(x = time, y = rate, color = source)) +
   )
 
 ggsave("simu-out/busy-rate.pdf", width = 10, height = 6, units = "cm")
+
+# Simulate some data
+data <- read.csv("simu-out/buffer-util.csv", header = TRUE)
+
+# Reshape and plot
+data_long <- pivot_longer(data, cols = -time, names_to = "variable", values_to = "value")
+ggplot(data_long, aes(x = time, y = value)) +
+  geom_line(color = "#5e81ac", linewidth = 0.5)+
+  facet_wrap(~ variable, ncol = 3, scales = "free_y") +
+  scale_y_continuous(limits = c(0, 8)) +  # Force y-axis range
+  labs(x = "Cycle", y = "Buffer Depth") +
+  theme_bw()
+ggsave("simu-out/buffer_util.pdf", width = 20, height = 16, units = "cm")
