@@ -16,10 +16,16 @@ impl<T: Clone + Default> HwInput for FIFOInput<T> {
     }
 }
 
+#[derive(Default)]
+pub struct FIFOStat {
+    pub length_per_cycle: Vec<u8>,
+}
+
 /// FIFO, with size N. Supports pipelining when full.
 pub struct FIFO<T: Clone + Default, const N: usize> {
     pub input: FIFOInput<T>,
     queue: VecDeque<T>,
+    stat: FIFOStat,
 }
 
 impl<T: Clone + Default, const N: usize> FIFO<T, N> {
@@ -27,6 +33,7 @@ impl<T: Clone + Default, const N: usize> FIFO<T, N> {
         Self {
             input: Default::default(),
             queue: VecDeque::with_capacity(N),
+            stat: Default::default(),
         }
     }
 
@@ -44,6 +51,10 @@ impl<T: Clone + Default, const N: usize> FIFO<T, N> {
             Some(v) => Some(v),
         }
     }
+
+    pub fn get_stat(&self) -> &FIFOStat {
+        &self.stat
+    }
 }
 
 impl<T: Clone + Default, const N: usize> HwModule for FIFO<T, N> {
@@ -56,6 +67,10 @@ impl<T: Clone + Default, const N: usize> HwModule for FIFO<T, N> {
         if fire(self.input.in_valid, self.in_ready()) {
             self.queue.push_back(self.input.din.clone());
         }
+    }
+
+    fn update_stat(&mut self) {
+        self.stat.length_per_cycle.push(self.queue.len() as u8);
     }
 
     fn tick_children(&mut self) {}

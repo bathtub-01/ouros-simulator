@@ -71,6 +71,7 @@ fn main() -> std::io::Result<()> {
     let threads_path = Path::new(dir).join("threads.csv");
     let red_rate_path = Path::new(dir).join("red-rate.csv");
     let alu_rate_path = Path::new(dir).join("alu-rate.csv");
+    let buffer_util_path = Path::new(dir).join("buffer_util.csv");
 
     fs::create_dir_all(dir)?;
 
@@ -78,6 +79,7 @@ fn main() -> std::io::Result<()> {
     let mut threads = File::create(threads_path)?;
     let mut red_rate = File::create(red_rate_path)?;
     let mut alu_rate = File::create(alu_rate_path)?;
+    let mut buffer_util = File::create(buffer_util_path)?;
 
     let (ouros, runtime_cycles) = simulate();
     let stats = ouros.get_stat();
@@ -136,6 +138,27 @@ fn main() -> std::io::Result<()> {
 
     let alu_rate_data: Vec<f32> = chunk_rate(&stats.2.busy_per_cycle, chunk_size);
     write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)?;
+
+    // write buffer utilisation
+    writeln!(buffer_util, "time,alu_0,alu_1,dheap_a_0,dheap_a_1,dheap_a_2,dheap_b_0,dheap_b_1,dheap_b_2,reducer_0,reducer_1,reducer_2")?;
+    let buffer_util_data = &stats.3;
+    for i in 0..buffer_util_data[0].length_per_cycle.len() {
+        writeln!(
+            buffer_util,
+            "{},{},{},{},{},{},{},{},{},{},{}",
+            buffer_util_data[0].length_per_cycle[i],
+            buffer_util_data[1].length_per_cycle[i],
+            buffer_util_data[2].length_per_cycle[i],
+            buffer_util_data[3].length_per_cycle[i],
+            buffer_util_data[4].length_per_cycle[i],
+            buffer_util_data[5].length_per_cycle[i],
+            buffer_util_data[6].length_per_cycle[i],
+            buffer_util_data[7].length_per_cycle[i],
+            buffer_util_data[8].length_per_cycle[i],
+            buffer_util_data[9].length_per_cycle[i],
+            buffer_util_data[10].length_per_cycle[i],
+        )?;
+    }
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 // Top level module of the Ouros core.
 
+use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::{Arbiter, FIFO};
 use crate::hardware::ouros::program::app_length;
 use crate::hw_module::{HwInput, HwModule};
@@ -76,11 +77,24 @@ impl OurosCore {
         self.dheap.done()
     }
 
-    pub fn get_stat(&self) -> (&DrfHeapStat, &ReducerStat, &AluStat) {
+    pub fn get_stat(&self) -> (&DrfHeapStat, &ReducerStat, &AluStat, [&FIFOStat; 11]) {
         (
             self.dheap.get_stat(),
             self.reducer.get_stat(),
             self.alu.get_stat(),
+            [
+                self.buffers_alu_0.get_stat(),
+                self.buffers_alu_1.get_stat(),
+                self.buffers_dheap_a_0.get_stat(),
+                self.buffers_dheap_a_1.get_stat(),
+                self.buffers_dheap_a_2.get_stat(),
+                self.buffers_dheap_b_0.get_stat(),
+                self.buffers_dheap_b_1.get_stat(),
+                self.buffers_dheap_b_2.get_stat(),
+                self.buffers_reducer_0.get_stat(),
+                self.buffers_reducer_1.get_stat(),
+                self.buffers_reducer_2.get_stat(),
+            ],
         )
     }
 }
