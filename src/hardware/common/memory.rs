@@ -114,6 +114,28 @@ impl<T: Clone + Default> DualPortMem<T> {
     pub fn dout_b(&self) -> &T {
         &self.holder_b
     }
+
+    pub fn write_a(&mut self, addr: usize, din: T) {
+        self.input.port_a.is_write = true;
+        self.input.port_a.addr = addr;
+        self.input.port_a.din = din;
+    }
+
+    pub fn read_a(&mut self, addr: usize) {
+        self.input.port_a.is_write = false;
+        self.input.port_a.addr = addr;
+    }
+
+    pub fn write_b(&mut self, addr: usize, din: T) {
+        self.input.port_b.is_write = true;
+        self.input.port_b.addr = addr;
+        self.input.port_b.din = din;
+    }
+
+    pub fn read_b(&mut self, addr: usize) {
+        self.input.port_b.is_write = false;
+        self.input.port_b.addr = addr;
+    }
 }
 
 impl<T: Clone + Default> HwModule for DualPortMem<T> {

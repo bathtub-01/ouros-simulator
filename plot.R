@@ -35,14 +35,14 @@ ggsave("simu-out/working-threads.pdf", width = 10, height = 5, units = "cm")
 # =========== PLOT BUSY RATES =============
 data1 <- read.csv("simu-out/red-rate.csv", header = TRUE)
 data2 <- read.csv("simu-out/alu-rate.csv", header = TRUE)
-data1$source <- "Combinator"  # Label for the first dataset
-data2$source <- "ALU Op"  # Label for the second dataset
+data1$source <- "Reducer"  # Label for the first dataset
+data2$source <- "ALU"  # Label for the second dataset
 combined_data <- rbind(data1, data2)  # Stack them vertically
 
 plot <- ggplot(combined_data, aes(x = time, y = rate, color = source)) +
   geom_line(linewidth = 0.5) +
   labs(x = "Cycles", y = "Busy Rate (%)", title = "Components Busy Rate Over Time") +
-  scale_color_manual(values = c("Combinator" = "#5e81ac", "ALU Op" = "#bf616a")) +
+  scale_color_manual(values = c("Reducer" = "#5e81ac", "ALU" = "#bf616a")) +
   guides(color = guide_legend(position = "inside"))+
   theme(
     plot.title = element_text(size = 12, hjust = 0.5),  # Smaller & centered title
@@ -89,4 +89,4 @@ ggplot(data_long, aes(x = time, y = value)) +
   scale_y_continuous(limits = c(0, 8)) +  # Force y-axis range
   labs(x = "Cycle", y = "Buffer Depth") +
   theme_bw()
-ggsave("simu-out/buffer_util.pdf", width = 20, height = 16, units = "cm")
+ggsave("simu-out/buffer-util.pdf", width = 20, height = 16, units = "cm")

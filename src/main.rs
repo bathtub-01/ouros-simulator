@@ -93,6 +93,11 @@ fn main() -> std::io::Result<()> {
     let (ouros, runtime_cycles) = simulate();
     let stats = ouros.get_stat();
 
+    println!(
+        "==== Simulation done! Cycles consumed: {} ====",
+        runtime_cycles
+    );
+
     // write log
     writeln!(log, "==================== SUMMARY =====================")?;
     writeln!(

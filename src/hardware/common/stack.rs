@@ -1,7 +1,7 @@
 use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
-pub enum StackOp {
+enum StackOp {
     #[default]
     NOP, // non-op
     PUSH, // push one
@@ -11,8 +11,8 @@ pub enum StackOp {
 
 #[derive(Default)]
 pub struct StackInput<T: Clone + Default> {
-    pub op: StackOp,
-    pub din: T,
+    op: StackOp,
+    din: T,
 }
 
 impl<T: Clone + Default> HwInput for StackInput<T> {
@@ -53,6 +53,20 @@ impl<T: Clone + Default, const N: usize> Stack<T, N> {
     /// current depth of the stack
     pub fn elements(&self) -> usize {
         self.mem.len()
+    }
+
+    pub fn push(&mut self, din: T) {
+        self.input.op = StackOp::PUSH;
+        self.input.din = din;
+    }
+
+    pub fn pop(&mut self) {
+        self.input.op = StackOp::POP;
+    }
+
+    pub fn modify(&mut self, din: T) {
+        self.input.op = StackOp::MOD;
+        self.input.din = din;
     }
 }
 

@@ -175,9 +175,9 @@ impl HwModule for OurosCore {
         // connect start signal
         self.dheap.input.start = self.input.start;
 
+        // this 'kind of' fixes the ring problem
         for _ in 0..3 {
             // connect arbiters as components' input (arbiter first)
-            // FIXME: what if dheap.port_a_ready depends on dheap.port_b_valid?
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
             self.arbiter_dheap_b.input.out_ready = self.dheap.port_b_ready();
             self.arbiter_reducer.input.out_ready = self.reducer.in_ready();
