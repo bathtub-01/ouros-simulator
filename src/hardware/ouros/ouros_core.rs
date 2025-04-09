@@ -346,69 +346,41 @@ impl HwModule for OurosCore {
     }
 }
 
+/// Quickly test whether the machine terminates and produces
+/// correct results.
 #[test]
 fn ouros_core_spec() {
     use super::benchmarks::*;
-    let mut ouros = OurosCore::new(&FIB);
-    let mut cycle: i32 = 0;
+    use Atom::*;
+    // [(program, result)]
+    let progs = [
+        (&FIB, INT(89)),
+        (&BOOL_AND, COM(2, 0, [1, 0, 0, 0, 0, 0])),
+        (&BOOL_NEST, COM(2, 0, [1, 0, 0, 0, 0, 0])),
+        (&ALU_OP, INT(162)),
+    ];
 
-    ouros.tick();
+    for (p, r) in progs {
+        let mut ouros = OurosCore::new(p);
+        let mut cycle: i32 = 0;
 
-    // kick start the machine
-    ouros.input.start = true;
-    ouros.tick();
-    ouros.input.start = false;
-
-    loop {
-        assert!(cycle < 100_000);
-        if ouros.done() {
-            println!("Program finished, taking {} cycles.", cycle);
-            break;
-        }
         ouros.tick();
-        cycle += 1;
-    }
 
-    let dheap_stat = ouros.dheap.get_stat();
-    let reducer_stat = ouros.reducer.get_stat();
-    let alu_stat = ouros.alu.get_stat();
+        // kick start the machine
+        ouros.input.start = true;
+        ouros.tick();
+        ouros.input.start = false;
 
-    fn compress(oapp: &Option<App>) -> String {
-        match oapp {
-            None => "empty".to_string(),
-            Some(app) => {
-                let app_str = app
-                    .iter()
-                    .take(app_length(app))
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                format!("[{}]", app_str)
+        loop {
+            assert!(cycle < 10_000);
+            if ouros.done() {
+                break;
             }
+            ouros.tick();
+            cycle += 1;
         }
-    }
 
-    for (i, p) in dheap_stat
-        .holder_contents
-        .iter()
-        .zip(&reducer_stat.holder_contents)
-        .zip(&alu_stat.holder_contents)
-        .zip(&dheap_stat.work_threads)
-        .map(|(((a, b), c), d)| (a, b, c, d))
-        .enumerate()
-    {
-        println!(
-            "{} dheap: {} reducer: {} alu: {} threads: {}",
-            i,
-            compress(p.0),
-            compress(p.1),
-            compress(p.2),
-            p.3
-        );
+        let res = &ouros.dheap.input.port_a_bits.load[0];
+        assert_eq!(*res, r);
     }
-
-    println!(
-        "reducer busy cycles: {}, alu busy cycles: {}",
-        reducer_stat.busy_cycles, alu_stat.busy_cycles
-    );
 }
