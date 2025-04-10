@@ -78,10 +78,37 @@ plot <- ggplot(combined_data, aes(x = time, y = rate, color = source)) +
 
 ggsave("simu-out/busy-rate.pdf", width = 10, height = 6, units = "cm")
 
-# Simulate some data
+# =========== PLOT STM DISTRIBUTION =============
+data <- read.csv("simu-out/stm-dist.csv", header = TRUE)
+# Convert 'state' to a factor with original order
+data$state <- factor(data$state, levels = data$state)
+
+ggplot(data, aes(x = state, y = cycles)) + 
+  geom_bar(stat = "identity", fill = "#5e81ac") +
+  labs(title = "Bar Chart of Cycles by State", 
+       x = "State", 
+       y = "Cycles") +
+  theme(
+    plot.title = element_text(size = 12, hjust = 0.5),  # Smaller & centered title
+    axis.title = element_text(size = 10),               # Smaller axis titles
+    axis.text = element_text(size = 10),               # Smaller tick labels
+    
+    # Remove minor gridlines (keep major if needed)
+    panel.grid.minor = element_blank(),                 
+    panel.grid.major = element_blank(),
+    
+    # Black border around the plot
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    
+    panel.background = element_rect(fill = "white"),
+    axis.ticks.length = unit(-0.15, "cm"),  # Negative value flips ticks inward
+  )
+  
+ggsave("simu-out/stm-dist.pdf", width = 10, height = 6, units = "cm")
+
+# =========== PLOT BUFFER UTILISATION =============
 data <- read.csv("simu-out/buffer-util.csv", header = TRUE)
 
-# Reshape and plot
 data_long <- pivot_longer(data, cols = -time, names_to = "variable", values_to = "value")
 ggplot(data_long, aes(x = time, y = value)) +
   geom_line(color = "#5e81ac", linewidth = 0.5)+

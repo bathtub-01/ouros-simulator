@@ -7,6 +7,7 @@
 
 use super::config::APP_LENGTH;
 use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
+use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{DualPortMem, Register, Stack};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
@@ -39,7 +40,7 @@ enum Stm {
     #[default]
     IDLE,
     WHNF,
-    WHNFsub,
+    // WHNFsub,
     IA,
     IAw,
     OPa,
@@ -59,6 +60,7 @@ struct HeapCell {
 pub struct DrfHeapStat {
     pub work_threads: Vec<u8>,
     pub holder_contents: Vec<Option<App>>,
+    pub stm_cycles: [u32; 8],
     pub wasted_cycles: u32,
 }
 
@@ -182,6 +184,10 @@ impl DrfHeap {
 
     pub fn get_stat(&self) -> &DrfHeapStat {
         &self.stat
+    }
+
+    pub fn get_mem_stat(&self) -> &DualPortMemStat {
+        self.heap_mem.get_stat()
     }
 
     fn handle_new_input(&mut self) {
@@ -481,7 +487,7 @@ impl HwModule for DrfHeap {
                     }
                 }
             }
-            Stm::WHNFsub => unimplemented!(),
+            // Stm::WHNFsub => unimplemented!(),
             Stm::IA => {
                 let target = &self.heap_mem.dout_a().app;
                 let demander = &self.holder_in.load;
@@ -561,6 +567,7 @@ impl HwModule for DrfHeap {
                 );
                 // jump to next state
                 self.stm.connect(&Stm::IDLE);
+                self.stat.wasted_cycles += 1;
             }
             Stm::OPa => {
                 let target = &self.heap_mem.dout_a().app;
@@ -660,6 +667,7 @@ impl HwModule for DrfHeap {
 
                         // jump to next state
                         self.stm.connect(&Stm::IDLE);
+                        self.stat.wasted_cycles += 1;
                     }
                     _ => panic!("dheap: unknown PRM argument `b` type!"),
                 }
@@ -811,6 +819,7 @@ impl HwModule for DrfHeap {
 
                 // jump to next state
                 self.stm.connect(&Stm::IDLE);
+                self.stat.wasted_cycles += 1;
             }
         }
 
@@ -852,6 +861,17 @@ impl HwModule for DrfHeap {
             .filter(|stk| stk.elements() != 0)
             .count();
         self.stat.work_threads.push(threads as u8);
+
+        match *self.stm.value() {
+            Stm::IDLE => self.stat.stm_cycles[0] += 1,
+            Stm::WHNF => self.stat.stm_cycles[1] += 1,
+            Stm::IA => self.stat.stm_cycles[2] += 1,
+            Stm::IAw => self.stat.stm_cycles[3] += 1,
+            Stm::OPa => self.stat.stm_cycles[4] += 1,
+            Stm::OPaw => self.stat.stm_cycles[5] += 1,
+            Stm::OPb => self.stat.stm_cycles[6] += 1,
+            Stm::OPbw => self.stat.stm_cycles[7] += 1,
+        }
     }
 
     fn tick_children(&mut self) {

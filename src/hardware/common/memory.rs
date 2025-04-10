@@ -82,6 +82,14 @@ impl<T: Clone + Default> HwInput for DualInput<T> {
     }
 }
 
+#[derive(Default)]
+pub struct DualPortMemStat {
+    pub a_reads: u32,
+    pub a_writes: u32,
+    pub b_reads: u32,
+    pub b_writes: u32,
+}
+
 /// Synchronous dual port read-write memory.
 /// Read-after-write for the same address.
 pub struct DualPortMem<T: Clone + Default> {
@@ -89,6 +97,7 @@ pub struct DualPortMem<T: Clone + Default> {
     ram: Vec<T>,
     holder_a: T,
     holder_b: T,
+    stat: DualPortMemStat,
 }
 
 impl<T: Clone + Default> DualPortMem<T> {
@@ -98,6 +107,7 @@ impl<T: Clone + Default> DualPortMem<T> {
             ram: vec![T::default(); depth],
             holder_a: T::default(),
             holder_b: T::default(),
+            stat: Default::default(),
         }
     }
 
@@ -119,22 +129,34 @@ impl<T: Clone + Default> DualPortMem<T> {
         self.input.port_a.is_write = true;
         self.input.port_a.addr = addr;
         self.input.port_a.din = din;
+
+        self.stat.a_writes += 1;
     }
 
     pub fn read_a(&mut self, addr: usize) {
         self.input.port_a.is_write = false;
         self.input.port_a.addr = addr;
+
+        self.stat.a_reads += 1;
     }
 
     pub fn write_b(&mut self, addr: usize, din: T) {
         self.input.port_b.is_write = true;
         self.input.port_b.addr = addr;
         self.input.port_b.din = din;
+
+        self.stat.b_writes += 1;
     }
 
     pub fn read_b(&mut self, addr: usize) {
         self.input.port_b.is_write = false;
         self.input.port_b.addr = addr;
+
+        self.stat.b_reads += 1;
+    }
+
+    pub fn get_stat(&self) -> &DualPortMemStat {
+        &self.stat
     }
 }
 

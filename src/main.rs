@@ -22,8 +22,8 @@ fn simulate() -> (OurosCore, u32) {
     ouros.input.start = false;
 
     loop {
-        assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 4000 {
+        assert!(cycle < 1_000_0);
+        if ouros.done() {
             break;
         }
         ouros.tick();
@@ -81,6 +81,7 @@ fn main() -> std::io::Result<()> {
     let red_rate_path = Path::new(dir).join("red-rate.csv");
     let alu_rate_path = Path::new(dir).join("alu-rate.csv");
     let buffer_util_path = Path::new(dir).join("buffer-util.csv");
+    let stm_dist_path = Path::new(dir).join("stm-dist.csv");
 
     fs::create_dir_all(dir)?;
 
@@ -89,6 +90,7 @@ fn main() -> std::io::Result<()> {
     let mut red_rate = File::create(red_rate_path)?;
     let mut alu_rate = File::create(alu_rate_path)?;
     let mut buffer_util = File::create(buffer_util_path)?;
+    let mut stm_dist = File::create(stm_dist_path)?;
 
     let (ouros, runtime_cycles) = simulate();
     let stats = ouros.get_stat();
@@ -116,6 +118,15 @@ fn main() -> std::io::Result<()> {
         "         ALU busy cycles: {} ({:.2}%)",
         stats.2.busy_cycles,
         (stats.2.busy_cycles as f32) / (runtime_cycles as f32) * 100.0
+    )?;
+    writeln!(
+        log,
+        "Heap memory accesses: {} (a_read {}, a_write {}, b_read {}, b_write {})",
+        stats.4.a_reads + stats.4.a_writes + stats.4.b_reads + stats.4.b_writes,
+        stats.4.a_reads,
+        stats.4.a_writes,
+        stats.4.b_reads,
+        stats.4.b_writes,
     )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 
@@ -173,6 +184,15 @@ fn main() -> std::io::Result<()> {
             buffer_util_data[9][i],
             buffer_util_data[10][i],
         )?;
+    }
+
+    // write stm distributioin
+    writeln!(stm_dist, "state,cycles")?;
+    for (s, c) in ["IDLE", "WHNF", "IA", "IAw", "OPa", "OPaw", "OPb", "OPbw"]
+        .iter()
+        .zip(stats.0.stm_cycles)
+    {
+        writeln!(stm_dist, "{},{}", s, c)?;
     }
 
     Ok(())
