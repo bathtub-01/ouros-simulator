@@ -23,7 +23,7 @@ fn simulate() -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() {
+        if ouros.done() || cycle == 4000 {
             break;
         }
         ouros.tick();
@@ -94,8 +94,8 @@ fn main() -> std::io::Result<()> {
     let stats = ouros.get_stat();
 
     println!(
-        "==== Simulation done! Cycles consumed: {} ====",
-        runtime_cycles
+        "==== Simulation done! Cycles consumed: {} (wsated {}) ====",
+        runtime_cycles, stats.0.wasted_cycles
     );
 
     // write log

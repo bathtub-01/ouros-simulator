@@ -59,6 +59,7 @@ struct HeapCell {
 pub struct DrfHeapStat {
     pub work_threads: Vec<u8>,
     pub holder_contents: Vec<Option<App>>,
+    pub wasted_cycles: u32,
 }
 
 // TODO: enable stack depth configuration
@@ -72,6 +73,7 @@ pub struct DrfHeap {
     holder_out: (Dest, bool, ActiveApp), // output-reg: (destination, valid, app)
     working: Register<bool>,             // track whether the machine is working
     addr_bumper: Register<usize>,
+    port_a_short: bool,
     stat: DrfHeapStat,
 }
 
@@ -87,6 +89,7 @@ impl DrfHeap {
             holder_out: Default::default(),
             working: Default::default(),
             addr_bumper: Default::default(),
+            port_a_short: Default::default(),
             stat: Default::default(),
         }
     }
@@ -122,12 +125,23 @@ impl DrfHeap {
             || fire(self.to_self_valid(), self.input.to_self_ready)
     }
 
+    /// port_a is ready to handle a new application in this cycle
     pub fn port_a_ready(&self) -> bool {
-        // port_a is ready to handle a new application in this cycle
-        // TODO: add an OR condition here to allow bypass?
-        (!self.holder_out.1 || self.output_fire())
-            && *self.stm.value() == Stm::IDLE
-            && !self.input.port_b_valid // ad-hoc fix
+        let out_clear = !self.holder_out.1 || self.output_fire();
+        let local: bool = {
+            match *self.stm.value() {
+                Stm::IDLE => true,
+                Stm::IA | Stm::OPb => is_whnf(&self.heap_mem.dout_a().app),
+                Stm::OPa => match self.holder_in.load[2] {
+                    Atom::INT(_) => is_whnf(&self.heap_mem.dout_a().app),
+                    _ => false,
+                },
+                _ => false,
+            }
+        };
+        let b_clear = !self.input.port_b_valid; // ad-hoc fix
+
+        out_clear && local && b_clear
     }
 
     pub fn port_b_ready(&self) -> bool {
@@ -168,6 +182,108 @@ impl DrfHeap {
 
     pub fn get_stat(&self) -> &DrfHeapStat {
         &self.stat
+    }
+
+    fn handle_new_input(&mut self) {
+        if self.port_a_fire() {
+            // handle new input
+            let stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+            // put input into holder
+            self.holder_in = self.input.port_a_bits.clone();
+            if is_whnf(&self.input.port_a_bits.load) {
+                match stk.second() {
+                    Some(addr) => {
+                        // read demander app
+                        self.heap_mem.read_a(*addr);
+                        // jump to next state
+                        self.stm.connect(&Stm::WHNF);
+                    }
+                    None => {
+                        // A sub thread reaches its end
+
+                        // pop this sub thread
+                        stk.pop();
+
+                        // find the demander, if any
+                        let top = *stk.top().unwrap();
+                        let (idx, demander): (usize, Option<&usize>) = {
+                            let mut res = (0, None);
+                            for (i, s) in self.thread_stack.iter().enumerate() {
+                                if s.top() == Some(&top) {
+                                    if s.second() != None {
+                                        res = (i, s.second());
+                                        break;
+                                    }
+                                }
+                            }
+                            res
+                        };
+                        match demander {
+                            Some(addr) => {
+                                self.holder_in.stack_idx = idx as u8;
+                                // read demander app
+                                self.heap_mem.read_a(*addr);
+                                // jump to next state
+                                self.stm.connect(&Stm::WHNF);
+                            }
+                            None => {
+                                // no one is waiting yet, just write it
+                                self.heap_mem.write_a(
+                                    top,
+                                    HeapCell {
+                                        working: false, // already in WHNF
+                                        stack_idx: 0,   // don't care
+                                        app: self.input.port_a_bits.load.clone(),
+                                    },
+                                );
+
+                                // jump to next state
+                                self.stm.connect(&Stm::IDLE);
+                            }
+                        }
+                    }
+                }
+            } else {
+                match self.input.port_a_bits.load[0] {
+                    Atom::PTR(p) => {
+                        // read the target
+                        self.heap_mem.read_a(p);
+                        self.addr_holder = p;
+                        // jump to next state
+                        self.stm.connect(&Stm::IA);
+                    }
+                    Atom::PRM(_, _) => {
+                        // (op a b)
+                        // check `a`
+                        match self.input.port_a_bits.load[1] {
+                            Atom::PTR(p) => {
+                                // read the target
+                                self.heap_mem.read_a(p);
+                                // OPa need this
+                                self.addr_holder = p;
+                                // jump to next state
+                                self.stm.connect(&Stm::OPa);
+                            }
+                            Atom::INT(_) => match self.input.port_a_bits.load[2] {
+                                Atom::PTR(p) => {
+                                    // read the target
+                                    self.heap_mem.read_a(p);
+                                    // OPb need this
+                                    self.addr_holder = p;
+                                    // jump to next state
+                                    self.stm.connect(&Stm::OPb);
+                                }
+                                _ => panic!("dheap: unknown PRM argument `b` type!"),
+                            },
+                            _ => panic!("dheap: unknown PRM argument `a` type!"),
+                        }
+                    }
+                    _ => {
+                        panic!("dheap: unknown input shape (redex should not enter dheap)!")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -235,6 +351,7 @@ impl HwModule for DrfHeap {
         for stk in &mut self.thread_stack {
             stk.input.default_input();
         }
+        self.port_a_short = false;
 
         // rise addr bumper
         self.addr_bumper
@@ -288,111 +405,9 @@ impl HwModule for DrfHeap {
             None
         };
 
-        // handle new input based on its shape, and jump to next state
-        // fn handle_new_input(h: &mut DrfHeap) {
-        //     h.stm.connect(&Stm::IDLE);
-        // }
         match *self.stm.value() {
             Stm::IDLE => {
-                if self.port_a_fire() {
-                    // handle new input
-                    let stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
-                    // put input into holder
-                    self.holder_in = self.input.port_a_bits.clone();
-                    if is_whnf(&self.input.port_a_bits.load) {
-                        match stk.second() {
-                            Some(addr) => {
-                                // read demander app
-                                self.heap_mem.read_a(*addr);
-                                // jump to next state
-                                self.stm.connect(&Stm::WHNF);
-                            }
-                            None => {
-                                // A sub thread reaches its end
-
-                                // pop this sub thread
-                                stk.pop();
-
-                                // find the demander, if any
-                                let top = *stk.top().unwrap();
-                                let (idx, demander): (usize, Option<&usize>) = {
-                                    let mut res = (0, None);
-                                    for (i, s) in self.thread_stack.iter().enumerate() {
-                                        if s.top() == Some(&top) {
-                                            if s.second() != None {
-                                                res = (i, s.second());
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    res
-                                };
-                                match demander {
-                                    Some(addr) => {
-                                        self.holder_in.stack_idx = idx as u8;
-                                        // read demander app
-                                        self.heap_mem.read_a(*addr);
-                                        // jump to next state
-                                        self.stm.connect(&Stm::WHNF);
-                                    }
-                                    None => {
-                                        // no one is waiting yet, just write it
-                                        self.heap_mem.write_a(
-                                            top,
-                                            HeapCell {
-                                                working: false, // already in WHNF
-                                                stack_idx: 0,   // don't care
-                                                app: self.input.port_a_bits.load.clone(),
-                                            },
-                                        );
-
-                                        // jump to next state
-                                        self.stm.connect(&Stm::IDLE);
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        match self.input.port_a_bits.load[0] {
-                            Atom::PTR(p) => {
-                                // read the target FIXME: refactor to change such things as functions
-                                self.heap_mem.read_a(p);
-                                self.addr_holder = p;
-                                // jump to next state
-                                self.stm.connect(&Stm::IA);
-                            }
-                            Atom::PRM(_, _) => {
-                                // (op a b)
-                                // check `a`
-                                match self.input.port_a_bits.load[1] {
-                                    Atom::PTR(p) => {
-                                        // read the target
-                                        self.heap_mem.read_a(p);
-                                        // OPa need this
-                                        self.addr_holder = p;
-                                        // jump to next state
-                                        self.stm.connect(&Stm::OPa);
-                                    }
-                                    Atom::INT(_) => match self.input.port_a_bits.load[2] {
-                                        Atom::PTR(p) => {
-                                            // read the target
-                                            self.heap_mem.read_a(p);
-                                            // OPb need this
-                                            self.addr_holder = p;
-                                            // jump to next state
-                                            self.stm.connect(&Stm::OPb);
-                                        }
-                                        _ => panic!("dheap: unknown PRM argument `b` type!"),
-                                    },
-                                    _ => panic!("dheap: unknown PRM argument `a` type!"),
-                                }
-                            }
-                            _ => {
-                                panic!("dheap: unknown input shape (redex should not enter dheap)!")
-                            }
-                        }
-                    }
-                }
+                self.handle_new_input();
             }
             Stm::WHNF => {
                 let stk = &mut self.thread_stack[self.holder_in.stack_idx as usize];
@@ -481,8 +496,9 @@ impl HwModule for DrfHeap {
                             load: deref_res,
                         },
                     );
-                    // jump to next state
+                    // jump to next state (allow shortcut)
                     self.stm.connect(&Stm::IDLE);
+                    self.handle_new_input();
                 } else {
                     let stk = &mut self.thread_stack[self.holder_in.stack_idx as usize];
                     if self.heap_mem.dout_a().working {
@@ -584,6 +600,7 @@ impl HwModule for DrfHeap {
                             );
                             // jump to next state
                             self.stm.connect(&Stm::IDLE);
+                            self.handle_new_input();
                         }
                         _ => panic!("dheap: unknown PRM argument `b` type!"),
                     }
@@ -671,6 +688,7 @@ impl HwModule for DrfHeap {
 
                     // jump to next state
                     self.stm.connect(&Stm::IDLE);
+                    self.handle_new_input();
                 } else if self.output_fire() || !self.holder_out.1 {
                     // whether to spark a new thread for `b`
                     let target = self.heap_mem.dout_a().app.clone();
