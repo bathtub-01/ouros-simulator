@@ -52,7 +52,7 @@ enum Stm {
 #[derive(Default, Clone)]
 struct HeapCell {
     working: bool,
-    stack_idx: u8,
+    // stack_idx: u8,
     app: App,
 }
 
@@ -104,7 +104,7 @@ impl DrfHeap {
             }
             HeapCell {
                 working: false,
-                stack_idx: 0,
+                // stack_idx: 0,
                 app,
             }
         }
@@ -145,7 +145,6 @@ impl DrfHeap {
     }
 
     pub fn port_b_ready(&self) -> bool {
-        // FIXME
         match *self.stm.value() {
             Stm::IAw => !(!is_whnf(&self.heap_mem.dout_a().app) && self.heap_mem.dout_a().working),
             Stm::OPa => is_whnf(&self.heap_mem.dout_a().app),
@@ -266,7 +265,7 @@ impl DrfHeap {
                                     top,
                                     HeapCell {
                                         working: false, // already in WHNF
-                                        stack_idx: 0,   // don't care
+                                        // stack_idx: 0,   // don't care
                                         app: self.input.port_a_bits.load.clone(),
                                     },
                                 );
@@ -445,7 +444,7 @@ impl HwModule for DrfHeap {
                         *addr,
                         HeapCell {
                             working: false, // already in WHNF
-                            stack_idx: self.holder_in.stack_idx,
+                            // stack_idx: self.holder_in.stack_idx,
                             app: target.clone(),
                         },
                     ),
@@ -480,7 +479,7 @@ impl HwModule for DrfHeap {
                             which_dest(&demander),
                             true,
                             ActiveApp {
-                                stack_idx: self.heap_mem.dout_a().stack_idx,
+                                stack_idx: self.holder_in.stack_idx,
                                 load: demander,
                             },
                         );
@@ -495,7 +494,7 @@ impl HwModule for DrfHeap {
                             which_dest(&deref_res),
                             true,
                             ActiveApp {
-                                stack_idx: self.heap_mem.dout_a().stack_idx,
+                                stack_idx: self.holder_in.stack_idx,
                                 load: deref_res,
                             },
                         );
@@ -504,7 +503,6 @@ impl HwModule for DrfHeap {
                     }
                 }
             }
-            // Stm::WHNFsub => unimplemented!(),
             Stm::IA => {
                 let target = &self.heap_mem.dout_a().app;
                 let demander = &self.holder_in.load;
@@ -537,7 +535,7 @@ impl HwModule for DrfHeap {
                                 *addr,
                                 HeapCell {
                                     working: true,
-                                    stack_idx: self.holder_in.stack_idx,
+                                    // stack_idx: self.holder_in.stack_idx,
                                     app: demander.clone(),
                                 },
                             ),
@@ -548,7 +546,7 @@ impl HwModule for DrfHeap {
                             self.addr_holder,
                             HeapCell {
                                 working: true,
-                                stack_idx: self.holder_in.stack_idx,
+                                // stack_idx: self.holder_in.stack_idx,
                                 app: self.holder_in.load.clone(),
                             },
                         );
@@ -632,7 +630,7 @@ impl HwModule for DrfHeap {
                         self.addr_holder,
                         HeapCell {
                             working: true,
-                            stack_idx: self.holder_in.stack_idx,
+                            // stack_idx: self.holder_in.stack_idx,
                             app: target.clone(),
                         },
                     );
@@ -666,7 +664,7 @@ impl HwModule for DrfHeap {
                                     *addr,
                                     HeapCell {
                                         working: true,
-                                        stack_idx: self.holder_in.stack_idx,
+                                        // stack_idx: self.holder_in.stack_idx,
                                         app: self.holder_in.load.clone(),
                                     },
                                 ),
@@ -723,7 +721,7 @@ impl HwModule for DrfHeap {
                                     self.addr_holder,
                                     HeapCell {
                                         working: true,
-                                        stack_idx: self.holder_in.stack_idx,
+                                        // stack_idx: self.holder_in.stack_idx,
                                         app: target.clone(),
                                     },
                                 );
@@ -734,7 +732,7 @@ impl HwModule for DrfHeap {
                                         .unwrap(),
                                     HeapCell {
                                         working: true,
-                                        stack_idx: self.holder_in.stack_idx,
+                                        // stack_idx: self.holder_in.stack_idx,
                                         app: self.holder_in.load.clone(),
                                     },
                                 );
@@ -760,7 +758,7 @@ impl HwModule for DrfHeap {
                                         .unwrap(),
                                     HeapCell {
                                         working: true,
-                                        stack_idx: self.holder_in.stack_idx,
+                                        // stack_idx: self.holder_in.stack_idx,
                                         app: self.holder_in.load.clone(),
                                     },
                                 );
@@ -780,7 +778,7 @@ impl HwModule for DrfHeap {
                                         self.addr_holder,
                                         HeapCell {
                                             working: true,
-                                            stack_idx: stk_idx as u8,
+                                            // stack_idx: stk_idx as u8,
                                             app: target.clone(),
                                         },
                                     );
@@ -792,7 +790,7 @@ impl HwModule for DrfHeap {
                                             .unwrap(),
                                         HeapCell {
                                             working: true,
-                                            stack_idx: self.holder_in.stack_idx,
+                                            // stack_idx: self.holder_in.stack_idx,
                                             app: self.holder_in.load.clone(),
                                         },
                                     );
@@ -823,7 +821,7 @@ impl HwModule for DrfHeap {
                                             .unwrap(),
                                         HeapCell {
                                             working: true,
-                                            stack_idx: self.holder_in.stack_idx,
+                                            // stack_idx: self.holder_in.stack_idx,
                                             app: self.holder_in.load.clone(),
                                         },
                                     );
@@ -849,7 +847,7 @@ impl HwModule for DrfHeap {
                 self.input.port_b_bits.heap_addr,
                 HeapCell {
                     working: false,
-                    stack_idx: 0,
+                    // stack_idx: 0,
                     app: {
                         let mut extended: App = std::array::from_fn(|_| Atom::NOP);
                         for (i, a) in self.input.port_b_bits.load.iter().enumerate() {
