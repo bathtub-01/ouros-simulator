@@ -31,7 +31,7 @@ impl HwInput for ReducerInput {}
 pub struct ReducerStat {
     pub busy_cycles: u32,
     pub busy_per_cycle: Vec<bool>,
-    pub holder_contents: Vec<Option<App>>,
+    pub holder_contents: Vec<Option<ActiveApp>>,
 }
 
 pub struct Reducer {
@@ -196,7 +196,7 @@ impl HwModule for Reducer {
         if self.spine_holder.0 {
             self.stat
                 .holder_contents
-                .push(Some(self.spine_holder.1.load.clone()));
+                .push(Some(self.spine_holder.1.clone()));
         } else {
             self.stat.holder_contents.push(None);
         }

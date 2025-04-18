@@ -28,7 +28,8 @@ pub struct OurosCore {
     buffers_dheap_a_0: FIFO<ActiveApp, 8>,
     buffers_dheap_a_1: FIFO<ActiveApp, 8>,
     buffers_dheap_a_2: FIFO<ActiveApp, 8>,
-    arbiter_dheap_a: Arbiter<ActiveApp, 3>,
+    buffers_dheap_a_3: FIFO<ActiveApp, 8>,
+    arbiter_dheap_a: Arbiter<ActiveApp, 4>,
 
     buffers_dheap_b_0: FIFO<FrozenApp, 8>,
     buffers_dheap_b_1: FIFO<FrozenApp, 8>,
@@ -38,11 +39,13 @@ pub struct OurosCore {
     buffers_reducer_0: FIFO<ActiveApp, 8>,
     buffers_reducer_1: FIFO<ActiveApp, 8>,
     buffers_reducer_2: FIFO<ActiveApp, 8>,
-    arbiter_reducer: Arbiter<ActiveApp, 3>,
+    buffers_reducer_3: FIFO<ActiveApp, 8>,
+    arbiter_reducer: Arbiter<ActiveApp, 4>,
 
     buffers_alu_0: FIFO<ActiveApp, 8>,
     buffers_alu_1: FIFO<ActiveApp, 8>,
-    arbiter_alu: Arbiter<ActiveApp, 2>,
+    buffers_alu_2: FIFO<ActiveApp, 8>,
+    arbiter_alu: Arbiter<ActiveApp, 3>,
 }
 
 impl OurosCore {
@@ -56,6 +59,7 @@ impl OurosCore {
             buffers_dheap_a_0: FIFO::new(),
             buffers_dheap_a_1: FIFO::new(),
             buffers_dheap_a_2: FIFO::new(),
+            buffers_dheap_a_3: FIFO::new(),
             arbiter_dheap_a: Arbiter::new(),
 
             buffers_dheap_b_0: FIFO::new(),
@@ -66,10 +70,12 @@ impl OurosCore {
             buffers_reducer_0: FIFO::new(),
             buffers_reducer_1: FIFO::new(),
             buffers_reducer_2: FIFO::new(),
+            buffers_reducer_3: FIFO::new(),
             arbiter_reducer: Arbiter::new(),
 
             buffers_alu_0: FIFO::new(),
             buffers_alu_1: FIFO::new(),
+            buffers_alu_2: FIFO::new(),
             arbiter_alu: Arbiter::new(),
         }
     }
@@ -84,7 +90,7 @@ impl OurosCore {
         &DrfHeapStat,
         &ReducerStat,
         &AluStat,
-        [&FIFOStat; 11],
+        [&FIFOStat; 14],
         &DualPortMemStat,
     ) {
         (
@@ -94,15 +100,18 @@ impl OurosCore {
             [
                 self.buffers_alu_0.get_stat(),
                 self.buffers_alu_1.get_stat(),
+                self.buffers_alu_2.get_stat(),
                 self.buffers_dheap_a_0.get_stat(),
                 self.buffers_dheap_a_1.get_stat(),
                 self.buffers_dheap_a_2.get_stat(),
+                self.buffers_dheap_a_3.get_stat(),
                 self.buffers_dheap_b_0.get_stat(),
                 self.buffers_dheap_b_1.get_stat(),
                 self.buffers_dheap_b_2.get_stat(),
                 self.buffers_reducer_0.get_stat(),
                 self.buffers_reducer_1.get_stat(),
                 self.buffers_reducer_2.get_stat(),
+                self.buffers_reducer_3.get_stat(),
             ],
             self.dheap.get_mem_stat(),
         )
@@ -176,11 +185,14 @@ impl HwModule for OurosCore {
         // set default inputs (for conditionally linked ports)
         self.buffers_dheap_a_1.input.default_input();
         self.buffers_dheap_a_2.input.default_input();
+        self.buffers_dheap_a_3.input.default_input();
         self.buffers_reducer_0.input.default_input();
         self.buffers_reducer_1.input.default_input();
         self.buffers_reducer_2.input.default_input();
+        self.buffers_reducer_3.input.default_input();
         self.buffers_alu_0.input.default_input();
         self.buffers_alu_1.input.default_input();
+        self.buffers_alu_2.input.default_input();
 
         // connect start signal
         self.dheap.input.start = self.input.start;
@@ -199,6 +211,7 @@ impl HwModule for OurosCore {
                     &mut self.buffers_dheap_a_0,
                     &mut self.buffers_dheap_a_1,
                     &mut self.buffers_dheap_a_2,
+                    &mut self.buffers_dheap_a_3,
                 ],
                 &mut self.arbiter_dheap_a,
             );
@@ -215,11 +228,16 @@ impl HwModule for OurosCore {
                     &mut self.buffers_reducer_0,
                     &mut self.buffers_reducer_1,
                     &mut self.buffers_reducer_2,
+                    &mut self.buffers_reducer_3,
                 ],
                 &mut self.arbiter_reducer,
             );
             buffers_arbiter(
-                [&mut self.buffers_alu_0, &mut self.buffers_alu_1],
+                [
+                    &mut self.buffers_alu_0,
+                    &mut self.buffers_alu_1,
+                    &mut self.buffers_alu_2,
+                ],
                 &mut self.arbiter_alu,
             );
 
@@ -273,6 +291,30 @@ impl HwModule for OurosCore {
                     self.buffers_alu_1.input.in_valid = true;
                     self.buffers_alu_1.input.din = self.dheap.to_reducer_bits().clone();
                     self.dheap.input.to_reducer_ready = self.buffers_alu_1.in_ready();
+                }
+            }
+
+            if self.dheap.out_sub_valid() {
+                if is_prm(&self.dheap.out_sub_bits().load[0])
+                    && is_int(&self.dheap.out_sub_bits().load[1])
+                    && is_int(&self.dheap.out_sub_bits().load[2])
+                {
+                    // connect to alu
+                    self.buffers_alu_2.input.in_valid = true;
+                    self.buffers_alu_2.input.din = self.dheap.out_sub_bits().clone();
+                    self.dheap.input.out_sub_ready = self.buffers_alu_2.in_ready();
+                } else if !is_whnf(&self.dheap.out_sub_bits().load)
+                    && is_comb(&self.dheap.out_sub_bits().load[0])
+                {
+                    // connect to reducer
+                    self.buffers_reducer_3.input.in_valid = true;
+                    self.buffers_reducer_3.input.din = self.dheap.out_sub_bits().clone();
+                    self.dheap.input.out_sub_ready = self.buffers_reducer_3.in_ready();
+                } else {
+                    // connect to dheap
+                    self.buffers_dheap_a_3.input.in_valid = true;
+                    self.buffers_dheap_a_3.input.din = self.dheap.out_sub_bits().clone();
+                    self.dheap.input.out_sub_ready = self.buffers_dheap_a_3.in_ready();
                 }
             }
 
@@ -338,6 +380,7 @@ impl HwModule for OurosCore {
         self.buffers_dheap_a_0.tick();
         self.buffers_dheap_a_1.tick();
         self.buffers_dheap_a_2.tick();
+        self.buffers_dheap_a_3.tick();
         self.arbiter_dheap_a.tick();
 
         self.buffers_dheap_b_0.tick();
@@ -348,10 +391,12 @@ impl HwModule for OurosCore {
         self.buffers_reducer_0.tick();
         self.buffers_reducer_1.tick();
         self.buffers_reducer_2.tick();
+        self.buffers_reducer_3.tick();
         self.arbiter_reducer.tick();
 
         self.buffers_alu_0.tick();
         self.buffers_alu_1.tick();
+        self.buffers_alu_2.tick();
         self.arbiter_alu.tick();
     }
 }

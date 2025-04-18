@@ -2,7 +2,7 @@ use crate::hw_module::HwModule;
 
 #[derive(Default)]
 pub struct Register<V: Clone + Default> {
-    input: V,
+    pub input: V,
     value: V,
 }
 

@@ -30,7 +30,7 @@ impl HwInput for AluInput {}
 pub struct AluStat {
     pub busy_cycles: u32,
     pub busy_per_cycle: Vec<bool>,
-    pub holder_contents: Vec<Option<App>>,
+    pub holder_contents: Vec<Option<ActiveApp>>,
 }
 
 #[derive(Default)]
@@ -152,9 +152,7 @@ impl HwModule for Alu {
         }
 
         if self.holder.0 {
-            self.stat
-                .holder_contents
-                .push(Some(self.holder.1.load.clone()));
+            self.stat.holder_contents.push(Some(self.holder.1.clone()));
         } else {
             self.stat.holder_contents.push(None);
         }

@@ -78,7 +78,9 @@ pub struct DualInput<T: Clone + Default> {
 impl<T: Clone + Default> HwInput for DualInput<T> {
     fn default_input(&mut self) {
         self.port_a.is_write = false;
+        self.port_a.addr = 0;
         self.port_b.is_write = false;
+        self.port_b.addr = 0;
     }
 }
 

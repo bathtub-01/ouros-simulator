@@ -21,6 +21,7 @@ pub struct DrfHeapInput {
     pub port_b_bits: FrozenApp,
     pub to_reducer_ready: bool,
     pub to_self_ready: bool,
+    pub out_sub_ready: bool,
     pub addr_consumed: usize, // address request from reducer (for GC)
 }
 
@@ -35,7 +36,7 @@ enum Dest {
     ToSelf,
 }
 
-#[derive(Default, Clone, PartialEq)]
+#[derive(Default, Clone, PartialEq, Debug)]
 enum Stm {
     #[default]
     IDLE,
@@ -51,15 +52,15 @@ enum Stm {
 
 #[derive(Default, Clone)]
 struct HeapCell {
+    exist: bool,
     working: bool,
-    // stack_idx: u8,
     app: App,
 }
 
 #[derive(Default)]
 pub struct DrfHeapStat {
     pub work_threads: Vec<u8>,
-    pub holder_contents: Vec<Option<App>>,
+    pub holder_contents: Vec<Option<ActiveApp>>,
     pub stm_cycles: [u32; 8],
     pub wasted_cycles: u32,
 }
@@ -70,10 +71,14 @@ pub struct DrfHeap {
     stm: Register<Stm>,
     holder_in: ActiveApp,
     addr_holder: usize,
+    addr_holder_sub: usize,
     thread_stack: [Stack<StackCell, 128>; 8],
     heap_mem: DualPortMem<HeapCell>,
+    demand_heap: DualPortMem<bool>,
     holder_out: (Dest, bool, ActiveApp), // output-reg: (destination, valid, app)
-    working: Register<bool>,             // track whether the machine is working
+    holder_out_sub: Register<(bool, App)>,
+    working: Register<bool>, // track whether the machine is working
+    same_addr: Register<bool>,
     addr_bumper: Register<usize>,
     stat: DrfHeapStat,
 }
@@ -85,12 +90,16 @@ impl DrfHeap {
             stm: Default::default(),
             holder_in: Default::default(),
             addr_holder: Default::default(),
+            addr_holder_sub: Default::default(),
             thread_stack: std::array::from_fn(|_| Stack::new()),
             heap_mem: DualPortMem::new(heap_size),
+            demand_heap: DualPortMem::new(heap_size),
             holder_out: Default::default(),
             working: Default::default(),
             addr_bumper: Default::default(),
             stat: Default::default(),
+            holder_out_sub: Default::default(),
+            same_addr: Default::default(),
         }
     }
 
@@ -103,8 +112,8 @@ impl DrfHeap {
                 app[i] = atm.clone();
             }
             HeapCell {
+                exist: true,
                 working: false,
-                // stack_idx: 0,
                 app,
             }
         }
@@ -120,51 +129,70 @@ impl DrfHeap {
         fire(self.input.port_a_valid, self.port_a_ready())
     }
 
+    fn port_b_fire(&self) -> bool {
+        fire(self.input.port_b_valid, self.port_b_ready())
+    }
+
     fn output_fire(&self) -> bool {
         fire(self.to_reducer_valid(), self.input.to_reducer_ready)
             || fire(self.to_self_valid(), self.input.to_self_ready)
     }
 
-    /// port_a is ready to handle a new application in this cycle
+    fn out_sub_fire(&self) -> bool {
+        fire(self.out_sub_valid(), self.input.out_sub_ready)
+    }
+
+    /// port_a is ready to handle a new application in this cycle (shortcut)
     pub fn port_a_ready(&self) -> bool {
         let out_clear = !self.holder_out.1 || self.output_fire();
         let local: bool = {
             match *self.stm.value() {
                 Stm::IDLE => true,
-                Stm::IA | Stm::OPb => is_whnf(&self.heap_mem.dout_a().app),
+                Stm::IA | Stm::OPb => {
+                    self.heap_mem.dout_a().exist && is_whnf(&self.heap_mem.dout_a().app)
+                }
                 Stm::OPa => match self.holder_in.load[2] {
-                    Atom::INT(_) => is_whnf(&self.heap_mem.dout_a().app),
+                    Atom::INT(_) => {
+                        self.heap_mem.dout_a().exist && is_whnf(&self.heap_mem.dout_a().app)
+                    }
                     _ => false,
                 },
                 _ => false,
             }
         };
-        let b_clear = !self.input.port_b_valid; // ad-hoc fix
+        // let b_clear = !self.input.port_b_valid; // ad-hoc fix
 
-        out_clear && local && b_clear
+        out_clear && local // && b_clear
     }
 
     pub fn port_b_ready(&self) -> bool {
-        match *self.stm.value() {
-            Stm::IAw => !(!is_whnf(&self.heap_mem.dout_a().app) && self.heap_mem.dout_a().working),
-            Stm::OPa => is_whnf(&self.heap_mem.dout_a().app),
+        let out_clear = !self.holder_out_sub.value().0 || self.out_sub_fire();
+        let local_used = match *self.stm.value() {
+            Stm::IA => {
+                self.heap_mem.dout_a().exist
+                    && !is_whnf(&self.heap_mem.dout_a().app)
+                    && !self.heap_mem.dout_a().working
+            }
+            Stm::OPa => self.heap_mem.dout_a().exist && !is_whnf(&self.heap_mem.dout_a().app),
             Stm::OPb => {
                 if !is_whnf(&self.heap_mem.dout_a().app)
                     && (self.output_fire() || !self.holder_out.1)
                 {
                     match self.holder_in.load[1] {
-                        Atom::INT(_) => self.heap_mem.dout_a().working,
+                        Atom::INT(_) => !self.heap_mem.dout_a().working,
                         _ => match self.pick_stack() {
-                            Some(_) => false,
-                            _ => true,
+                            Some(_) => true,
+                            _ => false,
                         },
                     }
                 } else {
-                    true
+                    false
                 }
             }
-            _ => true,
-        }
+            _ => false,
+        };
+
+        out_clear && !local_used
     }
 
     pub fn to_reducer_valid(&self) -> bool {
@@ -187,6 +215,35 @@ impl DrfHeap {
 
     pub fn to_self_bits(&self) -> &ActiveApp {
         &self.holder_out.2
+    }
+
+    pub fn out_sub_valid(&self) -> bool {
+        !self.same_addr.value() && (self.holder_out_sub.value().0 || *self.demand_heap.dout_b())
+    }
+
+    pub fn out_sub_bits(&self) -> ActiveApp {
+        // since it's demanded, there must be at least one stack waiting
+        let idx = {
+            match self.thread_stack.iter().position(|s| match s.top() {
+                None => false,
+                Some(a) => *a == self.addr_holder_sub,
+            }) {
+                Some(idx) => idx as u8,
+                None => panic!(
+                    "{}: wrong app leaving: {:?}, same_reg: {}, valid_reg: {}, demand_out: {}",
+                    self.addr_holder_sub,
+                    &self.holder_out_sub.value().1,
+                    self.same_addr.value(),
+                    self.holder_out_sub.value().0,
+                    *self.demand_heap.dout_b()
+                ),
+            }
+        };
+
+        ActiveApp {
+            stack_idx: idx,
+            load: self.holder_out_sub.value().1.clone(),
+        }
     }
 
     /// machine's work has been finished
@@ -264,8 +321,8 @@ impl DrfHeap {
                                 self.heap_mem.write_a(
                                     top,
                                     HeapCell {
+                                        exist: true,
                                         working: false, // already in WHNF
-                                        // stack_idx: 0,   // don't care
                                         app: self.input.port_a_bits.load.clone(),
                                     },
                                 );
@@ -281,7 +338,15 @@ impl DrfHeap {
                     Atom::PTR(p) => {
                         // read the target
                         self.heap_mem.read_a(p);
+                        self.demand_heap.write_a(p, true);
+
                         self.addr_holder = p;
+
+                        // if the requested app is also entering at the same cycle
+                        if self.port_b_fire() && self.input.port_b_bits.heap_addr == p {
+                            self.same_addr.connect(&true);
+                        }
+
                         // jump to next state
                         self.stm.connect(&Stm::IA);
                     }
@@ -292,6 +357,11 @@ impl DrfHeap {
                             Atom::PTR(p) => {
                                 // read the target
                                 self.heap_mem.read_a(p);
+                                self.demand_heap.write_a(p, true);
+                                // if the requested app is also entering at the same cycle
+                                if self.port_b_fire() && self.input.port_b_bits.heap_addr == p {
+                                    self.same_addr.connect(&true);
+                                }
                                 // OPa need this
                                 self.addr_holder = p;
                                 // jump to next state
@@ -301,6 +371,12 @@ impl DrfHeap {
                                 Atom::PTR(p) => {
                                     // read the target
                                     self.heap_mem.read_a(p);
+                                    self.demand_heap.write_a(p, true);
+                                    // if the requested app is also entering at the same cycle
+                                    if self.port_b_fire() && self.input.port_b_bits.heap_addr == p {
+                                        self.same_addr.connect(&true);
+                                    }
+
                                     // OPb need this
                                     self.addr_holder = p;
                                     // jump to next state
@@ -381,6 +457,7 @@ impl HwModule for DrfHeap {
     fn update_local(&mut self) {
         // always give default inputs at the beginning of a cycle
         self.heap_mem.input.default_input();
+        self.demand_heap.input.default_input();
         for stk in &mut self.thread_stack {
             stk.input.default_input();
         }
@@ -389,7 +466,7 @@ impl HwModule for DrfHeap {
         self.addr_bumper
             .connect(&(self.addr_bumper.value() + self.input.addr_consumed));
 
-        // start the machine
+        // start the machine (demand flag of `main`, at addr 0, need to be false.)
         if !self.working.value() {
             if self.input.start {
                 self.working.connect(&true);
@@ -425,6 +502,14 @@ impl HwModule for DrfHeap {
             self.holder_out.1 = false;
         }
 
+        if self.out_sub_fire() {
+            self.holder_out_sub.input.0 = false;
+        }
+
+        self.same_addr.connect(&false);
+
+        self.addr_holder_sub = self.input.port_b_bits.heap_addr;
+
         // handle port_a
 
         match *self.stm.value() {
@@ -443,8 +528,8 @@ impl HwModule for DrfHeap {
                     Some(addr) => self.heap_mem.write_a(
                         *addr,
                         HeapCell {
+                            exist: true,
                             working: false, // already in WHNF
-                            // stack_idx: self.holder_in.stack_idx,
                             app: target.clone(),
                         },
                     ),
@@ -465,7 +550,6 @@ impl HwModule for DrfHeap {
                             Atom::PTR(_) => {
                                 demander[1] = Atom::INT(arg);
                                 // emit demander
-                                // TODO: now handle the second argument!
                             }
                             Atom::INT(_) => {
                                 // argument `b` must be a PTR in this case
@@ -505,8 +589,34 @@ impl HwModule for DrfHeap {
             }
             Stm::IA => {
                 let target = &self.heap_mem.dout_a().app;
+                let exist = self.heap_mem.dout_a().exist;
                 let demander = &self.holder_in.load;
-                if is_whnf(target) {
+                let stk = &mut self.thread_stack[self.holder_in.stack_idx as usize];
+                if !exist {
+                    // write incoming demander (suspend it)
+                    match stk.top() {
+                        None => panic!("dheap: thread stack error!"),
+                        Some(addr) => self.heap_mem.write_a(
+                            *addr,
+                            HeapCell {
+                                exist: true,
+                                working: true,
+                                app: demander.clone(),
+                            },
+                        ),
+                    }
+
+                    // push target to the stack (wait for its arrival)
+                    match demander[0] {
+                        Atom::PTR(p) => {
+                            stk.push(p);
+                        }
+                        _ => panic!("dheap: demander head should be a PTR!"),
+                    }
+
+                    // jump to next state
+                    self.stm.connect(&Stm::IDLE);
+                } else if is_whnf(target) {
                     // put output register
                     let deref_res = deref(demander, target);
                     self.holder_out = (
@@ -521,7 +631,6 @@ impl HwModule for DrfHeap {
                     self.stm.connect(&Stm::IDLE);
                     self.handle_new_input();
                 } else {
-                    let stk = &mut self.thread_stack[self.holder_in.stack_idx as usize];
                     if self.heap_mem.dout_a().working {
                         // TODO: handle multiple sharer case (target in computation)..
                         panic!("not impl yet!");
@@ -534,8 +643,8 @@ impl HwModule for DrfHeap {
                             Some(addr) => self.heap_mem.write_a(
                                 *addr,
                                 HeapCell {
+                                    exist: true,
                                     working: true,
-                                    // stack_idx: self.holder_in.stack_idx,
                                     app: demander.clone(),
                                 },
                             ),
@@ -545,8 +654,8 @@ impl HwModule for DrfHeap {
                         self.heap_mem.write_b(
                             self.addr_holder,
                             HeapCell {
+                                exist: true,
                                 working: true,
-                                // stack_idx: self.holder_in.stack_idx,
                                 app: self.holder_in.load.clone(),
                             },
                         );
@@ -558,13 +667,9 @@ impl HwModule for DrfHeap {
                             }
                             _ => panic!("dheap: demander head should be a PTR!"),
                         }
-                        // put target in holder_in, for next cycle's writing
+
                         let target = &self.heap_mem.dout_a().app;
-                        self.holder_in = ActiveApp {
-                            stack_idx: self.holder_in.stack_idx,
-                            load: target.clone(),
-                        };
-                        // put output register
+
                         self.holder_out = (
                             which_dest(target),
                             true,
@@ -581,7 +686,44 @@ impl HwModule for DrfHeap {
             Stm::IAw => unimplemented!(),
             Stm::OPa => {
                 let target = &self.heap_mem.dout_a().app;
-                if is_whnf(target) {
+                let exist = self.heap_mem.dout_a().exist;
+                let demander = &self.holder_in.load;
+                let stk = &mut self.thread_stack[self.holder_in.stack_idx as usize];
+
+                if !exist {
+                    // FIXME: the `working` flag of 'a' should raise?
+
+                    // push target to the stack (wait for its arrival)
+                    stk.push(self.addr_holder);
+
+                    // check `b`
+                    match self.holder_in.load[2] {
+                        Atom::PTR(p) => {
+                            // read the target
+                            self.heap_mem.read_a(p);
+                            self.addr_holder = p;
+                            // jump to next state
+                            self.stm.connect(&Stm::OPb);
+                        }
+                        Atom::INT(_) => {
+                            // write incoming demander (suspend it)
+                            match stk.top() {
+                                None => panic!("dheap: thread stack error!"),
+                                Some(addr) => self.heap_mem.write_a(
+                                    *addr,
+                                    HeapCell {
+                                        exist: true,
+                                        working: true,
+                                        app: demander.clone(),
+                                    },
+                                ),
+                            }
+                            // jump to next state
+                            self.stm.connect(&Stm::IDLE);
+                        }
+                        _ => panic!("dheap: unknown PRM argument `b` type!"),
+                    }
+                } else if is_whnf(target) {
                     // in this case, `a` should be an Int
                     let a = {
                         match target[0] {
@@ -607,8 +749,7 @@ impl HwModule for DrfHeap {
                                 ActiveApp {
                                     stack_idx: self.holder_in.stack_idx,
                                     load: {
-                                        let mut res: App = Default::default();
-                                        res[0] = self.holder_in.load[0].clone();
+                                        let mut res: App = self.holder_in.load.clone();
                                         res[1] = Atom::INT(a);
                                         res[2] = Atom::INT(b);
                                         res
@@ -629,14 +770,14 @@ impl HwModule for DrfHeap {
                     self.heap_mem.write_b(
                         self.addr_holder,
                         HeapCell {
+                            exist: true,
                             working: true,
-                            // stack_idx: self.holder_in.stack_idx,
                             app: target.clone(),
                         },
                     );
 
                     // push `a` to the stack
-                    self.thread_stack[self.holder_in.stack_idx as usize].push(self.addr_holder);
+                    stk.push(self.addr_holder);
 
                     // put register
                     self.holder_out = (
@@ -663,8 +804,8 @@ impl HwModule for DrfHeap {
                                 Some(addr) => self.heap_mem.write_a(
                                     *addr,
                                     HeapCell {
+                                        exist: true,
                                         working: true,
-                                        // stack_idx: self.holder_in.stack_idx,
                                         app: self.holder_in.load.clone(),
                                     },
                                 ),
@@ -681,7 +822,10 @@ impl HwModule for DrfHeap {
             Stm::OPaw => unimplemented!(),
             Stm::OPb => {
                 let target = &self.heap_mem.dout_a().app;
+                // FIXME: b might not exist..
                 if is_whnf(target) {
+                    // FIXME: a might not be an int yet..
+
                     // in this case, `b` should be an Int
                     let b = {
                         match target[0] {
@@ -720,8 +864,8 @@ impl HwModule for DrfHeap {
                                 self.heap_mem.write_a(
                                     self.addr_holder,
                                     HeapCell {
+                                        exist: true,
                                         working: true,
-                                        // stack_idx: self.holder_in.stack_idx,
                                         app: target.clone(),
                                     },
                                 );
@@ -731,8 +875,8 @@ impl HwModule for DrfHeap {
                                         .top()
                                         .unwrap(),
                                     HeapCell {
+                                        exist: true,
                                         working: true,
-                                        // stack_idx: self.holder_in.stack_idx,
                                         app: self.holder_in.load.clone(),
                                     },
                                 );
@@ -749,7 +893,7 @@ impl HwModule for DrfHeap {
                                 // jump to next state
                                 self.stm.connect(&Stm::IDLE);
                             } else {
-                                // `b` is already in computation
+                                // `b` is already in computation (`a` returns earlier)
 
                                 // write the demander (suspend)
                                 self.heap_mem.write_a(
@@ -757,8 +901,8 @@ impl HwModule for DrfHeap {
                                         .top()
                                         .unwrap(),
                                     HeapCell {
+                                        exist: true,
                                         working: true,
-                                        // stack_idx: self.holder_in.stack_idx,
                                         app: self.holder_in.load.clone(),
                                     },
                                 );
@@ -777,8 +921,8 @@ impl HwModule for DrfHeap {
                                     self.heap_mem.write_a(
                                         self.addr_holder,
                                         HeapCell {
+                                            exist: true,
                                             working: true,
-                                            // stack_idx: stk_idx as u8,
                                             app: target.clone(),
                                         },
                                     );
@@ -789,8 +933,8 @@ impl HwModule for DrfHeap {
                                             .second()
                                             .unwrap(),
                                         HeapCell {
+                                            exist: true,
                                             working: true,
-                                            // stack_idx: self.holder_in.stack_idx,
                                             app: self.holder_in.load.clone(),
                                         },
                                     );
@@ -820,8 +964,8 @@ impl HwModule for DrfHeap {
                                             .second()
                                             .unwrap(),
                                         HeapCell {
+                                            exist: true,
                                             working: true,
-                                            // stack_idx: self.holder_in.stack_idx,
                                             app: self.holder_in.load.clone(),
                                         },
                                     );
@@ -838,23 +982,31 @@ impl HwModule for DrfHeap {
         }
 
         // handle port_b
-        // TODO: combinatory check when an app in demand in entering port_b
-        // read-after-write is good, but what if we are reading something
-        // that is not yet enter the heap?
-        // always write frozen applications
+
+        if !self.out_sub_fire() && !self.same_addr.value() {
+            self.holder_out_sub.input.0 = *self.demand_heap.dout_b();
+        }
+
+        // holder_out_sub can be used now
         if fire(self.input.port_b_valid, self.port_b_ready()) {
+            let addr = self.input.port_b_bits.heap_addr;
+            let app = {
+                let mut extended: App = std::array::from_fn(|_| Atom::NOP);
+                for (i, a) in self.input.port_b_bits.load.iter().enumerate() {
+                    extended[i] = a.clone();
+                }
+                extended
+            };
+
+            self.holder_out_sub.input.1 = app.clone();
+
+            self.demand_heap.read_b(addr);
             self.heap_mem.write_b(
-                self.input.port_b_bits.heap_addr,
+                addr,
                 HeapCell {
+                    exist: true,
                     working: false,
-                    // stack_idx: 0,
-                    app: {
-                        let mut extended: App = std::array::from_fn(|_| Atom::NOP);
-                        for (i, a) in self.input.port_b_bits.load.iter().enumerate() {
-                            extended[i] = a.clone();
-                        }
-                        extended
-                    },
+                    app,
                 },
             );
         }
@@ -864,7 +1016,7 @@ impl HwModule for DrfHeap {
         if self.holder_out.1 {
             self.stat
                 .holder_contents
-                .push(Some(self.holder_out.2.load.clone()));
+                .push(Some(self.holder_out.2.clone()));
         } else {
             self.stat.holder_contents.push(None);
         }
@@ -894,7 +1046,10 @@ impl HwModule for DrfHeap {
             stk.tick();
         }
         self.heap_mem.tick();
+        self.demand_heap.tick();
         self.working.tick();
+        self.holder_out_sub.tick();
         self.addr_bumper.tick();
+        self.same_addr.tick();
     }
 }

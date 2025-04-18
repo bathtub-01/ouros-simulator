@@ -6,7 +6,7 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use hardware::ouros::ouros_core::OurosCore;
-use hardware::ouros::program::{app_length, App};
+use hardware::ouros::program::{app_length, ActiveApp, App};
 use hw_module::HwModule;
 
 fn simulate() -> (OurosCore, u32) {
@@ -22,8 +22,10 @@ fn simulate() -> (OurosCore, u32) {
     ouros.input.start = false;
 
     loop {
-        assert!(cycle < 1_000_0);
-        if ouros.done() {
+        assert!(cycle < 1_000_000);
+        if ouros.done()
+        // || cycle == 115
+        {
             break;
         }
         ouros.tick();
@@ -33,17 +35,18 @@ fn simulate() -> (OurosCore, u32) {
     (ouros, cycle)
 }
 
-fn compress(oapp: &Option<App>) -> String {
+fn compress(oapp: &Option<ActiveApp>) -> String {
     match oapp {
         None => "empty".to_string(),
         Some(app) => {
             let app_str = app
+                .load
                 .iter()
-                .take(app_length(app))
+                .take(app_length(&app.load))
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>()
                 .join(", ");
-            format!("[{}]", app_str)
+            format!("{}-[{}]", app.stack_idx, app_str)
         }
     }
 }
@@ -165,12 +168,12 @@ fn main() -> std::io::Result<()> {
     write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)?;
 
     // write buffer utilisation
-    writeln!(buffer_util, "time,alu_0,alu_1,dheap_a_0,dheap_a_1,dheap_a_2,dheap_b_0,dheap_b_1,dheap_b_2,reducer_0,reducer_1,reducer_2")?;
+    writeln!(buffer_util, "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b_0,dheap_b_1,dheap_b_2,reducer_0,reducer_1,reducer_2,reducer_3")?;
     let buffer_util_data = stats.3.map(|s| chunk_util(&s.length_per_cycle, chunk_size));
     for i in 0..buffer_util_data[0].len() {
         writeln!(
             buffer_util,
-            "{},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2}",
+            "{},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2}",
             i * chunk_size + chunk_size / 2,
             buffer_util_data[0][i],
             buffer_util_data[1][i],
@@ -183,6 +186,9 @@ fn main() -> std::io::Result<()> {
             buffer_util_data[8][i],
             buffer_util_data[9][i],
             buffer_util_data[10][i],
+            buffer_util_data[11][i],
+            buffer_util_data[12][i],
+            buffer_util_data[13][i],
         )?;
     }
 
