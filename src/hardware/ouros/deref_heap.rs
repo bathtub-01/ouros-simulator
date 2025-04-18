@@ -160,9 +160,8 @@ impl DrfHeap {
                 _ => false,
             }
         };
-        // let b_clear = !self.input.port_b_valid; // ad-hoc fix
 
-        out_clear && local // && b_clear
+        out_clear && local
     }
 
     pub fn port_b_ready(&self) -> bool {
@@ -229,14 +228,7 @@ impl DrfHeap {
                 Some(a) => *a == self.addr_holder_sub,
             }) {
                 Some(idx) => idx as u8,
-                None => panic!(
-                    "{}: wrong app leaving: {:?}, same_reg: {}, valid_reg: {}, demand_out: {}",
-                    self.addr_holder_sub,
-                    &self.holder_out_sub.value().1,
-                    self.same_addr.value(),
-                    self.holder_out_sub.value().0,
-                    *self.demand_heap.dout_b()
-                ),
+                None => panic!("dheap: demanded but not waiting!"),
             }
         };
 
@@ -751,7 +743,6 @@ impl HwModule for DrfHeap {
                                     load: {
                                         let mut res: App = self.holder_in.load.clone();
                                         res[1] = Atom::INT(a);
-                                        res[2] = Atom::INT(b);
                                         res
                                     },
                                 },
