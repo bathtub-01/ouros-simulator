@@ -83,7 +83,7 @@ impl HwModule for Alu {
             match *atom {
                 INT(i) => i,
                 _ => {
-                    panic!("alu: wrong operand type!");
+                    panic!("alu: wrong operand type! {:?}", atom);
                 }
             }
         }

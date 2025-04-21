@@ -145,28 +145,28 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize>(
     }
 }
 
-fn is_ptr(atom: &Atom) -> bool {
+pub fn is_ptr(atom: &Atom) -> bool {
     match atom {
         Atom::PTR(_) => true,
         _ => false,
     }
 }
 
-fn is_comb(atom: &Atom) -> bool {
+pub fn is_comb(atom: &Atom) -> bool {
     match atom {
         Atom::COM(_, _, _) => true,
         _ => false,
     }
 }
 
-fn is_int(atom: &Atom) -> bool {
+pub fn is_int(atom: &Atom) -> bool {
     match atom {
         Atom::INT(_) => true,
         _ => false,
     }
 }
 
-fn is_prm(atom: &Atom) -> bool {
+pub fn is_prm(atom: &Atom) -> bool {
     match atom {
         Atom::PRM(_, _) => true,
         _ => false,
