@@ -183,6 +183,7 @@ impl HwModule for OurosCore {
         Keep this in mind if anything strange occurs in the future..
          */
         // set default inputs (for conditionally linked ports)
+        self.buffers_dheap_a_0.input.default_input();
         self.buffers_dheap_a_1.input.default_input();
         self.buffers_dheap_a_2.input.default_input();
         self.buffers_dheap_a_3.input.default_input();
@@ -277,20 +278,27 @@ impl HwModule for OurosCore {
                 }
             });
 
-            // connect components' output to buffers
-            self.buffers_dheap_a_0.input.in_valid = self.dheap.to_self_valid();
-            self.buffers_dheap_a_0.input.din = self.dheap.to_self_bits().clone();
-            self.dheap.input.to_self_ready = self.buffers_dheap_a_0.in_ready();
-
-            if self.dheap.to_reducer_valid() {
-                if is_comb(&self.dheap.to_reducer_bits().load[0]) {
-                    self.buffers_reducer_1.input.in_valid = true;
-                    self.buffers_reducer_1.input.din = self.dheap.to_reducer_bits().clone();
-                    self.dheap.input.to_reducer_ready = self.buffers_reducer_1.in_ready();
-                } else {
+            if self.dheap.out_main_valid() {
+                if is_prm(&self.dheap.out_main_bits().load[0])
+                    && is_int(&self.dheap.out_main_bits().load[1])
+                    && is_int(&self.dheap.out_main_bits().load[2])
+                {
+                    // connect to alu
                     self.buffers_alu_1.input.in_valid = true;
-                    self.buffers_alu_1.input.din = self.dheap.to_reducer_bits().clone();
-                    self.dheap.input.to_reducer_ready = self.buffers_alu_1.in_ready();
+                    self.buffers_alu_1.input.din = self.dheap.out_main_bits().clone();
+                    self.dheap.input.out_main_ready = self.buffers_alu_1.in_ready();
+                } else if !is_whnf(&self.dheap.out_main_bits().load)
+                    && is_comb(&self.dheap.out_main_bits().load[0])
+                {
+                    // connect to reducer
+                    self.buffers_reducer_1.input.in_valid = true;
+                    self.buffers_reducer_1.input.din = self.dheap.out_main_bits().clone();
+                    self.dheap.input.out_main_ready = self.buffers_reducer_1.in_ready();
+                } else {
+                    // connect to dheap
+                    self.buffers_dheap_a_0.input.in_valid = true;
+                    self.buffers_dheap_a_0.input.din = self.dheap.out_main_bits().clone();
+                    self.dheap.input.out_main_ready = self.buffers_dheap_a_0.in_ready();
                 }
             }
 

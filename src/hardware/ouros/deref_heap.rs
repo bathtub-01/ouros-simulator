@@ -1,8 +1,8 @@
 // Dereference Heap, also handles thread management:
 //           +-----------------+
-// addr  <-->|    Dereference  |===> to_reducer
+// addr  <-->|    Dereference  |===> out_main
 // port_a ==>|                 |
-// port_b ==>|       Heap      |===> to_self
+// port_b ==>|       Heap      |===> out_sub
 //           +-----------------+
 
 use super::config::APP_LENGTH;
@@ -20,8 +20,7 @@ pub struct DrfHeapInput {
     pub port_a_bits: ActiveApp,
     pub port_b_valid: bool,
     pub port_b_bits: FrozenApp,
-    pub to_reducer_ready: bool,
-    pub to_self_ready: bool,
+    pub out_main_ready: bool,
     pub out_sub_ready: bool,
     pub addr_consumed: usize, // address request from reducer (for GC)
 }
@@ -76,7 +75,7 @@ pub struct DrfHeap {
     heap_mem: DualPortMem<HeapCell>,
     demand_heap: DualPortMem<bool>,
     working_heap: DualPortMem<bool>,
-    holder_out: (Dest, bool, ActiveApp), // output-reg: (destination, valid, app)
+    holder_out: (bool, ActiveApp), // output-reg: (valid, app)
     holder_out_sub: Register<(bool, App)>,
     working: Register<bool>, // track whether the machine is working
     same_addr: Register<bool>,
@@ -132,8 +131,7 @@ impl DrfHeap {
     }
 
     fn output_fire(&self) -> bool {
-        fire(self.to_reducer_valid(), self.input.to_reducer_ready)
-            || fire(self.to_self_valid(), self.input.to_self_ready)
+        fire(self.out_main_valid(), self.input.out_main_ready)
     }
 
     fn out_sub_fire(&self) -> bool {
@@ -142,7 +140,7 @@ impl DrfHeap {
 
     /// port_a is ready to handle a new application in this cycle (shortcut)
     pub fn port_a_ready(&self) -> bool {
-        let out_clear = !self.holder_out.1 || self.output_fire();
+        let out_clear = !self.holder_out.0 || self.output_fire();
         let local_shortcut: bool = {
             match *self.stm.value() {
                 Stm::IDLE => true,
@@ -169,7 +167,7 @@ impl DrfHeap {
                         false
                     } else if is_whnf(&self.heap_mem.dout_a().app) {
                         true
-                    } else if self.output_fire() || !self.holder_out.1 {
+                    } else if self.output_fire() || !self.holder_out.0 {
                         match self.holder_in.value().load[1] {
                             Atom::INT(_) => !*self.working_heap.dout_a(),
                             _ => self.pick_stack() == None,
@@ -210,7 +208,7 @@ impl DrfHeap {
                 if !self.heap_mem.dout_a().exist {
                     false
                 } else if !is_whnf(&self.heap_mem.dout_a().app)
-                    && (self.output_fire() || !self.holder_out.1)
+                    && (self.output_fire() || !self.holder_out.0)
                 {
                     match self.holder_in.value().load[1] {
                         Atom::INT(_) => !*self.working_heap.dout_a(),
@@ -226,42 +224,15 @@ impl DrfHeap {
         out_clear && !local_used
     }
 
-    pub fn to_reducer_valid(&self) -> bool {
-        match self.holder_out.0 {
-            Dest::ToReducer => self.holder_out.1,
-            Dest::ToSelf => false,
-        }
+    pub fn out_main_valid(&self) -> bool {
+        self.holder_out.0
     }
 
-    pub fn to_reducer_bits(&self) -> &ActiveApp {
-        &self.holder_out.2
-    }
-
-    pub fn to_self_valid(&self) -> bool {
-        match self.holder_out.0 {
-            Dest::ToReducer => false,
-            Dest::ToSelf => self.holder_out.1,
-        }
-    }
-
-    pub fn to_self_bits(&self) -> &ActiveApp {
-        &self.holder_out.2
+    pub fn out_main_bits(&self) -> &ActiveApp {
+        &self.holder_out.1
     }
 
     pub fn out_sub_valid(&self) -> bool {
-        // let musk = match *self.stm.value() {
-        //     Stm::OPb => {
-        //         if !self.heap_mem.dout_a().exist {
-        //             match self.holder_in.value().load[1]{
-        //                 Atom::INT(_) => false,
-        //                 _ => {
-
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     _ => false,
-        // };
         !self.same_addr.value() && (self.holder_out_sub.value().0 || *self.demand_heap.dout_b())
     }
 
@@ -444,20 +415,6 @@ impl DrfHeap {
     }
 }
 
-/// Determine the destination of an output application
-fn which_dest(app: &App) -> Dest {
-    if is_whnf(app) {
-        Dest::ToSelf
-    } else {
-        match (&app[0], &app[1], &app[2]) {
-            (Atom::PTR(_), _, _) => Dest::ToSelf,
-            (Atom::PRM(_, _), Atom::PTR(_), _) => Dest::ToSelf,
-            (Atom::PRM(_, _), _, Atom::PTR(_)) => Dest::ToSelf,
-            _ => Dest::ToReducer,
-        }
-    }
-}
-
 /// Dereference app's head pointer
 fn deref(app: &App, target: &App) -> App {
     match app[0] {
@@ -524,7 +481,6 @@ impl HwModule for DrfHeap {
                 // put output register
                 let main = &self.heap_mem.dout_a().app;
                 self.holder_out = (
-                    which_dest(main),
                     true,
                     ActiveApp {
                         stack_idx: 0,
@@ -548,7 +504,7 @@ impl HwModule for DrfHeap {
 
         // clear holder when output fires
         if self.output_fire() {
-            self.holder_out.1 = false;
+            self.holder_out.0 = false;
         }
 
         if self.out_sub_fire() {
@@ -610,7 +566,6 @@ impl HwModule for DrfHeap {
                         }
                         // put output register
                         self.holder_out = (
-                            which_dest(&demander),
                             true,
                             ActiveApp {
                                 stack_idx: self.holder_in.value().stack_idx,
@@ -623,7 +578,6 @@ impl HwModule for DrfHeap {
                         let demander = &self.heap_mem.dout_a().app;
                         let deref_res = deref(demander, target);
                         self.holder_out = (
-                            which_dest(&deref_res),
                             true,
                             ActiveApp {
                                 stack_idx: self.holder_in.value().stack_idx,
@@ -671,7 +625,6 @@ impl HwModule for DrfHeap {
                     // put output register
                     let deref_res = deref(demander, target);
                     self.holder_out = (
-                        which_dest(&deref_res),
                         true,
                         ActiveApp {
                             stack_idx: self.holder_in.value().stack_idx,
@@ -712,7 +665,6 @@ impl HwModule for DrfHeap {
                         let target = &self.heap_mem.dout_a().app;
 
                         self.holder_out = (
-                            which_dest(target),
                             true,
                             ActiveApp {
                                 stack_idx: self.holder_in.value().stack_idx,
@@ -805,7 +757,7 @@ impl HwModule for DrfHeap {
                         Atom::INT(_) => {
                             // put output register
                             self.holder_out = (
-                                Dest::ToReducer,
+                                // Dest::ToReducer,
                                 true,
                                 ActiveApp {
                                     stack_idx: self.holder_in.value().stack_idx,
@@ -834,7 +786,6 @@ impl HwModule for DrfHeap {
 
                     // put register
                     self.holder_out = (
-                        which_dest(&target),
                         true,
                         ActiveApp {
                             stack_idx: self.holder_in.value().stack_idx,
@@ -947,7 +898,7 @@ impl HwModule for DrfHeap {
 
                     // put register
                     self.holder_out = (
-                        Dest::ToReducer,
+                        // Dest::ToReducer,
                         true,
                         ActiveApp {
                             stack_idx: self.holder_in.value().stack_idx,
@@ -962,7 +913,7 @@ impl HwModule for DrfHeap {
                     // jump to next state
                     self.stm.connect(&Stm::IDLE);
                     self.handle_new_input();
-                } else if self.output_fire() || !self.holder_out.1 {
+                } else if self.output_fire() || !self.holder_out.0 {
                     // whether to spark a new thread for `b`
                     let target = self.heap_mem.dout_a().app.clone();
                     match self.holder_in.value().load[1] {
@@ -989,7 +940,6 @@ impl HwModule for DrfHeap {
                                 );
                                 // put register
                                 self.holder_out = (
-                                    which_dest(&target),
                                     true,
                                     ActiveApp {
                                         stack_idx: self.holder_in.value().stack_idx,
@@ -1046,7 +996,6 @@ impl HwModule for DrfHeap {
 
                                     // put register
                                     self.holder_out = (
-                                        which_dest(&target),
                                         true,
                                         ActiveApp {
                                             stack_idx: stk_idx as u8,
@@ -1081,7 +1030,11 @@ impl HwModule for DrfHeap {
                     }
                 } else {
                     // keep reading b
-                    panic!("funny thing");
+                    panic!(
+                        "funny thing, out_ready: {}, out_valid: {}",
+                        self.input.out_main_ready,
+                        self.out_main_valid()
+                    );
                     match self.holder_in.value().load[2] {
                         Atom::PTR(p) => {
                             // read the target
@@ -1123,10 +1076,10 @@ impl HwModule for DrfHeap {
     }
 
     fn update_stat(&mut self) {
-        if self.holder_out.1 {
+        if self.holder_out.0 {
             self.stat
                 .holder_contents
-                .push(Some(self.holder_out.2.clone()));
+                .push(Some(self.holder_out.1.clone()));
         } else {
             self.stat.holder_contents.push(None);
         }
