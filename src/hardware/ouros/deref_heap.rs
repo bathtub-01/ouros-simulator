@@ -29,13 +29,6 @@ impl HwInput for DrfHeapInput {}
 
 type StackCell = usize;
 
-#[derive(Default)]
-enum Dest {
-    #[default]
-    ToReducer,
-    ToSelf,
-}
-
 #[derive(Default, Clone, PartialEq, Debug)]
 enum Stm {
     #[default]
@@ -757,7 +750,6 @@ impl HwModule for DrfHeap {
                         Atom::INT(_) => {
                             // put output register
                             self.holder_out = (
-                                // Dest::ToReducer,
                                 true,
                                 ActiveApp {
                                     stack_idx: self.holder_in.value().stack_idx,
@@ -898,7 +890,6 @@ impl HwModule for DrfHeap {
 
                     // put register
                     self.holder_out = (
-                        // Dest::ToReducer,
                         true,
                         ActiveApp {
                             stack_idx: self.holder_in.value().stack_idx,
