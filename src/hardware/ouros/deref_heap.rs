@@ -218,11 +218,138 @@ impl DrfHeap {
     }
 
     pub fn out_main_valid(&self) -> bool {
-        self.holder_out.0
+        let now = match *self.stm.value() {
+            Stm::IDLE => false,
+            Stm::WHNF => true,
+            Stm::IA => {
+                let exist = self.heap_mem.dout_a().exist;
+                exist
+            }
+            Stm::OPa => {
+                let exist = self.heap_mem.dout_a().exist;
+                let target = &self.heap_mem.dout_a().app;
+                if !exist {
+                    false
+                } else if is_whnf(target) {
+                    match self.holder_in.value().load[2] {
+                        Atom::INT(_) => true,
+                        _ => false,
+                    }
+                } else {
+                    true
+                }
+            }
+            Stm::OPb => {
+                let target = &self.heap_mem.dout_a().app;
+                let exist = self.heap_mem.dout_a().exist;
+                if !exist {
+                    false
+                } else if is_whnf(target) {
+                    true
+                } else if self.input.out_main_ready || !self.holder_out.0 {
+                    match self.holder_in.value().load[1] {
+                        Atom::INT(_) => !*self.working_heap.dout_a(),
+                        _ => self.pick_stack() != None,
+                    }
+                } else {
+                    false
+                }
+            }
+            _ => unreachable!(),
+        };
+        self.holder_out.0 || now
     }
 
-    pub fn out_main_bits(&self) -> &ActiveApp {
-        &self.holder_out.1
+    pub fn out_main_bits(&self) -> ActiveApp {
+        match *self.stm.value() {
+            Stm::IDLE => self.holder_out.1.clone(),
+            Stm::WHNF => ActiveApp {
+                stack_idx: self.holder_in.value().stack_idx,
+                load: self.heap_mem.dout_a().app.clone(),
+            },
+            Stm::IA => {
+                let target = &self.heap_mem.dout_a().app;
+                let demander = &self.holder_in.value().load;
+                let exist = self.heap_mem.dout_a().exist;
+                if !exist {
+                    self.holder_out.1.clone() // just a place holder..
+                } else if is_whnf(target) {
+                    ActiveApp {
+                        stack_idx: self.holder_in.value().stack_idx,
+                        load: deref(demander, target),
+                    }
+                } else {
+                    ActiveApp {
+                        stack_idx: self.holder_in.value().stack_idx,
+                        load: target.clone(),
+                    }
+                }
+            }
+            Stm::OPa => {
+                let target = &self.heap_mem.dout_a().app;
+                let demander = &self.holder_in.value().load;
+
+                let exist = self.heap_mem.dout_a().exist;
+                if !exist {
+                    self.holder_out.1.clone()
+                } else if is_whnf(target) {
+                    let a = match target[0] {
+                        Atom::INT(i) => i,
+                        _ => unreachable!(),
+                    };
+                    ActiveApp {
+                        stack_idx: self.holder_in.value().stack_idx,
+                        load: {
+                            let mut res: App = self.holder_in.value().load.clone();
+                            res[1] = Atom::INT(a);
+                            res
+                        },
+                    }
+                } else {
+                    ActiveApp {
+                        stack_idx: self.holder_in.value().stack_idx,
+                        load: target.clone(),
+                    }
+                }
+            }
+            Stm::OPb => {
+                let target = &self.heap_mem.dout_a().app;
+                let exist = self.heap_mem.dout_a().exist;
+                if !exist {
+                    self.holder_out.1.clone() // unreachable
+                } else if is_whnf(target) {
+                    let b = match target[0] {
+                        Atom::INT(i) => i,
+                        _ => unreachable!(),
+                    };
+                    ActiveApp {
+                        stack_idx: self.holder_in.value().stack_idx,
+                        load: {
+                            let mut res = self.holder_in.value().load.clone();
+                            res[2] = Atom::INT(b);
+                            res
+                        },
+                    }
+                } else if self.input.out_main_ready || !self.holder_out.0 {
+                    match self.holder_in.value().load[1] {
+                        Atom::INT(_) => ActiveApp {
+                            stack_idx: self.holder_in.value().stack_idx,
+                            load: target.clone(),
+                        },
+                        _ => match self.pick_stack() {
+                            Some(stk_idx) => ActiveApp {
+                                stack_idx: stk_idx as u8,
+                                load: self.heap_mem.dout_a().app.clone(),
+                            },
+                            None => unreachable!(),
+                        },
+                    }
+                } else {
+                    unreachable!()
+                }
+            }
+            _ => unreachable!(),
+        }
     }
 
     pub fn out_sub_valid(&self) -> bool {
@@ -453,6 +580,8 @@ fn deref_spec() {
 
 impl HwModule for DrfHeap {
     fn update_local(&mut self) {
+        // FIXME: no machenism in blocking the machine when holder_out is not yet consumed!
+
         // always give default inputs at the beginning of a cycle
         self.heap_mem.input.default_input();
         self.demand_heap.input.default_input();
@@ -559,7 +688,8 @@ impl HwModule for DrfHeap {
                         }
                         // put output register
                         self.holder_out = (
-                            true,
+                            // true,
+                            !self.input.out_main_ready,
                             ActiveApp {
                                 stack_idx: self.holder_in.value().stack_idx,
                                 load: demander,
@@ -567,11 +697,13 @@ impl HwModule for DrfHeap {
                         );
                     }
                     _ => {
+                        // TODO: combine duplicated code
                         // put output register
                         let demander = &self.heap_mem.dout_a().app;
                         let deref_res = deref(demander, target);
                         self.holder_out = (
-                            true,
+                            // true,
+                            !self.input.out_main_ready,
                             ActiveApp {
                                 stack_idx: self.holder_in.value().stack_idx,
                                 load: deref_res,
@@ -618,7 +750,8 @@ impl HwModule for DrfHeap {
                     // put output register
                     let deref_res = deref(demander, target);
                     self.holder_out = (
-                        true,
+                        // true,
+                        !self.input.out_main_ready,
                         ActiveApp {
                             stack_idx: self.holder_in.value().stack_idx,
                             load: deref_res,
@@ -658,7 +791,8 @@ impl HwModule for DrfHeap {
                         let target = &self.heap_mem.dout_a().app;
 
                         self.holder_out = (
-                            true,
+                            // true,
+                            !self.input.out_main_ready,
                             ActiveApp {
                                 stack_idx: self.holder_in.value().stack_idx,
                                 load: target.clone(),
@@ -721,11 +855,9 @@ impl HwModule for DrfHeap {
                     }
                 } else if is_whnf(target) {
                     // in this case, `a` should be an Int
-                    let a = {
-                        match target[0] {
-                            Atom::INT(i) => i,
-                            _ => panic!("dheap: PRM argument `a` must be an Int!"),
-                        }
+                    let a = match target[0] {
+                        Atom::INT(i) => i,
+                        _ => panic!("dheap: PRM argument `a` must be an Int!"),
                     };
                     // check `b`
                     match self.holder_in.value().load[2] {
@@ -750,7 +882,8 @@ impl HwModule for DrfHeap {
                         Atom::INT(_) => {
                             // put output register
                             self.holder_out = (
-                                true,
+                                // true,
+                                !self.input.out_main_ready,
                                 ActiveApp {
                                     stack_idx: self.holder_in.value().stack_idx,
                                     load: {
@@ -778,7 +911,8 @@ impl HwModule for DrfHeap {
 
                     // put register
                     self.holder_out = (
-                        true,
+                        // true,
+                        !self.input.out_main_ready,
                         ActiveApp {
                             stack_idx: self.holder_in.value().stack_idx,
                             load: target,
@@ -881,16 +1015,15 @@ impl HwModule for DrfHeap {
                     }
 
                     // in this case, `b` should be an Int
-                    let b = {
-                        match target[0] {
-                            Atom::INT(i) => i,
-                            _ => panic!("dheap: PRM argument `b` must be an Int!"),
-                        }
+                    let b = match target[0] {
+                        Atom::INT(i) => i,
+                        _ => panic!("dheap: PRM argument `b` must be an Int!"),
                     };
 
                     // put register
                     self.holder_out = (
-                        true,
+                        // true,
+                        !self.input.out_main_ready,
                         ActiveApp {
                             stack_idx: self.holder_in.value().stack_idx,
                             load: {
@@ -931,7 +1064,8 @@ impl HwModule for DrfHeap {
                                 );
                                 // put register
                                 self.holder_out = (
-                                    true,
+                                    // true,
+                                    !self.input.out_main_ready,
                                     ActiveApp {
                                         stack_idx: self.holder_in.value().stack_idx,
                                         load: target,
@@ -987,7 +1121,8 @@ impl HwModule for DrfHeap {
 
                                     // put register
                                     self.holder_out = (
-                                        true,
+                                        // true,
+                                        !self.input.out_main_ready,
                                         ActiveApp {
                                             stack_idx: stk_idx as u8,
                                             load: target,
@@ -1071,6 +1206,8 @@ impl HwModule for DrfHeap {
             self.stat
                 .holder_contents
                 .push(Some(self.holder_out.1.clone()));
+        } else if self.output_fire() {
+            self.stat.holder_contents.push(Some(self.out_main_bits()));
         } else {
             self.stat.holder_contents.push(None);
         }
