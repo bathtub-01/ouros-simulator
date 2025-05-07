@@ -263,10 +263,41 @@ impl DrfHeap {
     pub fn out_main_bits(&self) -> ActiveApp {
         match *self.stm.value() {
             Stm::IDLE => self.holder_out.1.clone(),
-            Stm::WHNF => ActiveApp {
-                stack_idx: self.holder_in.value().stack_idx,
-                load: self.heap_mem.dout_a().app.clone(),
-            },
+            Stm::WHNF => {
+                let target = &self.holder_in.value().load;
+                match self.heap_mem.dout_a().app[0] {
+                    Atom::PRM(_, _) => {
+                        let arg = {
+                            match target[0] {
+                                Atom::INT(i) => i,
+                                _ => panic!("dheap: PRM argument must be an Int!"),
+                            }
+                        };
+                        let mut demander = self.heap_mem.dout_a().app.clone();
+                        match self.heap_mem.dout_a().app[1] {
+                            Atom::PTR(_) => {
+                                demander[1] = Atom::INT(arg);
+                            }
+                            Atom::INT(_) => {
+                                demander[2] = Atom::INT(arg);
+                            }
+                            _ => panic!("dheap: strange PRM argument `a`!"),
+                        }
+                        ActiveApp {
+                            stack_idx: self.holder_in.value().stack_idx,
+                            load: demander,
+                        }
+                    }
+                    _ => {
+                        let demander = &self.heap_mem.dout_a().app;
+                        let deref_res = deref(demander, target);
+                        ActiveApp {
+                            stack_idx: self.holder_in.value().stack_idx,
+                            load: deref_res,
+                        }
+                    }
+                }
+            }
             Stm::IA => {
                 let target = &self.heap_mem.dout_a().app;
                 let demander = &self.holder_in.value().load;
