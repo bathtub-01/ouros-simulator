@@ -1,8 +1,8 @@
 use crate::hardware::ouros::program::{AluOp, Atom, Program};
 use std::sync::LazyLock;
 use AluOp::*;
-use Atom::*; 
- 
+use Atom::*;
+
 // Functions in this file: 2
 // Apps in this file: 4
 // Combinators in this file: 3
@@ -23,9 +23,9 @@ use Atom::*;
             INT(1),
         ], 
         vec![ // 2 
-            COM(5,12,[0, 4, 1, 2, 3]), //X(XXX)X
+            COM(5,12,[0, 4, 1, 2, 3, 0]), //X(XXX)X
             PTR(1),
-            PRM(SUB,fasle),
+            PRM(SUB,false),
             INT(2),
             PRM(ADD,false),
         ], 
@@ -33,7 +33,7 @@ use Atom::*;
             COM(5,49,[0, 4, 1, 4, 2, 3]), //XX(X(XXX))
             PTR(2),
             PTR(1),
-            PRM(SUB,fasle),
+            PRM(SUB,false),
             INT(1),
         ], 
     ]

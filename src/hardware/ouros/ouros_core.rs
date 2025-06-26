@@ -154,7 +154,7 @@ pub fn is_ptr(atom: &Atom) -> bool {
 
 pub fn is_comb(atom: &Atom) -> bool {
     match atom {
-        Atom::COM(_, _, _) => true,
+        Atom::COM(_, _, _) | Atom::Y => true,
         _ => false,
     }
 }

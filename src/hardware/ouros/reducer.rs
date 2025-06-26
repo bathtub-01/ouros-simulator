@@ -101,6 +101,7 @@ impl Reducer {
                     .filter(|&&x| !x)
                     .count()
                 }
+                Atom::Y => 1,
                 _ => panic!("reducer: app head is not combinator!"),
             }
         } else {
@@ -179,6 +180,25 @@ impl HwModule for Reducer {
                     app1.0 = app1.1.load[0] != Atom::NOP;
                     app2.0 = app2.1.load[0] != Atom::NOP;
                     app3.0 = app3.1.load[0] != Atom::NOP;
+                }
+                Atom::Y => {
+                    let in_app = &self.input.in_app;
+                    let mut spine_app: App = self.input.in_app.load.clone();
+                    let mut app1_app: [Atom; HOLES - 1] = Default::default();
+
+                    spine_app[0] = in_app.load[1].clone();
+                    spine_app[1] = Atom::PTR(self.input.free_addr);
+                    app1_app[0] = in_app.load[1].clone();
+                    app1_app[1] = Atom::PTR(self.input.free_addr);
+
+                    self.spine_holder.1.load = spine_app;
+                    self.app1_holder.1.load = app1_app;
+
+                    self.spine_holder.1.stack_idx = in_app.stack_idx;
+                    self.app1_holder.1.heap_addr = self.input.free_addr;
+
+                    self.spine_holder.0 = true;
+                    self.app1_holder.0 = true;
                 }
                 _ => panic!("reducer: app head is not combinator!"),
             }

@@ -116,3 +116,95 @@ pub static ALU_OP: LazyLock<Program> = LazyLock::new(|| {
         ],
     ]
 });
+
+#[rustfmt::skip]
+pub static MAP_Y: LazyLock<Program> = LazyLock::new(|| {
+    vec![
+         // FUN0Map.main
+        vec![ // 0 
+            PTR(4),
+            PRM(ADD,false),
+            INT(0),
+            PTR(3),
+        ], 
+        vec![ // 1 
+            PTR(9),
+            INT(0),
+            INT(49),
+        ], 
+        vec![ // 2 
+            COM(3,2,[0,2,1,0,0,0]), //XXX
+            PRM(ADD,false),
+            INT(1),
+        ], 
+        vec![ // 3 
+            PTR(6),
+            PTR(2),
+            PTR(1),
+        ], 
+         // FUN1NanoPrelude.foldr'
+        vec![ // 4 
+            COM(4,7,[0,1,2,3,0,0]), //X(XXX)
+            Y,
+            PTR(5),
+        ], 
+        vec![ // 5 
+            COM(5,16,[4,2,0,1,3,0]), //XX(XXX)
+            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
+        ], 
+         // FUN2NanoPrelude.map
+        vec![ // 6 
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            Y,
+            PTR(8),
+        ], 
+        vec![ // 7 
+            COM(5,15,[0,1,3,2,4,0]), //X(XX)(XX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+        ], 
+        vec![ // 8 
+            COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(7),
+        ], 
+         // FUN3NanoPrelude.enumFromTo
+        vec![ // 9 
+            COM(5,15,[0,1,4,2,3,0]), //X(XX)(XX)
+            PTR(11),
+            PTR(10),
+            PTR(15),
+        ], 
+        vec![ // 10 
+            COM(3,2,[0,2,1,0,0,0]), //XXX
+            PRM(LE,false),
+        ], 
+         // FUN4NanoPrelude.takeWhile
+        vec![ // 11 
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            Y,
+            PTR(14),
+        ], 
+        vec![ // 12 
+            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+        ], 
+        vec![ // 13 
+            COM(5,42,[1,3,0,2,3,4]), //XXX(XXX)
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+        vec![ // 14 
+            COM(6,48,[5,0,1,3,2,4]), //XX(XX(XX))
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(13),
+            PTR(12),
+        ], 
+         // FUN5NanoPrelude.enumFrom
+        vec![ // 15 
+            COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(15),
+            PRM(ADD,false),
+            INT(1),
+        ], 
+    ]
+});
