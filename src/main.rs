@@ -11,7 +11,7 @@ use hw_module::HwModule;
 
 fn simulate() -> (OurosCore, u32) {
     use hardware::ouros::benchmarks::*;
-    let mut ouros = OurosCore::new(&MAP_Y);
+    let mut ouros = OurosCore::new(&MSS);
     let mut cycle: u32 = 0;
 
     ouros.tick();
@@ -23,7 +23,7 @@ fn simulate() -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 10000 {
+        if ouros.done() || cycle == 100000 {
             break;
         }
         ouros.tick();
@@ -137,13 +137,17 @@ fn main() -> std::io::Result<()> {
         .iter()
         .zip(&stats.1.holder_contents)
         .zip(&stats.2.holder_contents)
-        .map(|((a, b), c)| (a, b, c))
+        .zip(&stats.0.heap_stm)
+        .zip(&stats.0.serving_id)
+        .map(|((((a, b), c), d), e)| (a, b, c, d, e))
         .enumerate()
     {
         writeln!(
             log,
-            "{} dheap: {} reducer: {} alu: {}",
+            "{} dheap[{}-{}]: {} reducer: {} alu: {}",
             i,
+            s.3,
+            s.4,
             compress(s.0),
             compress(s.1),
             compress(s.2)

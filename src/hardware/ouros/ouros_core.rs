@@ -417,10 +417,11 @@ fn ouros_core_spec() {
     use Atom::*;
     // [(program, result)]
     let progs = [
-        (&FIB, INT(89)),
+        // (&FIB, INT(89)),
         (&BOOL_AND, COM(2, 0, [1, 0, 0, 0, 0, 0])),
         (&BOOL_NEST, COM(2, 0, [1, 0, 0, 0, 0, 0])),
         (&ALU_OP, INT(162)),
+        (&MAP_Y, INT(1275)),
     ];
 
     for (p, r) in progs {

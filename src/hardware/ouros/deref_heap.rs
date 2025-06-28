@@ -12,6 +12,7 @@ use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{DualPortMem, Register, Stack};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
+use std::fmt;
 
 #[derive(Default)]
 pub struct DrfHeapInput {
@@ -30,7 +31,7 @@ impl HwInput for DrfHeapInput {}
 type StackCell = usize;
 
 #[derive(Default, Clone, PartialEq, Debug)]
-enum Stm {
+pub enum Stm {
     #[default]
     IDLE,
     WHNF,
@@ -43,6 +44,21 @@ enum Stm {
     OPbw,
 }
 
+impl fmt::Display for Stm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Stm::IDLE => write!(f, "IDLE"),
+            Stm::WHNF => write!(f, "WHNF"),
+            Stm::IA => write!(f, "IA"),
+            Stm::IAw => write!(f, "IAw"),
+            Stm::OPa => write!(f, "OPa"),
+            Stm::OPaw => write!(f, "OPaw"),
+            Stm::OPb => write!(f, "OPb"),
+            Stm::OPbw => write!(f, "OPbw"),
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 struct HeapCell {
     exist: bool,
@@ -53,6 +69,8 @@ struct HeapCell {
 pub struct DrfHeapStat {
     pub work_threads: Vec<u8>,
     pub holder_contents: Vec<Option<ActiveApp>>,
+    pub heap_stm: Vec<Stm>,
+    pub serving_id: Vec<u8>,
     pub stm_cycles: [u32; 8],
     pub wasted_cycles: u32,
 }
@@ -137,7 +155,19 @@ impl DrfHeap {
         let local_shortcut: bool = {
             match *self.stm.value() {
                 Stm::IDLE => true,
-                Stm::WHNF => true,
+                Stm::WHNF => {
+                    let stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
+                    let top = *stk.top().unwrap();
+                    let mut res = true;
+                    for (i, s) in self.thread_stack.iter().enumerate() {
+                        if i != self.holder_in.value().stack_idx as usize && s.top() == Some(&top) {
+                            if s.second() != None {
+                                res = false;
+                            }
+                        }
+                    }
+                    res
+                }
                 Stm::IA => self.heap_mem.dout_a().exist,
                 Stm::OPa => {
                     // ugly but easy to check... should rewrite the logic in `update_local`..
@@ -181,9 +211,8 @@ impl DrfHeap {
         let local_used = match *self.stm.value() {
             Stm::WHNF => true,
             Stm::IA => {
-                self.heap_mem.dout_a().exist
-                    && !is_whnf(&self.heap_mem.dout_a().app)
-                    && !*self.working_heap.dout_a()
+                self.heap_mem.dout_a().exist && !is_whnf(&self.heap_mem.dout_a().app)
+                // && !*self.working_heap.dout_a()
             }
             Stm::OPa => {
                 if !self.heap_mem.dout_a().exist {
@@ -222,8 +251,9 @@ impl DrfHeap {
             Stm::IDLE => false,
             Stm::WHNF => true,
             Stm::IA => {
+                let target = &self.heap_mem.dout_a().app;
                 let exist = self.heap_mem.dout_a().exist;
-                exist
+                exist && (is_whnf(target) || !*self.working_heap.dout_a())
             }
             Stm::OPa => {
                 let exist = self.heap_mem.dout_a().exist;
@@ -236,7 +266,7 @@ impl DrfHeap {
                         _ => false,
                     }
                 } else {
-                    true
+                    !*self.working_heap.dout_a()
                 }
             }
             Stm::OPb => {
@@ -676,9 +706,7 @@ impl HwModule for DrfHeap {
             }
             Stm::WHNF => {
                 let stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
-                // TODO: handle multiple sharer case..
-
-                // no more sharer
+                // current sharer is in `stk`
                 let target = &self.holder_in.value().load;
 
                 // write incoming WHNF
@@ -742,9 +770,40 @@ impl HwModule for DrfHeap {
                         );
                     }
                 }
-                // jump to next state
-                self.stm.connect(&Stm::IDLE);
-                self.handle_new_input();
+
+                // TODO: handle multiple sharer case..
+                // find the next demander, if any
+                let top = *stk.top().unwrap();
+                let (idx, demander): (usize, Option<&usize>) = {
+                    let mut res = (0, None);
+                    for (i, s) in self.thread_stack.iter().enumerate() {
+                        if i != self.holder_in.value().stack_idx as usize && s.top() == Some(&top) {
+                            if s.second() != None {
+                                res = (i, s.second());
+                                break;
+                            } else {
+                                panic!("dheap: wait but not using?");
+                            }
+                        }
+                    }
+                    res
+                };
+
+                match demander {
+                    Some(addr) => {
+                        self.holder_in.input.stack_idx = idx as u8;
+                        // read demander app
+                        self.heap_mem.read_a(*addr);
+                        self.working_heap.read_a(*addr);
+                        // jump to next state
+                        self.stm.connect(&Stm::WHNF);
+                    }
+                    None => {
+                        // jump to next state
+                        self.stm.connect(&Stm::IDLE);
+                        self.handle_new_input();
+                    }
+                }
             }
             Stm::IA => {
                 let target = &self.heap_mem.dout_a().app;
@@ -792,47 +851,43 @@ impl HwModule for DrfHeap {
                     self.stm.connect(&Stm::IDLE);
                     self.handle_new_input();
                 } else {
+                    // write incoming demander (suspend it)
+                    match stk.top() {
+                        None => panic!("dheap: thread stack error!"),
+                        Some(addr) => self.heap_mem.write_b(
+                            *addr,
+                            HeapCell {
+                                exist: true,
+                                app: demander.clone(),
+                            },
+                        ),
+                    }
+                    self.working_heap.write_b(self.addr_holder, true);
+
+                    // push target to the stack (start new thread)
+                    match demander[0] {
+                        Atom::PTR(p) => {
+                            stk.push(p);
+                        }
+                        _ => panic!("dheap: demander head should be a PTR!"),
+                    }
+
+                    let target = &self.heap_mem.dout_a().app;
+
+                    // if target is not in computation, emit it
                     if *self.working_heap.dout_a() {
-                        // TODO: handle multiple sharer case (target in computation)..
-                        panic!("not impl yet!");
-                    } else {
-                        // target is fresh
-
-                        // write incoming demander (suspend it)
-                        match stk.top() {
-                            None => panic!("dheap: thread stack error!"),
-                            Some(addr) => self.heap_mem.write_b(
-                                *addr,
-                                HeapCell {
-                                    exist: true,
-                                    app: demander.clone(),
-                                },
-                            ),
-                        }
-                        self.working_heap.write_b(self.addr_holder, true);
-
-                        // push target to the stack (start new thread)
-                        match demander[0] {
-                            Atom::PTR(p) => {
-                                stk.push(p);
-                            }
-                            _ => panic!("dheap: demander head should be a PTR!"),
-                        }
-
-                        let target = &self.heap_mem.dout_a().app;
-
                         self.holder_out = (
-                            // true,
                             !self.input.out_main_ready,
                             ActiveApp {
                                 stack_idx: self.holder_in.value().stack_idx,
                                 load: target.clone(),
                             },
                         );
-                        // jump to next state
-                        self.stm.connect(&Stm::IDLE);
-                        self.handle_new_input();
                     }
+
+                    // jump to next state
+                    self.stm.connect(&Stm::IDLE);
+                    self.handle_new_input();
                 }
             }
             Stm::IAw => unimplemented!(),
@@ -898,8 +953,8 @@ impl HwModule for DrfHeap {
                             self.working_heap.read_a(p);
                             self.demand_heap.write_a(
                                 p,
-                                !(!is_int(&self.holder_in.value().load[1])
-                                    && self.pick_stack() == None),
+                                true, // !(!is_int(&self.holder_in.value().load[1])
+                                     //     && self.pick_stack() == None),
                             );
                             // if the requested app is also entering at the same cycle
                             if self.port_b_fire() && self.input.port_b_bits.heap_addr == p {
@@ -931,24 +986,26 @@ impl HwModule for DrfHeap {
                         _ => panic!("dheap: unknown PRM argument `b` type!"),
                     }
                 } else {
-                    // `a` not in WHNF, emit `a`
-
-                    let target = self.heap_mem.dout_a().app.clone();
-                    // write the updated target info.
-                    self.working_heap.write_b(self.addr_holder, true);
+                    // `a` not in WHNF
 
                     // push `a` to the stack
                     stk.push(self.addr_holder);
 
-                    // put register
-                    self.holder_out = (
-                        // true,
-                        !self.input.out_main_ready,
-                        ActiveApp {
-                            stack_idx: self.holder_in.value().stack_idx,
-                            load: target,
-                        },
-                    );
+                    // emit `a` if it's not working yet
+                    if !*self.working_heap.dout_a() {
+                        let target = self.heap_mem.dout_a().app.clone();
+                        // write the updated target info.
+                        self.working_heap.write_b(self.addr_holder, true);
+
+                        // put register
+                        self.holder_out = (
+                            !self.input.out_main_ready,
+                            ActiveApp {
+                                stack_idx: self.holder_in.value().stack_idx,
+                                load: target,
+                            },
+                        );
+                    }
 
                     // jump to next state
                     match self.holder_in.value().load[2] {
@@ -1034,16 +1091,16 @@ impl HwModule for DrfHeap {
                     // jump to next state
                     self.stm.connect(&Stm::IDLE);
                 } else if is_whnf(target) {
-                    match self.holder_in.value().load[1] {
-                        Atom::INT(_) => { /* normal */ }
-                        _ => {
-                            // FIXME
-                            panic!(
-                                "OPb: `a` is not an Int yet! {:?}",
-                                self.holder_in.value().load
-                            );
-                        }
-                    }
+                    // match self.holder_in.value().load[1] {
+                    //     Atom::INT(_) => { /* normal */ }
+                    //     _ => {
+                    //         // FIXME
+                    //         panic!(
+                    //             "OPb: `a` is not an Int yet! {:?}",
+                    //             self.holder_in.value().load
+                    //         );
+                    //     }
+                    // }
 
                     // in this case, `b` should be an Int
                     let b = match target[0] {
@@ -1053,7 +1110,6 @@ impl HwModule for DrfHeap {
 
                     // put register
                     self.holder_out = (
-                        // true,
                         !self.input.out_main_ready,
                         ActiveApp {
                             stack_idx: self.holder_in.value().stack_idx,
@@ -1242,6 +1298,9 @@ impl HwModule for DrfHeap {
         } else {
             self.stat.holder_contents.push(None);
         }
+
+        self.stat.heap_stm.push(self.stm.value().clone());
+        self.stat.serving_id.push(self.holder_in.value().stack_idx);
 
         let threads = self
             .thread_stack
