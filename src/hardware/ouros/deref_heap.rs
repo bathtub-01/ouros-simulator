@@ -67,7 +67,8 @@ struct HeapCell {
 
 #[derive(Default)]
 pub struct DrfHeapStat {
-    pub work_threads: Vec<u8>,
+    active_threads: u8,
+    pub work_threads: Vec<(u8, u8)>, // (occupied resources, active threads)
     pub holder_contents: Vec<Option<ActiveApp>>,
     pub heap_stm: Vec<Stm>,
     pub serving_id: Vec<u8>,
@@ -1302,12 +1303,23 @@ impl HwModule for DrfHeap {
         self.stat.heap_stm.push(self.stm.value().clone());
         self.stat.serving_id.push(self.holder_in.value().stack_idx);
 
-        let threads = self
+        let occupied = self
             .thread_stack
             .iter()
             .filter(|stk| stk.elements() != 0)
             .count();
-        self.stat.work_threads.push(threads as u8);
+        if self.port_a_fire() {
+            self.stat.active_threads -= 1;
+        }
+        if self.output_fire() {
+            self.stat.active_threads += 1;
+        }
+        if self.out_sub_fire() {
+            self.stat.active_threads += 1;
+        }
+        self.stat
+            .work_threads
+            .push((occupied as u8, self.stat.active_threads));
 
         match *self.stm.value() {
             Stm::IDLE => self.stat.stm_cycles[0] += 1,

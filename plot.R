@@ -11,23 +11,53 @@ my_palette7 <- c("#bf616a", "#5e81ac", "#808080","#a3be8c","#ebcb8b","#b48ead","
 # =========== PLOT THREADS =============
 data <- read.csv("simu-out/threads.csv", header = TRUE)
 
-plot <- ggplot(data, aes(x = time, y = threads)) +
-  geom_line(color = "#5e81ac", linewidth = 0.5) +
-  labs(x = "Cycles", y = "Threads", title = "Working Threads Over Time") +
+# Reshape the data from wide to long format
+# This is crucial for plotting multiple lines with ggplot2
+data_long <- data %>%
+  pivot_longer(
+    cols = c(occupied, active), # Columns to pivot
+    names_to = "metric",                             # New column for original column names
+    values_to = "value"                              # New column for the values
+  )
+
+plot <- ggplot(data_long, aes(x = time, y = value, color = metric)) +
+  geom_line(linewidth = 0.5) + # Color aesthetic is now mapped to 'metric'
+  guides(color = guide_legend(position = "inside"))+
+  labs(
+    x = "Cycles",
+    y = "Count", # Changed y-axis label to be more generic for both metrics
+    title = "Threads Over Time",
+  ) +
+  scale_color_manual(
+    breaks = c("occupied", "active"), # Original column names
+    values = c("occupied" = "#5e81ac", "active" = "#bf616a"), # Custom colors for each line
+    labels = c("Used resources", "Active threads") # New, custom labels for the legend
+  ) +
   theme(
-    plot.title = element_text(size = 12, hjust = 0.5),  # Smaller & centered title
-    axis.title = element_text(size = 10),               # Smaller axis titles
-    axis.text = element_text(size = 10),               # Smaller tick labels
-    
-    # Remove minor gridlines (keep major if needed)
-    panel.grid.minor = element_blank(),                 
-    panel.grid.major = element_line(color = "gray90"),  # Lighter major grid
-    
-    # Black border around the plot
+    plot.title = element_text(size = 12, hjust = 0.5),
+    axis.title = element_text(size = 10),
+    axis.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90"),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
-    
     panel.background = element_rect(fill = "white"),
-    axis.ticks.length = unit(-0.15, "cm"),  # Negative value flips ticks inward
+    axis.ticks.length = unit(-0.15, "cm"),
+    
+    # Legend inside plot with black border
+    legend.position.inside = c(0.65, 0.3),
+    legend.direction = "horizontal",  # Key change: horizontal layout
+    legend.box.just = "center",      # Centers items in the legend box
+    legend.text = element_text(size = 8, margin = margin(r = 1)),  # Smaller legend text
+    legend.background = element_rect(
+      color = "black",  # Black border
+      fill = "white",   # White background
+      linewidth = 0.3   # Border thickness
+    ),
+
+    legend.margin = margin(1, 2, 1, 2),  # Tight internal padding (top,right,bottom,left)
+    
+    # Remove legend title
+    legend.title = element_blank(),
   )
 
 ggsave("simu-out/working-threads.pdf", width = 10, height = 5, units = "cm")
@@ -57,7 +87,7 @@ plot <- ggplot(combined_data, aes(x = time, y = rate, color = source)) +
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
     
     # Legend inside plot with black border
-    legend.position.inside = c(0.65, 0.1),
+    legend.position.inside = c(0.7, 0.8),
     legend.direction = "horizontal",  # Key change: horizontal layout
     legend.box.just = "center",      # Centers items in the legend box
     legend.text = element_text(size = 8, margin = margin(r = 1)),  # Smaller legend text

@@ -49,6 +49,21 @@ fn compress(oapp: &Option<ActiveApp>) -> String {
     }
 }
 
+fn chunk_threads(threads: &Vec<(u8, u8)>, chunk_size: usize) -> Vec<(f32, f32)> {
+    threads
+        .chunks(chunk_size)
+        .map(|chunk| {
+            let occupied = chunk.iter().fold((0, 0), |(a, b), (c, d)| {
+                (a as u32 + *c as u32, b as u32 + *d as u32)
+            });
+            (
+                occupied.0 as f32 / chunk.len() as f32,
+                occupied.1 as f32 / chunk.len() as f32,
+            )
+        })
+        .collect()
+}
+
 fn chunk_rate(bpc: &Vec<bool>, chunk_size: usize) -> Vec<f32> {
     bpc.chunks(chunk_size)
         .map(|chunk| {
@@ -65,6 +80,10 @@ fn chunk_util(util: &Vec<u8>, chunk_size: usize) -> Vec<f32> {
             sum as f32 / chunk.len() as f32
         })
         .collect()
+}
+
+fn write_threads() -> std::io::Result<()> {
+    Ok(())
 }
 
 fn write_busy_rate(file: &mut File, data: &Vec<f32>, chunk_size: usize) -> std::io::Result<()> {
@@ -154,15 +173,22 @@ fn main() -> std::io::Result<()> {
         )?;
     }
 
+    let points_on_graph = 150;
+    let chunk_size = stats.0.work_threads.len() / points_on_graph;
     // write thread stats
-    writeln!(threads, "time,threads")?;
-    for (i, t) in stats.0.work_threads.iter().enumerate() {
-        writeln!(threads, "{},{}", i, t)?;
+    writeln!(threads, "time,occupied,active")?;
+    let threads_data = chunk_threads(&stats.0.work_threads, chunk_size);
+    for (i, t) in threads_data.iter().enumerate() {
+        writeln!(
+            threads,
+            "{},{},{}",
+            i * chunk_size + chunk_size / 2,
+            t.0,
+            t.1
+        )?;
     }
 
     // write busy rate
-    let chunk_size = 50;
-
     let red_rate_data: Vec<f32> = chunk_rate(&stats.1.busy_per_cycle, chunk_size);
     write_busy_rate(&mut red_rate, &red_rate_data, chunk_size)?;
 
