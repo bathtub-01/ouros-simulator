@@ -1,8 +1,8 @@
 use crate::hardware::ouros::program::{AluOp, Atom, Program};
 use std::sync::LazyLock;
 use AluOp::*;
-use Atom::*; 
- 
+use Atom::*;
+
 // Functions in this file: 2
 // Apps in this file: 4
 // Combinators in this file: 3
@@ -12,7 +12,7 @@ pub static FIB: LazyLock<Program> = LazyLock::new(|| {
          // FUN0Fib.main
         vec![ // 0 
             PTR(1),
-            INT(17),
+            INT(10),
         ], 
          // FUN1Fib.fib
         vec![ // 1 

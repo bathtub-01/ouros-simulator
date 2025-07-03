@@ -962,8 +962,8 @@ impl HwModule for DrfHeap {
                                 self.same_addr.connect(&true);
                             }
                             self.holder_in.input.load[1] = Atom::INT(a);
-                            self.addr_holder = p;
-                            // jump to next state
+                            self.addr_holder = p; // dbg!(&p: Debug)
+                                                  // jump to next state
                             self.stm.connect(&Stm::OPb);
                         }
                         Atom::INT(_) => {
