@@ -35,6 +35,11 @@ fn stack_cell_with(cell: Option<&StackCell>, p: impl FnOnce(&StackCell) -> bool)
     }
 }
 
+enum HeapPort {
+    A,
+    B,
+}
+
 #[derive(Default, Clone, PartialEq, Debug)]
 pub enum Stm {
     #[default]
@@ -83,6 +88,22 @@ enum IAs2 {
 enum RESUMEs {
     TopInWHNF,
     TopInIA,
+}
+
+/// select the dereference pointer, returns (arg position, pointer value)
+fn select_arg(app: &App) -> (usize, usize) {
+    match app[0] {
+        Atom::PTR(p) => (0, p),
+        Atom::PRM(_, _) => match app[1] {
+            Atom::PTR(p) => (1, p),
+            Atom::INT(_) => match app[2] {
+                Atom::PTR(p) => (2, p),
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        },
+        _ => unreachable!(),
+    }
 }
 
 impl fmt::Display for Stm {
@@ -302,14 +323,76 @@ impl DrfHeap {
         self.addr_holder_sub = self.input.port_b_bits.heap_addr;
     }
 
+    /// read the pointed target
+    fn read_target(&mut self, p: usize) {
+        self.heap_mem.read_a(p);
+        self.working_heap.read_a(p);
+        self.demand_heap.write_a(p, true);
+        self.addr_holder = p;
+
+        // if the requested app is also entering at the same cycle
+        if self.port_b_fire() && self.input.port_b_bits.heap_addr == p {
+            self.same_addr.connect(&true);
+        }
+    }
+
+    fn write_incoming(&mut self, p: HeapPort) {
+        let current_stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+        let addr = current_stk.top().unwrap().1;
+        let cell = HeapCell {
+            exist: true,
+            app: self.input.port_a_bits.load.clone(),
+        };
+
+        match p {
+            HeapPort::A => self.heap_mem.write_a(addr, cell),
+            HeapPort::B => self.heap_mem.write_b(addr, cell),
+        }
+    }
+
     fn consume_next(&mut self) {
         self.holder_in.connect(&self.input.port_a_bits.clone());
         match self.getCONSUMEs() {
-            CONSUMEs::NoInput => todo!(),
-            CONSUMEs::InputIA => todo!(),
-            CONSUMEs::InputWHNFWithDmder => todo!(),
-            CONSUMEs::InputWHNFNoDmderNewFrame => todo!(),
-            CONSUMEs::InputWHNFNoDmderNoFrame => todo!(),
+            CONSUMEs::NoInput => {
+                self.stm.connect(&Stm::IDLE);
+            }
+            CONSUMEs::InputIA => {
+                let (arg_id, p) = select_arg(&self.input.port_a_bits.load);
+                self.read_target(p);
+                self.arg_id = arg_id;
+                self.stm.connect(&Stm::IA);
+            }
+            CONSUMEs::InputWHNFWithDmder => {
+                let current_stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+                let current_top = current_stk.top().unwrap().1;
+                if let Some((stk_id, stack)) =
+                    self.thread_stack.iter_mut().enumerate().find(|(_, s)| {
+                        stack_cell_with(s.top(), |(_, addr)| *addr == current_top)
+                            && stack_cell_with(s.second(), |(flag, _)| !*flag)
+                    })
+                {
+                    stack.pop();
+                    self.heap_mem.read_a(stack.second().unwrap().1);
+                    self.addr_holder = current_top;
+                    self.holder_in.input.stack_idx = stk_id as u8;
+                } else {
+                    unreachable!()
+                }
+                self.stm.connect(&Stm::WHNF);
+            }
+            CONSUMEs::InputWHNFNoDmderNewFrame => {
+                let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+                current_stk.pop();
+                self.heap_mem.read_a(current_stk.second().unwrap().1);
+                self.write_incoming(HeapPort::B);
+                self.stm.connect(&Stm::RESUME);
+            }
+            CONSUMEs::InputWHNFNoDmderNoFrame => {
+                let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+                current_stk.pop();
+                self.write_incoming(HeapPort::A);
+                self.stm.connect(&Stm::IDLE);
+            }
         }
     }
 
@@ -337,12 +420,10 @@ impl DrfHeap {
         }
 
         match *self.stm.value() {
-            Stm::IDLE => {
-                self.consume_next();
-            }
-            Stm::WHNF => {}
-            Stm::IA => {}
-            Stm::RESUME => {}
+            Stm::IDLE => self.consume_next(),
+            Stm::WHNF => self.step_whnf(),
+            Stm::IA => self.step_ia(),
+            Stm::RESUME => self.step_resume(),
         }
     }
 
