@@ -10,6 +10,7 @@ use super::ouros_core::is_int;
 use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{DualPortMem, Register, Stack};
+use crate::hardware::ouros::ouros_core::is_ptr;
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 use std::fmt;
@@ -27,11 +28,26 @@ pub struct DrfHeapInput {
 }
 
 type StackCell = (bool, usize);
+type AddrStack = Stack<StackCell, 128>;
 
 fn stack_cell_with(cell: Option<&StackCell>, p: impl FnOnce(&StackCell) -> bool) -> bool {
     match cell {
         Some(c) => p(c),
         None => false,
+    }
+}
+
+fn find_more_dmder(address: usize) -> impl Fn(&AddrStack) -> bool {
+    move |s| {
+        stack_cell_with(s.top(), |(_, addr)| *addr == address)
+            && stack_cell_with(s.second(), |(flag, _)| !*flag)
+    }
+}
+
+fn find_new_frame(address: usize) -> impl Fn(&AddrStack) -> bool {
+    move |s| {
+        stack_cell_with(s.top(), |(_, addr)| *addr == address)
+            && stack_cell_with(s.second(), |(flag, _)| *flag)
     }
 }
 
@@ -75,7 +91,7 @@ enum IAs1 {
     ExistWHNF,
     ExistIAWorkingNormal,
     ExistIAWorkingAtNewFrame,
-    ExistIAResting,
+    ExistIAFresh,
 }
 
 /// branch conditions for the `IA` state, part 2
@@ -106,6 +122,58 @@ fn select_arg(app: &App) -> (usize, usize) {
     }
 }
 
+/// Dereference `app`'s PTR at position `arg_id`, with `target`
+fn deref(app: &App, arg_id: usize, target: &App) -> App {
+    assert!(is_ptr(&app[arg_id]));
+    let app_len = app_length(app);
+    let target_len = app_length(target);
+    // TODO: fix this with runtime splition
+    if app_len + target_len - 1 > APP_LENGTH {
+        panic!("dheap: deref: deref result too long!");
+    }
+
+    let mut res: App = std::array::from_fn(|_| Atom::NOP);
+    for i in 0..arg_id {
+        res[i] = app[i].clone();
+    }
+    for i in 0..target_len {
+        res[arg_id + i] = target[i].clone();
+    }
+    for i in 0..app_len - arg_id - 1 {
+        res[arg_id + target_len + i] = app[arg_id + 1 + i].clone();
+    }
+    res
+}
+
+#[test]
+fn deref_spec() {
+    use Atom::*;
+    let app: App = [PTR(0), INT(1), PTR(2), INT(3), NOP, NOP, NOP, NOP];
+    let target: App = [PTR(11), PTR(22), PTR(33), PTR(44), PTR(55), NOP, NOP, NOP];
+    let res1: App = [
+        PTR(11),
+        PTR(22),
+        PTR(33),
+        PTR(44),
+        PTR(55),
+        INT(1),
+        INT(2),
+        INT(3),
+    ];
+    let res2: App = [
+        PTR(0),
+        INT(1),
+        PTR(11),
+        PTR(22),
+        PTR(33),
+        PTR(44),
+        PTR(55),
+        INT(3),
+    ];
+    assert_eq!(deref(&app, 0, &target), res1);
+    assert_eq!(deref(&app, 2, &target), res2);
+}
+
 impl fmt::Display for Stm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -129,7 +197,7 @@ pub struct DrfHeap {
     holder_in: Register<ActiveApp>,
     addr_holder: usize,
     addr_holder_sub: usize,
-    thread_stack: [Stack<StackCell, 128>; 8],
+    thread_stack: [AddrStack; 8],
     heap_mem: DualPortMem<HeapCell>,
     demand_heap: DualPortMem<bool>,
     working_heap: DualPortMem<bool>,
@@ -204,10 +272,11 @@ impl DrfHeap {
         } else {
             let stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
             if is_whnf(&self.input.port_a_bits.load) {
-                if self.thread_stack.iter().any(|s| {
-                    stack_cell_with(s.top(), |(_, addr)| *addr == stk.top().unwrap().1)
-                        && stack_cell_with(s.second(), |(flag, _)| !*flag)
-                }) {
+                if self
+                    .thread_stack
+                    .iter()
+                    .any(find_more_dmder(stk.top().unwrap().1))
+                {
                     CONSUMEs::InputWHNFWithDmder
                 } else {
                     if stk.second() != None {
@@ -223,16 +292,18 @@ impl DrfHeap {
     }
 
     fn getWHNFs(&self) -> WHNFs {
-        if self.thread_stack.iter().any(|s| {
-            stack_cell_with(s.top(), |(_, addr)| *addr == self.addr_holder)
-                && stack_cell_with(s.second(), |(flag, _)| !*flag)
-        }) {
+        if self
+            .thread_stack
+            .iter()
+            .any(find_more_dmder(self.addr_holder))
+        {
             WHNFs::MoreDmders
         } else {
-            if self.thread_stack.iter().any(|s| {
-                stack_cell_with(s.top(), |(_, addr)| *addr == self.addr_holder)
-                    && stack_cell_with(s.second(), |(flag, _)| *flag)
-            }) {
+            if self
+                .thread_stack
+                .iter()
+                .any(find_new_frame(self.addr_holder))
+            {
                 WHNFs::NewFrame
             } else {
                 WHNFs::NoNewFrame
@@ -250,7 +321,7 @@ impl DrfHeap {
                 IAs1::ExistWHNF
             } else {
                 if !*self.working_heap.dout_a() {
-                    IAs1::ExistIAResting
+                    IAs1::ExistIAFresh
                 } else {
                     if stack_cell_with(stk.top(), |(flag, _)| !*flag) {
                         IAs1::ExistIAWorkingNormal
@@ -336,18 +407,59 @@ impl DrfHeap {
         }
     }
 
-    fn write_incoming(&mut self, p: HeapPort) {
-        let current_stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+    /// write the incoming IA
+    fn write_ia(&mut self, p: HeapPort) {
+        let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
         let addr = current_stk.top().unwrap().1;
         let cell = HeapCell {
             exist: true,
             app: self.input.port_a_bits.load.clone(),
         };
-
+        current_stk.pop();
         match p {
             HeapPort::A => self.heap_mem.write_a(addr, cell),
             HeapPort::B => self.heap_mem.write_b(addr, cell),
         }
+    }
+
+    fn write_whnf(&mut self, p: HeapPort) {
+        let addr = self.addr_holder;
+        let cell = HeapCell {
+            exist: true,
+            app: self.holder_in.value().load.clone(),
+        };
+        match p {
+            HeapPort::A => self.heap_mem.write_a(addr, cell),
+            HeapPort::B => self.heap_mem.write_b(addr, cell),
+        }
+    }
+
+    /// put output register
+    fn put_output(&mut self, stack_idx: u8, load: App) {
+        self.holder_out = (true, ActiveApp { stack_idx, load });
+    }
+
+    /// find the stack that satisfies `p`, pop the stack and read the second item
+    fn find_pop_read(&mut self, p: impl Fn(&AddrStack) -> bool) {
+        if let Some((stk_id, stack)) = self
+            .thread_stack
+            .iter_mut()
+            .enumerate()
+            .find(|(_, s)| p(*s))
+        {
+            stack.pop();
+            self.heap_mem.read_a(stack.second().unwrap().1);
+            self.holder_in.input.stack_idx = stk_id as u8;
+        } else {
+            unreachable!()
+        }
+    }
+
+    /// push the target, set its working flag
+    fn push_target(&mut self, new_frame: bool) {
+        let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
+        self.working_heap.write_b(self.addr_holder, true);
+        current_stk.push((new_frame, self.addr_holder));
     }
 
     fn consume_next(&mut self) {
@@ -365,51 +477,88 @@ impl DrfHeap {
             CONSUMEs::InputWHNFWithDmder => {
                 let current_stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
                 let current_top = current_stk.top().unwrap().1;
-                if let Some((stk_id, stack)) =
-                    self.thread_stack.iter_mut().enumerate().find(|(_, s)| {
-                        stack_cell_with(s.top(), |(_, addr)| *addr == current_top)
-                            && stack_cell_with(s.second(), |(flag, _)| !*flag)
-                    })
-                {
-                    stack.pop();
-                    self.heap_mem.read_a(stack.second().unwrap().1);
-                    self.addr_holder = current_top;
-                    self.holder_in.input.stack_idx = stk_id as u8;
-                } else {
-                    unreachable!()
-                }
+                self.find_pop_read(find_more_dmder(current_top));
+                self.addr_holder = current_top;
                 self.stm.connect(&Stm::WHNF);
             }
             CONSUMEs::InputWHNFNoDmderNewFrame => {
                 let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
-                current_stk.pop();
                 self.heap_mem.read_a(current_stk.second().unwrap().1);
-                self.write_incoming(HeapPort::B);
+                self.write_ia(HeapPort::B);
                 self.stm.connect(&Stm::RESUME);
             }
             CONSUMEs::InputWHNFNoDmderNoFrame => {
-                let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
-                current_stk.pop();
-                self.write_incoming(HeapPort::A);
+                self.write_ia(HeapPort::A);
                 self.stm.connect(&Stm::IDLE);
             }
         }
     }
 
     fn step_whnf(&mut self) {
+        let dmder = &self.heap_mem.dout_a().app;
+        let target = &self.holder_in.value().load;
+        let (arg_id, _) = select_arg(dmder);
+        let deref_res = deref(dmder, arg_id, target);
+        let whnf_addr = self.addr_holder;
+        self.put_output(self.holder_in.value().stack_idx, deref_res);
         match self.getWHNFs() {
-            WHNFs::MoreDmders => todo!(),
-            WHNFs::NewFrame => todo!(),
-            WHNFs::NoNewFrame => todo!(),
+            WHNFs::MoreDmders => {
+                self.find_pop_read(find_more_dmder(whnf_addr));
+                self.stm.connect(&Stm::WHNF);
+            }
+            WHNFs::NewFrame => {
+                self.write_whnf(HeapPort::B);
+                self.find_pop_read(find_new_frame(whnf_addr));
+                self.stm.connect(&Stm::RESUME);
+            }
+            WHNFs::NoNewFrame => {
+                self.write_whnf(HeapPort::B);
+                self.consume_next();
+            }
         }
     }
 
-    fn step_ia(&mut self) {}
+    fn step_ia(&mut self) {
+        let dmder = &self.holder_in.value().load;
+        let target = self.heap_mem.dout_a().app.clone();
+        match self.getIAs1() {
+            IAs1::NoExist => {
+                self.push_target(false);
+            }
+            IAs1::ExistWHNF => {
+                let deref_res = deref(dmder, self.arg_id, &target);
+                self.put_output(self.holder_in.value().stack_idx, deref_res);
+            }
+            IAs1::ExistIAWorkingNormal => {
+                self.push_target(true);
+            }
+            IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
+            IAs1::ExistIAFresh => {
+                self.push_target(false);
+                self.put_output(self.holder_in.value().stack_idx, target);
+            }
+        }
+
+        match self.getIAs2() {
+            IAs2::NextStrictArgs => todo!(),
+            IAs2::NoStrictArgs => todo!(),
+        }
+    }
 
     fn step_resume(&mut self) {
         match self.getRESUMEs() {
-            RESUMEs::TopInWHNF => todo!(),
-            RESUMEs::TopInIA => todo!(),
+            RESUMEs::TopInWHNF => {
+                let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+                let current_top = current_stk.top().unwrap().1;
+                self.holder_in.input.load = self.heap_mem.dout_a().app.clone();
+                current_stk.pop();
+                self.heap_mem.read_a(current_top);
+                self.addr_holder = current_top;
+                self.stm.connect(&Stm::WHNF);
+            }
+            RESUMEs::TopInIA => {
+                self.consume_next();
+            }
         }
     }
 
