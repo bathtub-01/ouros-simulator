@@ -6,7 +6,7 @@
 //           +-----------------+
 
 use super::config::APP_LENGTH;
-use super::ouros_core::is_int;
+use super::ouros_core::{is_int, is_prm};
 use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{DualPortMem, Register, Stack};
@@ -51,6 +51,10 @@ fn find_new_frame(address: usize) -> impl Fn(&AddrStack) -> bool {
     }
 }
 
+fn find_free_stack(s: &AddrStack) -> bool {
+    s.elements() == 0 || stack_cell_with(s.top(), |(flag, _)| *flag)
+}
+
 enum HeapPort {
     A,
     B,
@@ -86,6 +90,7 @@ enum WHNFs {
 }
 
 /// branch conditions for the `IA` state, part 1
+#[derive(PartialEq)]
 enum IAs1 {
     NoExist,
     ExistWHNF,
@@ -96,8 +101,10 @@ enum IAs1 {
 
 /// branch conditions for the `IA` state, part 2
 enum IAs2 {
-    NextStrictArgs,
-    NoStrictArgs,
+    NextStrictArgLocal,
+    NextStrictArgNewStk,
+    NoMoreArgsCanEmit,
+    NoMoreArgsNoEmit,
 }
 
 /// branch conditions for the `RESUME` state
@@ -333,13 +340,11 @@ impl DrfHeap {
         }
     }
 
-    fn getIAs2(&self) -> IAs2 {
+    fn getIAs2(&self, s1: &IAs1) -> IAs2 {
         let ia = &self.holder_in.value().load;
-        let idle_stack: bool = self.thread_stack.iter().any(|s| s.elements() == 0)
-            || self
-                .thread_stack
-                .iter()
-                .any(|s| stack_cell_with(s.top(), |(flag, _)| *flag));
+        let target_in_whnf = self.heap_mem.dout_a().exist && is_whnf(&self.heap_mem.dout_a().app);
+        let idle_stack: bool = self.thread_stack.iter().any(|s| find_free_stack(s));
+        let local_stack: bool = *s1 == IAs1::ExistWHNF || *s1 == IAs1::ExistIAWorkingAtNewFrame;
         let more_strict_args: bool = {
             match ia[0] {
                 Atom::PTR(_) => false,
@@ -349,10 +354,16 @@ impl DrfHeap {
             }
         };
 
-        if idle_stack && more_strict_args {
-            IAs2::NextStrictArgs
+        if more_strict_args && local_stack {
+            IAs2::NextStrictArgLocal
+        } else if more_strict_args && idle_stack {
+            IAs2::NextStrictArgNewStk
         } else {
-            IAs2::NoStrictArgs
+            if (is_ptr(&ia[0]) || is_prm(&ia[0]) && is_int(&ia[1])) && target_in_whnf {
+                IAs2::NoMoreArgsCanEmit
+            } else {
+                IAs2::NoMoreArgsNoEmit
+            }
         }
     }
 
@@ -455,6 +466,13 @@ impl DrfHeap {
         }
     }
 
+    /// select next arg from `app` and read it
+    fn select_arg_read(&mut self, app: &App) {
+        let (arg_id, p) = select_arg(app);
+        self.read_target(p);
+        self.arg_id = arg_id;
+    }
+
     /// push the target, set its working flag
     fn push_target(&mut self, new_frame: bool) {
         let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
@@ -469,9 +487,8 @@ impl DrfHeap {
                 self.stm.connect(&Stm::IDLE);
             }
             CONSUMEs::InputIA => {
-                let (arg_id, p) = select_arg(&self.input.port_a_bits.load);
-                self.read_target(p);
-                self.arg_id = arg_id;
+                let ia = &self.input.port_a_bits.load;
+                self.select_arg_read(&ia.clone());
                 self.stm.connect(&Stm::IA);
             }
             CONSUMEs::InputWHNFWithDmder => {
@@ -520,14 +537,20 @@ impl DrfHeap {
 
     fn step_ia(&mut self) {
         let dmder = &self.holder_in.value().load;
+        let mut updated_dmder = dmder.clone();
         let target = self.heap_mem.dout_a().app.clone();
-        match self.getIAs1() {
+        let ia_addr = self.thread_stack[self.input.port_a_bits.stack_idx as usize]
+            .top()
+            .unwrap()
+            .1;
+        let ias1 = self.getIAs1();
+        match ias1 {
             IAs1::NoExist => {
                 self.push_target(false);
             }
             IAs1::ExistWHNF => {
-                let deref_res = deref(dmder, self.arg_id, &target);
-                self.put_output(self.holder_in.value().stack_idx, deref_res);
+                updated_dmder = deref(dmder, self.arg_id, &target);
+                self.holder_in.input.load = updated_dmder.clone();
             }
             IAs1::ExistIAWorkingNormal => {
                 self.push_target(true);
@@ -535,13 +558,40 @@ impl DrfHeap {
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
                 self.push_target(false);
-                self.put_output(self.holder_in.value().stack_idx, target);
+                self.put_output(self.holder_in.value().stack_idx, target.clone());
             }
         }
 
-        match self.getIAs2() {
-            IAs2::NextStrictArgs => todo!(),
-            IAs2::NoStrictArgs => todo!(),
+        // TODO: handle the "same cycle" issue
+        match self.getIAs2(&ias1) {
+            IAs2::NextStrictArgNewStk => {
+                if let Some((stk_id, _)) = self
+                    .thread_stack
+                    .iter()
+                    .enumerate()
+                    .find(|(_, s)| find_free_stack(s))
+                {
+                    self.holder_in.input.stack_idx = stk_id as u8;
+                };
+                self.select_arg_read(&updated_dmder);
+            }
+            IAs2::NextStrictArgLocal => {
+                self.select_arg_read(&updated_dmder);
+            }
+            IAs2::NoMoreArgsNoEmit => {
+                self.heap_mem.write_b(
+                    ia_addr,
+                    HeapCell {
+                        exist: true,
+                        app: updated_dmder,
+                    },
+                );
+                self.consume_next();
+            }
+            IAs2::NoMoreArgsCanEmit => {
+                self.put_output(self.holder_in.value().stack_idx, updated_dmder);
+                self.consume_next();
+            }
         }
     }
 
