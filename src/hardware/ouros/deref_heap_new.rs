@@ -480,6 +480,25 @@ impl DrfHeap {
         current_stk.push((new_frame, self.addr_holder));
     }
 
+    /// take shortcuts, unless 'sensitive cases' are encountered
+    fn step_to_next(&mut self, s1: &IAs1) {
+        let a_sensitive = *s1 == IAs1::ExistIAWorkingNormal;
+        let b_sensitive = *s1 == IAs1::NoExist;
+        let a_same = self.input.port_a_valid
+            && self.thread_stack[self.input.port_a_bits.stack_idx as usize]
+                .top()
+                .unwrap()
+                .1
+                == self.addr_holder;
+        let b_same =
+            self.input.port_b_valid && self.input.port_b_bits.heap_addr == self.addr_holder;
+        if (a_sensitive && a_same) || (b_sensitive && b_same) {
+            self.stm.connect(&Stm::IDLE);
+        } else {
+            self.consume_next();
+        }
+    }
+
     fn consume_next(&mut self) {
         self.holder_in.connect(&self.input.port_a_bits.clone());
         match self.getCONSUMEs() {
@@ -562,7 +581,6 @@ impl DrfHeap {
             }
         }
 
-        // TODO: handle the "same cycle" issue
         match self.getIAs2(&ias1) {
             IAs2::NextStrictArgNewStk => {
                 if let Some((stk_id, _)) = self
@@ -586,11 +604,11 @@ impl DrfHeap {
                         app: updated_dmder,
                     },
                 );
-                self.consume_next();
+                self.step_to_next(&ias1);
             }
             IAs2::NoMoreArgsCanEmit => {
                 self.put_output(self.holder_in.value().stack_idx, updated_dmder);
-                self.consume_next();
+                self.step_to_next(&ias1);
             }
         }
     }
