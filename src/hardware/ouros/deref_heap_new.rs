@@ -334,11 +334,14 @@ impl DrfHeap {
         };
         let borrowed: bool = match *self.stm.value() {
             Stm::IDLE => false,
-            Stm::WHNF => true,
+            Stm::WHNF => match self.getWHNFs() {
+                WHNFs::MoreDmders => false,
+                _ => true,
+            },
             Stm::IA => {
                 let ias1 = self.getIAs1();
                 match self.getIAs2(&ias1) {
-                    IAs2::NoMoreArgsNoEmit => !self.is_sensitive(&ias1),
+                    IAs2::NoMoreArgsNoEmit => true,
                     _ => false,
                 }
             }
@@ -362,7 +365,37 @@ impl DrfHeap {
         self.holder_out.0 || derived
     }
 
-    pub fn out_main_bits(&self) -> ActiveApp {}
+    pub fn out_main_bits(&self) -> ActiveApp {
+        if self.holder_out.0 {
+            return self.holder_out.1.clone();
+        }
+
+        match *self.stm.value() {
+            Stm::IDLE => Default::default(),
+            Stm::WHNF => {
+                let deref_res = self.gen_output_whnf();
+                self.gen_active_app(deref_res)
+            }
+            Stm::IA => {
+                let ias1 = self.getIAs1();
+                if ias1 == IAs1::ExistIAFresh {
+                    return self.gen_active_app(self.heap_mem.dout_a().app.clone());
+                }
+                match self.getIAs2(&ias1) {
+                    IAs2::NoMoreArgsCanEmit => {
+                        let updated_dmder = deref(
+                            &self.holder_in.value().load,
+                            self.arg_id,
+                            &self.heap_mem.dout_a().app,
+                        );
+                        self.gen_active_app(updated_dmder)
+                    }
+                    _ => Default::default(),
+                }
+            }
+            Stm::RESUME => Default::default(),
+        }
+    }
 
     pub fn out_sub_valid(&self) -> bool {
         let derived: bool = {
@@ -377,7 +410,24 @@ impl DrfHeap {
         self.holder_out_sub.0 || derived
     }
 
-    pub fn out_sub_bits(&self) -> ActiveApp {}
+    pub fn out_sub_bits(&self) -> ActiveApp {
+        if self.holder_out_sub.0 {
+            return self.holder_out_sub.1.clone();
+        }
+        match *self.stm_sub.value() {
+            StmSub::IDLE => Default::default(),
+            StmSub::WORK => match self.getWORKs() {
+                WORKs::DmderFound => {
+                    let load = extend_to_app(&self.holder_in_sub.value().load);
+                    ActiveApp {
+                        stack_idx: self.find_dmder_stk(),
+                        load,
+                    }
+                }
+                _ => Default::default(),
+            },
+        }
+    }
 
     fn getCONSUMEs(&self) -> CONSUMEs {
         if !self.port_a_fire() {
@@ -576,23 +626,29 @@ impl DrfHeap {
         }
     }
 
-    fn put_output_sub(&mut self) {
-        let load = extend_to_app(&self.holder_in_sub.value().load);
+    /// when sub port is firing, find which stack is demanding the app
+    fn find_dmder_stk(&self) -> u8 {
         if let Some((stk_idx, _)) = self.thread_stack.iter().enumerate().find(|(_, s)| {
             stack_cell_with(s.top(), |(_, c)| *c == self.holder_in_sub.value().heap_addr)
         }) {
-            // only when unable to fire in current cycle
-            if !self.input.out_sub_ready {
-                self.holder_out_sub = (
-                    true,
-                    ActiveApp {
-                        stack_idx: stk_idx as u8,
-                        load,
-                    },
-                );
-            }
+            return stk_idx as u8;
         } else {
             unreachable!()
+        }
+    }
+
+    /// put output register of the sub port
+    fn put_output_sub(&mut self) {
+        let load = extend_to_app(&self.holder_in_sub.value().load);
+        // only when unable to fire in current cycle
+        if !self.input.out_sub_ready {
+            self.holder_out_sub = (
+                true,
+                ActiveApp {
+                    stack_idx: self.find_dmder_stk(),
+                    load,
+                },
+            );
         }
     }
 
@@ -647,6 +703,20 @@ impl DrfHeap {
         }
     }
 
+    fn gen_output_whnf(&self) -> App {
+        let dmder = &self.heap_mem.dout_a().app;
+        let target = &self.holder_in.value().load;
+        let (arg_id, _) = select_arg(dmder);
+        deref(dmder, arg_id, target)
+    }
+
+    fn gen_active_app(&self, app: App) -> ActiveApp {
+        ActiveApp {
+            stack_idx: self.holder_in.value().stack_idx,
+            load: app,
+        }
+    }
+
     fn consume_next(&mut self) {
         match self.getCONSUMEs() {
             CONSUMEs::NoInput => {
@@ -698,10 +768,7 @@ impl DrfHeap {
     }
 
     fn step_whnf(&mut self) {
-        let dmder = &self.heap_mem.dout_a().app;
-        let target = &self.holder_in.value().load;
-        let (arg_id, _) = select_arg(dmder);
-        let deref_res = deref(dmder, arg_id, target);
+        let deref_res = self.gen_output_whnf();
         let whnf_addr = self.addr_holder;
         self.put_output(self.holder_in.value().stack_idx, deref_res);
         match self.getWHNFs() {
