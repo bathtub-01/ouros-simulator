@@ -332,7 +332,19 @@ impl DrfHeap {
                 WORKs::DmderNotFound => false,
             },
         };
-        out_clear && local
+        let borrowed: bool = match *self.stm.value() {
+            Stm::IDLE => false,
+            Stm::WHNF => true,
+            Stm::IA => {
+                let ias1 = self.getIAs1();
+                match self.getIAs2(&ias1) {
+                    IAs2::NoMoreArgsNoEmit => !self.is_sensitive(&ias1),
+                    _ => false,
+                }
+            }
+            Stm::RESUME => false,
+        };
+        out_clear && local && !borrowed
     }
 
     pub fn out_main_valid(&self) -> bool {
@@ -453,7 +465,7 @@ impl DrfHeap {
         } else if more_strict_args && idle_stack {
             IAs2::NextStrictArgNewStk
         } else {
-            if (is_ptr(&ia[0]) || is_prm(&ia[0]) && is_int(&ia[1])) && target_in_whnf {
+            if (is_ptr(&ia[0]) || (is_prm(&ia[0]) && is_int(&ia[1]))) && target_in_whnf {
                 IAs2::NoMoreArgsCanEmit
             } else {
                 IAs2::NoMoreArgsNoEmit
