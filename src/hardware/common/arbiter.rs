@@ -52,12 +52,10 @@ impl<T: Clone + Default, const N: usize> Arbiter<T, N> {
     }
 
     pub fn select(&self) -> Option<usize> {
-        if self.input.out_ready {
-            for i in 0..N {
-                let port = (i + self.priority.value()) % N;
-                if self.input.in_valid[port] {
-                    return Some(port);
-                }
+        for i in 0..N {
+            let port = (i + self.priority.value()) % N;
+            if self.input.in_valid[port] {
+                return Some(port);
             }
         }
         None

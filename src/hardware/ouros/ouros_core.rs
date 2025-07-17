@@ -7,8 +7,8 @@ use crate::hardware::ouros::program::app_length;
 use crate::hw_module::{HwInput, HwModule};
 
 use super::alu::{Alu, AluStat};
-// use super::deref_heap::{DrfHeap, DrfHeapStat};
-use super::deref_heap_new::{DrfHeap, DrfHeapStat};
+use super::deref_heap::{DrfHeap, DrfHeapStat};
+// use super::deref_heap_new::{DrfHeap, DrfHeapStat};
 use super::program::{is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use super::reducer::{Reducer, ReducerStat};
 

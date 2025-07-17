@@ -774,15 +774,22 @@ impl DrfHeap {
             .unwrap()
             .1;
         let current_stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
-        let same1 = self.input.port_a_valid && returning_app == *self.addr_holder.value();
-        let same2 = self.input.port_a_valid
-            && stack_cell_with(current_stk.top(), |(_, addr)| *addr == returning_app);
+        let same1 = returning_app == *self.addr_holder.value();
+        let same2 = stack_cell_with(current_stk.top(), |(_, addr)| *addr == returning_app);
+        // if self.input.port_a_valid
+        //     && self.input.port_a_bits.stack_idx == self.holder_in.value().stack_idx
+        // {
+        //     panic!("strange shit!");
+        // }
         (sensitive1 && same1) || (sensitive2 && same2)
     }
 
     /// take shortcuts, unless 'sensitive cases' are encountered
     fn step_to_next(&mut self, s1: &IAs1) {
         if self.is_sensitive(s1) {
+            // if self.input.port_a_valid {
+            //     println!("sensi! returning: {:?}", self.input.port_a_bits.load);
+            // }
             self.stm.connect(&Stm::IDLE);
         } else {
             self.consume_next();
