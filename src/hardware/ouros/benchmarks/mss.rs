@@ -17,12 +17,12 @@ pub static MSS: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 1 
             PRM(SUB,false),
             INT(0),
-            INT(5),
+            INT(20),
         ], 
         vec![ // 2 
             PTR(28),
             PTR(1),
-            INT(5),
+            INT(20),
         ], 
          // FUN1Mss.mss
         vec![ // 3 

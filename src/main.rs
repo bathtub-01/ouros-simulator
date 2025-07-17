@@ -23,7 +23,7 @@ fn simulate() -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 1000 {
+        if ouros.done() || cycle == 1000000 {
             break;
         }
         ouros.tick();
