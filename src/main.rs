@@ -11,7 +11,7 @@ use hw_module::HwModule;
 
 fn simulate() -> (OurosCore, u32) {
     use hardware::ouros::benchmarks::*;
-    let mut ouros = OurosCore::new(&MSS);
+    let mut ouros = OurosCore::new(&FIB);
     let mut cycle: u32 = 0;
 
     ouros.tick();
@@ -23,7 +23,7 @@ fn simulate() -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 100000 {
+        if ouros.done() || cycle == 1000 {
             break;
         }
         ouros.tick();
@@ -222,7 +222,7 @@ fn main() -> std::io::Result<()> {
 
     // write stm distributioin
     writeln!(stm_dist, "state,cycles")?;
-    for (s, c) in ["IDLE", "WHNF", "IA", "IAw", "OPa", "OPaw", "OPb", "OPbw"]
+    for (s, c) in ["IDLE", "WHNF", "IA", "RESUME"]
         .iter()
         .zip(stats.0.stm_cycles)
     {

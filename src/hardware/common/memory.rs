@@ -96,7 +96,7 @@ pub struct DualPortMemStat {
 /// Read-after-write for the same address.
 pub struct DualPortMem<T: Clone + Default> {
     pub input: DualInput<T>,
-    ram: Vec<T>,
+    pub ram: Vec<T>,
     holder_a: T,
     holder_b: T,
     stat: DualPortMemStat,

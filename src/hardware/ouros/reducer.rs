@@ -116,6 +116,7 @@ impl Reducer {
 
 impl HwModule for Reducer {
     fn update_local(&mut self) {
+        // FIXME: looks a bit wrong..
         if fire(self.spine().0, self.input.spine_ready) {
             self.spine_holder.0 = false;
         }

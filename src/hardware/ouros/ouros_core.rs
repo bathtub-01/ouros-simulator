@@ -7,7 +7,8 @@ use crate::hardware::ouros::program::app_length;
 use crate::hw_module::{HwInput, HwModule};
 
 use super::alu::{Alu, AluStat};
-use super::deref_heap::{DrfHeap, DrfHeapStat};
+// use super::deref_heap::{DrfHeap, DrfHeapStat};
+use super::deref_heap_new::{DrfHeap, DrfHeapStat};
 use super::program::{is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use super::reducer::{Reducer, ReducerStat};
 
@@ -381,6 +382,12 @@ impl HwModule for OurosCore {
     }
 
     fn tick_children(&mut self) {
+        // if self.arbiter_dheap_b.out_valid() && self.arbiter_dheap_b.input.out_ready {
+        //     println!(
+        //         "arbiter fire: {:?}",
+        //         self.arbiter_dheap_b.out_bits(self.arbiter_dheap_b.select())
+        //     );
+        // }
         self.dheap.tick();
         self.reducer.tick();
         self.alu.tick();
@@ -446,5 +453,6 @@ fn ouros_core_spec() {
 
         let res = &ouros.dheap.input.port_a_bits.load[0];
         assert_eq!(*res, r);
+        eprintln! {"passed!"};
     }
 }
