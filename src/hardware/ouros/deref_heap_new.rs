@@ -31,6 +31,8 @@ impl HwInput for DrfHeapInput {}
 
 type StackCell = (bool, usize);
 type AddrStack = Stack<StackCell, 512>;
+type FrameRecord = [usize; 8];
+type FrameStack = Stack<FrameRecord, 64>;
 
 fn stack_cell_with(cell: Option<&StackCell>, p: impl FnOnce(&StackCell) -> bool) -> bool {
     match cell {
@@ -53,8 +55,8 @@ fn find_new_frame(address: usize) -> impl Fn(&AddrStack) -> bool {
     }
 }
 
-fn find_free_stack(s: &AddrStack) -> bool {
-    s.elements() == 0 || stack_cell_with(s.top(), |(flag, _)| *flag)
+fn find_free_stack(s: &AddrStack, target_addr: usize) -> bool {
+    s.elements() == 0 || stack_cell_with(s.top(), |(flag, addr)| *flag && *addr == target_addr)
 }
 
 fn extend_to_app<const N: usize>(atms: &[Atom; N]) -> App {
@@ -252,7 +254,9 @@ pub struct DrfHeap {
     holder_in_sub: Register<FrozenApp>,
     addr_holder: Register<usize>,
     ia_addr: Register<usize>,
+    father_stk: Register<u8>,
     thread_stack: [AddrStack; 8],
+    frame_stack: [FrameStack; 8],
     heap_mem: DualPortMem<HeapCell>,
     demand_heap: DualPortMem<bool>,
     working_heap: DualPortMem<bool>,
@@ -274,7 +278,9 @@ impl DrfHeap {
             holder_in_sub: Default::default(),
             addr_holder: Default::default(),
             ia_addr: Default::default(),
+            father_stk: Default::default(),
             thread_stack: std::array::from_fn(|_| Stack::new()),
+            frame_stack: std::array::from_fn(|_| Stack::new()),
             heap_mem: DualPortMem::new(heap_size),
             working_heap: DualPortMem::new(heap_size),
             demand_heap: DualPortMem::new(heap_size),
@@ -574,7 +580,14 @@ impl DrfHeap {
     fn getIAs2(&self, s1: &IAs1) -> IAs2 {
         let ia = &self.holder_in.value().load;
         let target_in_whnf = self.heap_mem.dout_a().exist && is_whnf(&self.heap_mem.dout_a().app);
-        let idle_stack: bool = self.thread_stack.iter().any(|s| find_free_stack(s));
+        let frame_record = self.frame_stack[self.holder_in.value().stack_idx as usize]
+            .top()
+            .unwrap();
+        let idle_stack: bool = self
+            .thread_stack
+            .iter()
+            .enumerate()
+            .any(|(idx, s)| find_free_stack(s, frame_record[idx]));
         let local_stack: bool = *s1 == IAs1::ExistWHNF || *s1 == IAs1::ExistIAWorkingAtNewFrame;
         let more_strict_args: bool = {
             match ia[0] {
@@ -635,6 +648,9 @@ impl DrfHeap {
         self.demand_heap.input.default_input();
         self.working_heap.input.default_input();
         for stk in &mut self.thread_stack {
+            stk.input.default_input();
+        }
+        for stk in &mut self.frame_stack {
             stk.input.default_input();
         }
 
@@ -723,7 +739,7 @@ impl DrfHeap {
     }
 
     /// find the stack that satisfies `p`, pop the stack and read the second item
-    fn find_pop_read(&mut self, p: impl Fn(&AddrStack) -> bool) {
+    fn find_pop_read(&mut self, p: impl Fn(&AddrStack) -> bool, pop_frame: bool) {
         if let Some((stk_id, stack)) = self
             .thread_stack
             .iter_mut()
@@ -731,6 +747,9 @@ impl DrfHeap {
             .find(|(_, s)| p(*s))
         {
             stack.pop();
+            if pop_frame {
+                self.frame_stack[stk_id].pop();
+            }
             self.heap_mem.read_a(stack.second().unwrap().1);
             self.holder_in.input.stack_idx = stk_id as u8;
         } else {
@@ -810,6 +829,13 @@ impl DrfHeap {
         }
     }
 
+    fn gen_frame_record(&self) -> FrameRecord {
+        let father_stk_id = *self.father_stk.value() as usize;
+        let mut res = self.frame_stack[father_stk_id].top().unwrap().clone();
+        res[father_stk_id] = *self.addr_holder.value();
+        res
+    }
+
     /// consumes the next task; must not use heap port b!
     fn consume_next(&mut self) {
         self.holder_in.connect(&self.input.port_a_bits.clone());
@@ -827,12 +853,13 @@ impl DrfHeap {
                         .unwrap()
                         .1,
                 );
+                self.father_stk.connect(&self.input.port_a_bits.stack_idx);
                 self.stm.connect(&Stm::IA);
             }
             CONSUMEs::InputWHNFWithDmder => {
                 let current_stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
                 let current_top = current_stk.top().unwrap().1;
-                self.find_pop_read(find_more_dmder(current_top));
+                self.find_pop_read(find_more_dmder(current_top), false);
                 self.addr_holder.connect(&current_top);
                 self.stm.connect(&Stm::WHNF);
             }
@@ -842,10 +869,7 @@ impl DrfHeap {
                 current_stk.pop();
                 self.heap_mem.read_a(current_stk.second().unwrap().1);
                 self.addr_holder.connect(&current_top);
-                // self.write_incoming(HeapPort::B);
-                if stack_cell_with(current_stk.second(), |(flag, _)| !*flag) {
-                    panic!("strange new frame!");
-                }
+                self.frame_stack[self.input.port_a_bits.stack_idx as usize].pop();
                 // println!(
                 //     "enter2 RESUME: stk{}-{:?}-{:?}",
                 //     self.input.port_a_bits.stack_idx,
@@ -855,6 +879,7 @@ impl DrfHeap {
                 self.stm.connect(&Stm::RESUME);
             }
             CONSUMEs::InputWHNFNoDmderNoFrame => {
+                self.frame_stack[self.input.port_a_bits.stack_idx as usize].pop();
                 self.write_incoming(HeapPort::A);
                 self.stm.connect(&Stm::IDLE);
             }
@@ -888,33 +913,24 @@ impl DrfHeap {
         self.put_output(self.holder_in.value().stack_idx, deref_res);
         match self.getWHNFs() {
             WHNFs::MoreDmders => {
-                self.find_pop_read(find_more_dmder(whnf_addr));
+                self.find_pop_read(find_more_dmder(whnf_addr), false);
                 self.stm.connect(&Stm::WHNF);
             }
             WHNFs::NewFrame => {
-                // self.write_whnf(HeapPort::B);
-                self.find_pop_read(find_new_frame(whnf_addr));
-                if stack_cell_with(
-                    self.thread_stack[self.holder_in.input.stack_idx as usize].second(),
-                    |(flag, _)| !*flag,
-                ) {
-                    panic!("strange new frame!");
-                }
-                // println!(
-                //     "enter1 RESUME: stk{}-{:?}-{:?}",
-                //     self.holder_in.input.stack_idx,
-                //     self.thread_stack[self.holder_in.input.stack_idx as usize]
-                //         .second()
-                //         .unwrap(),
-                //     self.heap_mem.ram[self.thread_stack[self.holder_in.input.stack_idx as usize]
-                //         .second()
-                //         .unwrap()
-                //         .1]
-                //         .app
-                // );
+                self.write_whnf(HeapPort::B);
+                self.find_pop_read(find_new_frame(whnf_addr), true);
                 self.stm.connect(&Stm::RESUME);
             }
             WHNFs::NoNewFrame => {
+                if let Some((stk_id, stack)) = self
+                    .thread_stack
+                    .iter_mut()
+                    .enumerate()
+                    .find(|(_, s)| stack_cell_with(s.top(), |(_, addr)| *addr == whnf_addr))
+                {
+                    stack.pop();
+                    self.frame_stack[stk_id].pop();
+                }
                 self.write_whnf(HeapPort::B);
                 self.consume_next();
             }
@@ -949,25 +965,28 @@ impl DrfHeap {
             }
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
+                let current_stk_id = self.holder_in.value().stack_idx;
                 self.push_target(false);
-                self.put_output(self.holder_in.value().stack_idx, target.clone());
+                // push new frame record here!
+                self.frame_stack[current_stk_id as usize].push(self.gen_frame_record());
+                self.put_output(current_stk_id, target.clone());
             }
         }
 
         match self.getIAs2(&ias1) {
             IAs2::NextStrictArgNewStk => {
+                let frame_record = self.frame_stack[self.holder_in.value().stack_idx as usize]
+                    .top()
+                    .unwrap();
                 if let Some((stk_id, _)) = self
                     .thread_stack
                     .iter()
                     .enumerate()
-                    .find(|(_, s)| find_free_stack(s))
+                    .find(|(idx, s)| find_free_stack(s, frame_record[*idx]))
                 {
                     // FIXME: ensure using a new stack
                     if stk_id as u8 == self.holder_in.value().stack_idx {
                         panic!("GOT YA!");
-                    }
-                    if stack_cell_with(self.thread_stack[stk_id].top(), |(flag, _)| !*flag) {
-                        panic!("jumping on a working stack!");
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                 };
@@ -1049,6 +1068,7 @@ impl DrfHeap {
 
     fn handle_port_a(&mut self) {
         // halt the machine if output is not consumed yet
+        // TODO: to maintain the reading signals on memories
         if self.holder_out.0 && !self.input.out_main_ready {
             return;
         }
@@ -1105,6 +1125,7 @@ impl HwModule for DrfHeap {
                 self.working.connect(&true);
                 // push to stack
                 self.thread_stack[0].push((false, 0));
+                self.frame_stack[0].push(Default::default());
                 // put output register
                 self.holder_out = (
                     true,
@@ -1217,6 +1238,9 @@ impl HwModule for DrfHeap {
         for stk in &mut self.thread_stack {
             stk.tick();
         }
+        for stk in &mut self.frame_stack {
+            stk.tick();
+        }
         self.heap_mem.tick();
         self.demand_heap.tick();
         self.working_heap.tick();
@@ -1225,6 +1249,7 @@ impl HwModule for DrfHeap {
         self.holder_in_sub.tick();
         self.addr_bumper.tick();
         self.arg_id.tick();
+        self.father_stk.tick();
         self.addr_holder.tick();
         self.ia_addr.tick();
     }
