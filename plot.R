@@ -50,8 +50,8 @@ plot <- ggplot(data_long, aes(x = time, y = value, color = metric)) +
     legend.text = element_text(size = 8, margin = margin(r = 1)),  # Smaller legend text
     legend.background = element_rect(
       color = "black",  # Black border
-      fill = "white",   # White background
-      linewidth = 0.3   # Border thickness
+      fill = alpha("white", 0.6),   # White background
+      linewidth = 0.3,   # Border thickness
     ),
 
     legend.margin = margin(1, 2, 1, 2),  # Tight internal padding (top,right,bottom,left)
@@ -93,8 +93,8 @@ plot <- ggplot(combined_data, aes(x = time, y = rate, color = source)) +
     legend.text = element_text(size = 8, margin = margin(r = 1)),  # Smaller legend text
     legend.background = element_rect(
       color = "black",  # Black border
-      fill = "white",   # White background
-      linewidth = 0.3   # Border thickness
+      fill = alpha("white", 0.6),   # White background
+      linewidth = 0.3,   # Border thickness
     ),
 
     legend.margin = margin(1, 2, 1, 2),  # Tight internal padding (top,right,bottom,left)

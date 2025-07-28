@@ -11,7 +11,7 @@ use hw_module::HwModule;
 
 fn simulate() -> (OurosCore, u32) {
     use hardware::ouros::benchmarks::*;
-    let mut ouros = OurosCore::new(&FIB);
+    let mut ouros = OurosCore::new(&DEADLOCK);
     let mut cycle: u32 = 0;
 
     ouros.tick();
@@ -23,7 +23,7 @@ fn simulate() -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 1000000 {
+        if ouros.done() || cycle == 100000 {
             break;
         }
         ouros.tick();
