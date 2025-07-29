@@ -784,7 +784,9 @@ impl DrfHeap {
         current_stk.push((new_frame, *self.addr_holder.value()));
     }
 
-    /// when the pushed app is also entering in this cycle
+    /// ''sensitive'' cases:
+    /// 1. we push an item to wait for an app, but that app is returning in this cycle
+    /// 2. we ride on an idle stack, but the old waited app is returning in this cycle
     fn is_sensitive(&self, s1: &IAs1) -> bool {
         let sensitive1 = *s1 == IAs1::ExistIAWorkingNormal;
         let sensitive2 = *s1 == IAs1::ExistIAFresh || *s1 == IAs1::NoExist;
@@ -830,10 +832,24 @@ impl DrfHeap {
     }
 
     fn gen_frame_record(&self) -> FrameRecord {
-        let father_stk_id = *self.father_stk.value() as usize;
+        let father_stk_id = self.holder_in.value().stack_idx as usize;
         let mut res = self.frame_stack[father_stk_id].top().unwrap().clone();
-        res[father_stk_id] = *self.addr_holder.value();
+        res[father_stk_id] = self.addr_holder.input;
         res
+    }
+
+    /// if currently in a new frame & not pushing, cancel the new frame
+    fn cancel_new_frame(&mut self, s1: &IAs1) {
+        match s1 {
+            IAs1::ExistWHNF | IAs1::ExistIAWorkingAtNewFrame => {
+                let stk_idx = self.holder_in.value().stack_idx as usize;
+                let stk = &self.thread_stack[stk_idx];
+                if stack_cell_with(stk.top(), |(flag, _)| *flag) {
+                    self.frame_stack[stk_idx].pop();
+                }
+            }
+            _ => {}
+        }
     }
 
     /// consumes the next task; must not use heap port b!
@@ -965,16 +981,14 @@ impl DrfHeap {
             }
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
-                let current_stk_id = self.holder_in.value().stack_idx;
                 self.push_target(false);
-                // push new frame record here!
-                self.frame_stack[current_stk_id as usize].push(self.gen_frame_record());
-                self.put_output(current_stk_id, target.clone());
+                self.put_output(self.holder_in.value().stack_idx, target.clone());
             }
         }
 
         match self.getIAs2(&ias1) {
             IAs2::NextStrictArgNewStk => {
+                self.select_next_arg_read(&updated_dmder);
                 let frame_record = self.frame_stack[self.holder_in.value().stack_idx as usize]
                     .top()
                     .unwrap();
@@ -989,8 +1003,9 @@ impl DrfHeap {
                         panic!("GOT YA!");
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
+                    self.frame_stack[stk_id].push(self.gen_frame_record());
+                    // println!("{} pushed frame", stk_id);
                 };
-                self.select_next_arg_read(&updated_dmder);
             }
             IAs2::NextStrictArgLocal => {
                 self.select_next_arg_read(&updated_dmder);
@@ -999,6 +1014,7 @@ impl DrfHeap {
                 // if *self.ia_addr.value() == 242 {
                 //     println!("updating ram[242]: {:?}", updated_dmder);
                 // }
+                self.cancel_new_frame(&ias1);
                 self.heap_mem.write_b(
                     *self.ia_addr.value(),
                     HeapCell {
@@ -1012,6 +1028,7 @@ impl DrfHeap {
                 // }
             }
             IAs2::NoMoreArgsCanEmit => {
+                self.cancel_new_frame(&ias1);
                 self.put_output(self.holder_in.value().stack_idx, updated_dmder);
                 self.step_to_next(&ias1);
             }

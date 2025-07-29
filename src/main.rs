@@ -11,7 +11,7 @@ use hw_module::HwModule;
 
 fn simulate() -> (OurosCore, u32) {
     use hardware::ouros::benchmarks::*;
-    let mut ouros = OurosCore::new(&MSS);
+    let mut ouros = OurosCore::new(&DEADLOCK);
     let mut cycle: u32 = 0;
 
     ouros.tick();
