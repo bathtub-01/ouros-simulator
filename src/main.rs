@@ -235,13 +235,22 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     Ok(())
 }
 
+macro_rules! benchmarks {
+    ($($name:ident),* $(,)?) => {
+        {
+            let benchmarks = [$(& $name),*];
+            let names = [$(stringify!($name)),*];
+            (benchmarks, names)
+        }
+    };
+}
+
 /// run the benchmark suite with less stat details
 fn run_benchmarks() -> std::io::Result<()> {
-    let benchmarks = [
-        &ADJOXO, &BRAUN, &CLAUSIFY, &COUNTDOWN, &FIB, &MSS, &ORDLIST, &PERMSORT, &QUEENS, &QUEENS2,
-        &SUMPUZ, &TAUT, &WHILEX,
-    ];
-    let names = benchmarks.map(|p| stringify!(nihao)); // FIXME: modify microHs to include a name field?
+    let (benchmarks, names) = benchmarks!(
+        ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2, SUMPUZ,
+        TAUT, WHILEX
+    );
     let results = benchmarks.map(|p| simulate(&p, 100));
     results
         .iter()
