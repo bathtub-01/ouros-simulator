@@ -50,10 +50,10 @@ pub struct OurosCore {
 }
 
 impl OurosCore {
-    pub fn new(prog: &Program) -> Self {
+    pub fn new(prog: &Program, detail_lv: u8) -> Self {
         Self {
             input: Default::default(),
-            dheap: DrfHeap::new(1024 * 256).program(prog),
+            dheap: DrfHeap::new(1024 * 256).program(prog).detail(detail_lv),
             reducer: Reducer::new(),
             alu: Alu::new(),
 
@@ -432,7 +432,7 @@ fn ouros_core_spec() {
     ];
 
     for (p, r) in progs {
-        let mut ouros = OurosCore::new(p);
+        let mut ouros = OurosCore::new(p, 0);
         let mut cycle: i32 = 0;
 
         ouros.tick();

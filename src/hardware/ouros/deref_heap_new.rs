@@ -96,8 +96,11 @@ pub struct DrfHeapStat {
     pub heap_stm: Vec<Stm>,
     pub serving_id: Vec<u8>,
     pub stm_cycles: [u32; 4],
-    pub wasted_cycles: u32,
 }
+
+pub const DLV_THREADS: u8 = 100;
+pub const DLV_FULL_LOG: u8 = 250;
+pub const DLV_STM_DIST: u8 = 240;
 
 /// branch conditions for `consume_next()`
 #[derive(Debug)]
@@ -297,6 +300,7 @@ pub struct DrfHeap {
     addr_bumper: Register<usize>,
     arg_id: Register<usize>,
     stat: DrfHeapStat,
+    stat_detail_lv: u8,
 }
 
 impl DrfHeap {
@@ -321,6 +325,7 @@ impl DrfHeap {
             stat: Default::default(),
             holder_out_sub: Default::default(),
             arg_id: Default::default(),
+            stat_detail_lv: Default::default(),
         }
     }
 
@@ -339,6 +344,12 @@ impl DrfHeap {
         self.heap_mem.image(&img);
         self.addr_bumper.connect(&img.len());
         self.addr_bumper.tick();
+        self
+    }
+
+    /// Setup the detail level of stats, 0~lowest, 255~highest
+    pub fn detail(mut self, lv: u8) -> Self {
+        self.stat_detail_lv = lv;
         self
     }
 
@@ -1275,42 +1286,48 @@ impl HwModule for DrfHeap {
     }
 
     fn update_stat(&mut self) {
-        if self.holder_out.0 {
+        if self.stat_detail_lv >= DLV_FULL_LOG {
+            if self.holder_out.0 {
+                self.stat
+                    .holder_contents
+                    .push(Some(self.holder_out.1.clone()));
+            } else if self.output_fire() {
+                self.stat.holder_contents.push(Some(self.out_main_bits()));
+            } else {
+                self.stat.holder_contents.push(None);
+            }
+
+            self.stat.heap_stm.push(self.stm.value().clone());
+            self.stat.serving_id.push(self.holder_in.value().stack_idx);
+        }
+
+        if self.stat_detail_lv >= DLV_THREADS {
+            let occupied = self
+                .thread_stack
+                .iter()
+                .filter(|stk| stk.elements() != 0)
+                .count();
+            if self.port_a_fire() {
+                self.stat.active_threads -= 1;
+            }
+            if self.output_fire() {
+                self.stat.active_threads += 1;
+            }
+            if self.out_sub_fire() {
+                self.stat.active_threads += 1;
+            }
             self.stat
-                .holder_contents
-                .push(Some(self.holder_out.1.clone()));
-        } else if self.output_fire() {
-            self.stat.holder_contents.push(Some(self.out_main_bits()));
-        } else {
-            self.stat.holder_contents.push(None);
+                .work_threads
+                .push((occupied as u8, self.stat.active_threads));
         }
 
-        self.stat.heap_stm.push(self.stm.value().clone());
-        self.stat.serving_id.push(self.holder_in.value().stack_idx);
-
-        let occupied = self
-            .thread_stack
-            .iter()
-            .filter(|stk| stk.elements() != 0)
-            .count();
-        if self.port_a_fire() {
-            self.stat.active_threads -= 1;
-        }
-        if self.output_fire() {
-            self.stat.active_threads += 1;
-        }
-        if self.out_sub_fire() {
-            self.stat.active_threads += 1;
-        }
-        self.stat
-            .work_threads
-            .push((occupied as u8, self.stat.active_threads));
-
-        match *self.stm.value() {
-            Stm::IDLE => self.stat.stm_cycles[0] += 1,
-            Stm::WHNF => self.stat.stm_cycles[1] += 1,
-            Stm::IA => self.stat.stm_cycles[2] += 1,
-            Stm::RESUME => self.stat.stm_cycles[3] += 1,
+        if self.stat_detail_lv >= DLV_STM_DIST {
+            match *self.stm.value() {
+                Stm::IDLE => self.stat.stm_cycles[0] += 1,
+                Stm::WHNF => self.stat.stm_cycles[1] += 1,
+                Stm::IA => self.stat.stm_cycles[2] += 1,
+                Stm::RESUME => self.stat.stm_cycles[3] += 1,
+            }
         }
     }
 

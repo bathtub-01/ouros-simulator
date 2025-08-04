@@ -6,12 +6,13 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use hardware::ouros::ouros_core::OurosCore;
-use hardware::ouros::program::{app_length, ActiveApp, App};
+use hardware::ouros::program::{app_length, ActiveApp, App, Program};
+// use hardware::ouros::deref_heap_new::
+use hardware::ouros::benchmarks::*;
 use hw_module::HwModule;
 
-fn simulate() -> (OurosCore, u32) {
-    use hardware::ouros::benchmarks::*;
-    let mut ouros = OurosCore::new(&WHILEX);
+fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
+    let mut ouros = OurosCore::new(prog, detail_lv);
     let mut cycle: u32 = 0;
 
     ouros.tick();
@@ -94,16 +95,18 @@ fn write_busy_rate(file: &mut File, data: &Vec<f32>, chunk_size: usize) -> std::
     Ok(())
 }
 
-fn main() -> std::io::Result<()> {
-    let dir = "simu-out/";
-    let log_path = Path::new(dir).join("log.txt");
-    let threads_path = Path::new(dir).join("threads.csv");
-    let red_rate_path = Path::new(dir).join("red-rate.csv");
-    let alu_rate_path = Path::new(dir).join("alu-rate.csv");
-    let buffer_util_path = Path::new(dir).join("buffer-util.csv");
-    let stm_dist_path = Path::new(dir).join("stm-dist.csv");
+const DIR: &str = "simu-out/";
 
-    fs::create_dir_all(dir)?;
+/// inspect a program with full stat details
+fn inspect_prog(prog: &Program) -> std::io::Result<()> {
+    let log_path = Path::new(DIR).join("log.txt");
+    let threads_path = Path::new(DIR).join("threads.csv");
+    let red_rate_path = Path::new(DIR).join("red-rate.csv");
+    let alu_rate_path = Path::new(DIR).join("alu-rate.csv");
+    let buffer_util_path = Path::new(DIR).join("buffer-util.csv");
+    let stm_dist_path = Path::new(DIR).join("stm-dist.csv");
+
+    fs::create_dir_all(DIR)?;
 
     let mut log = File::create(log_path)?;
     let mut threads = File::create(threads_path)?;
@@ -112,12 +115,12 @@ fn main() -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate();
+    let (ouros, runtime_cycles) = simulate(prog, u8::max_value());
     let stats = ouros.get_stat();
 
     println!(
-        "==== Simulation done! Cycles consumed: {} (wsated {}) ====",
-        runtime_cycles, stats.0.wasted_cycles
+        "==== Simulation done! Cycles consumed: {} ====",
+        runtime_cycles
     );
 
     // write log
@@ -230,4 +233,24 @@ fn main() -> std::io::Result<()> {
     }
 
     Ok(())
+}
+
+/// run the benchmark suite with less stat details
+fn run_benchmarks() -> std::io::Result<()> {
+    let benchmarks = [
+        &ADJOXO, &BRAUN, &CLAUSIFY, &COUNTDOWN, &FIB, &MSS, &ORDLIST, &PERMSORT, &QUEENS, &QUEENS2,
+        &SUMPUZ, &TAUT, &WHILEX,
+    ];
+    let names = benchmarks.map(|p| stringify!(nihao)); // FIXME: modify microHs to include a name field?
+    let results = benchmarks.map(|p| simulate(&p, 100));
+    results
+        .iter()
+        .zip(names)
+        .for_each(|((core, cycles), n)| println!("{} cycles", cycles));
+    Ok(())
+}
+
+fn main() -> std::io::Result<()> {
+    // inspect_prog(&FIB)
+    run_benchmarks()
 }
