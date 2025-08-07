@@ -2,6 +2,7 @@ use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
 pub struct MemInput<T: Clone + Default> {
+    pub enable: bool,
     pub is_write: bool,
     pub addr: usize,
     pub din: T,
@@ -77,8 +78,10 @@ pub struct DualInput<T: Clone + Default> {
 
 impl<T: Clone + Default> HwInput for DualInput<T> {
     fn default_input(&mut self) {
+        self.port_a.enable = false;
         self.port_a.is_write = false;
         self.port_a.addr = 0;
+        self.port_b.enable = false;
         self.port_b.is_write = false;
         self.port_b.addr = 0;
     }
@@ -100,6 +103,7 @@ pub struct DualPortMem<T: Clone + Default> {
     holder_a: T,
     holder_b: T,
     stat: DualPortMemStat,
+    pub record_stat: bool,
 }
 
 impl<T: Clone + Default> DualPortMem<T> {
@@ -110,6 +114,7 @@ impl<T: Clone + Default> DualPortMem<T> {
             holder_a: T::default(),
             holder_b: T::default(),
             stat: Default::default(),
+            record_stat: Default::default(),
         }
     }
 
@@ -128,33 +133,29 @@ impl<T: Clone + Default> DualPortMem<T> {
     }
 
     pub fn write_a(&mut self, addr: usize, din: T) {
+        self.input.port_a.enable = true;
         self.input.port_a.is_write = true;
         self.input.port_a.addr = addr;
         self.input.port_a.din = din;
-
-        self.stat.a_writes += 1;
     }
 
     pub fn read_a(&mut self, addr: usize) {
+        self.input.port_a.enable = true;
         self.input.port_a.is_write = false;
         self.input.port_a.addr = addr;
-
-        self.stat.a_reads += 1;
     }
 
     pub fn write_b(&mut self, addr: usize, din: T) {
+        self.input.port_b.enable = true;
         self.input.port_b.is_write = true;
         self.input.port_b.addr = addr;
         self.input.port_b.din = din;
-
-        self.stat.b_writes += 1;
     }
 
     pub fn read_b(&mut self, addr: usize) {
+        self.input.port_b.enable = true;
         self.input.port_b.is_write = false;
         self.input.port_b.addr = addr;
-
-        self.stat.b_reads += 1;
     }
 
     pub fn get_stat(&self) -> &DualPortMemStat {
@@ -163,6 +164,26 @@ impl<T: Clone + Default> DualPortMem<T> {
 }
 
 impl<T: Clone + Default> HwModule for DualPortMem<T> {
+    fn update_stat(&mut self) {
+        if self.record_stat {
+            if self.input.port_a.enable {
+                if self.input.port_a.is_write {
+                    self.stat.a_writes += 1;
+                } else {
+                    self.stat.a_reads += 1;
+                }
+            }
+
+            if self.input.port_b.enable {
+                if self.input.port_b.is_write {
+                    self.stat.b_writes += 1;
+                } else {
+                    self.stat.b_reads += 1;
+                }
+            }
+        }
+    }
+
     fn update_local(&mut self) {
         assert!(
             !(self.input.port_a.is_write

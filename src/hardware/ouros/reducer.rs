@@ -9,7 +9,7 @@
 // the reducer will be stalled if outputs fail to emit.
 
 use crate::hardware::ouros::combinator::{parse_pat, Hole, ParseRes, ALL_PATTERNS, DECODE_TABLE};
-use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
+use crate::hardware::ouros::config::*;
 use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
@@ -42,6 +42,7 @@ pub struct Reducer {
     app2_holder: (bool, FrozenApp),
     app3_holder: (bool, FrozenApp),
     stat: ReducerStat,
+    stat_detail_lv: u8,
 }
 
 impl Reducer {
@@ -54,7 +55,13 @@ impl Reducer {
             app2_holder: Default::default(),
             app3_holder: Default::default(),
             stat: Default::default(),
+            stat_detail_lv: Default::default(),
         }
+    }
+
+    pub fn detail(mut self, lv: u8) -> Self {
+        self.stat_detail_lv = lv;
+        self
     }
 
     pub fn spine(&self) -> &(bool, ActiveApp) {
@@ -207,19 +214,23 @@ impl HwModule for Reducer {
     }
 
     fn update_stat(&mut self) {
-        if fire(self.input.in_valid, self.in_ready()) {
-            self.stat.busy_cycles += 1;
-            self.stat.busy_per_cycle.push(true);
-        } else {
-            self.stat.busy_per_cycle.push(false);
+        if self.stat_detail_lv >= DLV_BUSY_RATE {
+            if fire(self.input.in_valid, self.in_ready()) {
+                self.stat.busy_cycles += 1;
+                self.stat.busy_per_cycle.push(true);
+            } else {
+                self.stat.busy_per_cycle.push(false);
+            }
         }
 
-        if self.spine_holder.0 {
-            self.stat
-                .holder_contents
-                .push(Some(self.spine_holder.1.clone()));
-        } else {
-            self.stat.holder_contents.push(None);
+        if self.stat_detail_lv >= DLV_FULL_LOG {
+            if self.spine_holder.0 {
+                self.stat
+                    .holder_contents
+                    .push(Some(self.spine_holder.1.clone()));
+            } else {
+                self.stat.holder_contents.push(None);
+            }
         }
     }
 

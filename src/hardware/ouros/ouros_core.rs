@@ -7,6 +7,7 @@ use crate::hardware::ouros::program::app_length;
 use crate::hw_module::{HwInput, HwModule};
 
 use super::alu::{Alu, AluStat};
+use super::config::*;
 // use super::deref_heap::{DrfHeap, DrfHeapStat};
 use super::deref_heap_new::{DrfHeap, DrfHeapStat};
 use super::program::{is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
@@ -51,32 +52,33 @@ pub struct OurosCore {
 
 impl OurosCore {
     pub fn new(prog: &Program, detail_lv: u8) -> Self {
+        let buffer_usage: bool = detail_lv >= DLV_BUFFER_USAGE;
         Self {
             input: Default::default(),
             dheap: DrfHeap::new(1024 * 256).program(prog).detail(detail_lv),
-            reducer: Reducer::new(),
-            alu: Alu::new(),
+            reducer: Reducer::new().detail(detail_lv),
+            alu: Alu::new().detail(detail_lv),
 
-            buffers_dheap_a_0: FIFO::new(),
-            buffers_dheap_a_1: FIFO::new(),
-            buffers_dheap_a_2: FIFO::new(),
-            buffers_dheap_a_3: FIFO::new(),
+            buffers_dheap_a_0: FIFO::new().record_stat(buffer_usage),
+            buffers_dheap_a_1: FIFO::new().record_stat(buffer_usage),
+            buffers_dheap_a_2: FIFO::new().record_stat(buffer_usage),
+            buffers_dheap_a_3: FIFO::new().record_stat(buffer_usage),
             arbiter_dheap_a: Arbiter::new(),
 
-            buffers_dheap_b_0: FIFO::new(),
-            buffers_dheap_b_1: FIFO::new(),
-            buffers_dheap_b_2: FIFO::new(),
+            buffers_dheap_b_0: FIFO::new().record_stat(buffer_usage),
+            buffers_dheap_b_1: FIFO::new().record_stat(buffer_usage),
+            buffers_dheap_b_2: FIFO::new().record_stat(buffer_usage),
             arbiter_dheap_b: Arbiter::new(),
 
-            buffers_reducer_0: FIFO::new(),
-            buffers_reducer_1: FIFO::new(),
-            buffers_reducer_2: FIFO::new(),
-            buffers_reducer_3: FIFO::new(),
+            buffers_reducer_0: FIFO::new().record_stat(buffer_usage),
+            buffers_reducer_1: FIFO::new().record_stat(buffer_usage),
+            buffers_reducer_2: FIFO::new().record_stat(buffer_usage),
+            buffers_reducer_3: FIFO::new().record_stat(buffer_usage),
             arbiter_reducer: Arbiter::new(),
 
-            buffers_alu_0: FIFO::new(),
-            buffers_alu_1: FIFO::new(),
-            buffers_alu_2: FIFO::new(),
+            buffers_alu_0: FIFO::new().record_stat(buffer_usage),
+            buffers_alu_1: FIFO::new().record_stat(buffer_usage),
+            buffers_alu_2: FIFO::new().record_stat(buffer_usage),
             arbiter_alu: Arbiter::new(),
         }
     }
@@ -424,11 +426,11 @@ fn ouros_core_spec() {
     use Atom::*;
     // [(program, result)]
     let progs = [
-        // (&FIB, INT(89)),
         (&BOOL_AND, COM(2, 0, [1, 0, 0, 0, 0, 0])),
         (&BOOL_NEST, COM(2, 0, [1, 0, 0, 0, 0, 0])),
         (&ALU_OP, INT(162)),
         (&MAP_Y, INT(1275)),
+        (&DEADLOCK, INT(29380)),
     ];
 
     for (p, r) in progs {

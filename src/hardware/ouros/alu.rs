@@ -7,7 +7,7 @@
 use crate::{
     hardware::{
         ouros::{
-            config::APP_LENGTH,
+            config::*,
             program::{AluOp, App},
         },
         utils::fire,
@@ -38,11 +38,17 @@ pub struct Alu {
     pub input: AluInput,
     holder: (bool, ActiveApp),
     stat: AluStat,
+    stat_detail_lv: u8,
 }
 
 impl Alu {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn detail(mut self, lv: u8) -> Self {
+        self.stat_detail_lv = lv;
+        self
     }
 
     fn input_fire(&self) -> bool {
@@ -144,17 +150,21 @@ impl HwModule for Alu {
     }
 
     fn update_stat(&mut self) {
-        if fire(self.input.input_valid, self.input_ready()) {
-            self.stat.busy_cycles += 1;
-            self.stat.busy_per_cycle.push(true);
-        } else {
-            self.stat.busy_per_cycle.push(false);
+        if self.stat_detail_lv >= DLV_BUSY_RATE {
+            if fire(self.input.input_valid, self.input_ready()) {
+                self.stat.busy_cycles += 1;
+                self.stat.busy_per_cycle.push(true);
+            } else {
+                self.stat.busy_per_cycle.push(false);
+            }
         }
 
-        if self.holder.0 {
-            self.stat.holder_contents.push(Some(self.holder.1.clone()));
-        } else {
-            self.stat.holder_contents.push(None);
+        if self.stat_detail_lv >= DLV_FULL_LOG {
+            if self.holder.0 {
+                self.stat.holder_contents.push(Some(self.holder.1.clone()));
+            } else {
+                self.stat.holder_contents.push(None);
+            }
         }
     }
 

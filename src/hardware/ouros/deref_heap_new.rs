@@ -5,7 +5,7 @@
 // port_b ==>|       Heap      |===> out_sub
 //           +-----------------+
 
-use super::config::APP_LENGTH;
+use super::config::*;
 use super::ouros_core::{is_int, is_prm};
 use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use crate::hardware::common::memory::DualPortMemStat;
@@ -97,10 +97,6 @@ pub struct DrfHeapStat {
     pub serving_id: Vec<u8>,
     pub stm_cycles: [u32; 4],
 }
-
-pub const DLV_THREADS: u8 = 100;
-pub const DLV_FULL_LOG: u8 = 250;
-pub const DLV_STM_DIST: u8 = 240;
 
 /// branch conditions for `consume_next()`
 #[derive(Debug)]
@@ -350,6 +346,7 @@ impl DrfHeap {
     /// Setup the detail level of stats, 0~lowest, 255~highest
     pub fn detail(mut self, lv: u8) -> Self {
         self.stat_detail_lv = lv;
+        self.heap_mem.record_stat = lv >= DLV_MEM_USAGE;
         self
     }
 

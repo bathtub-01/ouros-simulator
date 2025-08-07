@@ -26,13 +26,6 @@ pub trait HwInput {
     fn default_input(&mut self) {}
 }
 
-// TODO: a stat framework might be a bit over-exaggerated for now.
-//       Leave it to future..
-pub trait HwStat {
-    /// Detailed level of this stat
-    const DETAIL_LV: u8;
-}
-
 /// The behavior of a hardware module at each clock cycle:
 ///   * `update_local`: update its local states (`input` should first be setup
 ///     through `link_input`)

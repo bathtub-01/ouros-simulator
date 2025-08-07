@@ -26,6 +26,7 @@ pub struct FIFO<T: Clone + Default, const N: usize> {
     pub input: FIFOInput<T>,
     queue: VecDeque<T>,
     stat: FIFOStat,
+    record_stat: bool,
 }
 
 impl<T: Clone + Default, const N: usize> FIFO<T, N> {
@@ -34,7 +35,13 @@ impl<T: Clone + Default, const N: usize> FIFO<T, N> {
             input: Default::default(),
             queue: VecDeque::with_capacity(N),
             stat: Default::default(),
+            record_stat: Default::default(),
         }
+    }
+
+    pub fn record_stat(mut self, b: bool) -> Self {
+        self.record_stat = b;
+        self
     }
 
     pub fn in_ready(&self) -> bool {
@@ -70,7 +77,9 @@ impl<T: Clone + Default, const N: usize> HwModule for FIFO<T, N> {
     }
 
     fn update_stat(&mut self) {
-        self.stat.length_per_cycle.push(self.queue.len() as u8);
+        if self.record_stat {
+            self.stat.length_per_cycle.push(self.queue.len() as u8);
+        }
     }
 
     fn tick_children(&mut self) {}

@@ -251,15 +251,20 @@ fn run_benchmarks() -> std::io::Result<()> {
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2, SUMPUZ,
         TAUT, WHILEX
     );
-    let results = benchmarks.map(|p| simulate(&p, 100));
+    let mut counter = 0;
+    let results = benchmarks.map(|p| {
+        counter += 1;
+        println!("{}/{} finished.", counter, benchmarks.len());
+        simulate(&p, 100)
+    });
     results
         .iter()
         .zip(names)
-        .for_each(|((core, cycles), n)| println!("{} cycles", cycles));
+        .for_each(|((core, cycles), n)| println!("{}: {} cycles", n, cycles));
     Ok(())
 }
 
 fn main() -> std::io::Result<()> {
-    // inspect_prog(&FIB)
+    // inspect_prog(&DEADLOCK)
     run_benchmarks()
 }
