@@ -4,7 +4,6 @@ pub mod combinator;
 
 pub mod reducer;
 
-pub mod deref_heap;
 pub mod deref_heap_new;
 
 pub mod alu;

@@ -1,33 +1,33 @@
 use crate::hardware::ouros::program::{AluOp, Atom, Program};
 use std::sync::LazyLock;
 use AluOp::*;
-use Atom::*;
-
-// Functions in this file: 14
-// Apps in this file: 37
-// Combinators in this file: 55
+use Atom::*; 
+ 
+// Functions in this file: 15
+// Apps in this file: 36
+// Combinators in this file: 68
 #[rustfmt::skip]
 pub static BRAUN: LazyLock<Program> = LazyLock::new(|| {
     vec![
          // FUN0Braun.main
         vec![ // 0 
-            PTR(4),
-            PTR(3),
+            PTR(4, false),
+            PTR(3, false),
         ], 
         vec![ // 1 
-            PTR(30),
+            PTR(28, false),
             INT(0),
             INT(255),
         ], 
         vec![ // 2 
-            PTR(26),
+            PTR(25, false),
             INT(2),
-            PTR(1),
+            PTR(1, false),
         ], 
         vec![ // 3 
-            PTR(5),
-            PTR(9),
-            PTR(2),
+            PTR(5, false),
+            PTR(9, false),
+            PTR(2, false),
         ], 
          // FUN1Braun.int
         vec![ // 4 
@@ -39,16 +39,17 @@ pub static BRAUN: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 5 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(7),
+            PTR(7, false),
         ], 
         vec![ // 6 
-            COM(5,15,[0,1,3,2,4,0]), //X(XX)(XX)
-            PTR(8),
+            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(8, false),
         ], 
         vec![ // 7 
             COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[1,0,0,0,0,0]), //X
-            PTR(6),
+            PTR(6, false),
         ], 
          // FUN3Data.Bool.&&
         vec![ // 8 
@@ -58,27 +59,31 @@ pub static BRAUN: LazyLock<Program> = LazyLock::new(|| {
          // FUN4Braun.prop
         vec![ // 9 
             COM(4,17,[0,3,1,2,3,0]), //XX(X(XX))
-            PTR(10),
-            PTR(14),
-            PTR(22),
+            PTR(10, false),
+            PTR(14, false),
+            PTR(20, false),
         ], 
          // FUN5Braun.equal
         vec![ // 10 
             COM(5,40,[3,4,0,1,2,4]), //X(XXX)(XX)
             COM(2,0,[1,0,0,0,0,0]), //X
-            PTR(13),
-            PTR(12),
+            PTR(13, false),
+            PTR(12, false),
         ], 
         vec![ // 11 
-            COM(6,37,[0,2,4,1,3,5]), //XXXX(XX)
+            COM(5,11,[0,1,2,4,3,0]), //XX(XX)X
+            COM(5,12,[0,1,4,2,3,0]), //X(XXX)X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
             PRM(EQ,false),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
         vec![ // 12 
-            COM(6,48,[3,0,1,4,2,5]), //XX(XX(XX))
+            COM(6,25,[0,1,5,2,3,4]), //XX(XX)XX
+            COM(5,11,[0,1,2,4,3,0]), //XX(XX)X
+            COM(4,8,[0,1,2,3,0,0]), //X(X(XX))
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(11),
-            PTR(10),
+            PTR(11, false),
+            PTR(10, false),
         ], 
         vec![ // 13 
             COM(3,0,[0,0,0,0,0,0]), //X
@@ -87,126 +92,133 @@ pub static BRAUN: LazyLock<Program> = LazyLock::new(|| {
          // FUN6Braun.toList
         vec![ // 14 
             COM(3,2,[2,0,1,0,0,0]), //XXX
-            PTR(16),
+            PTR(15, false),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
         vec![ // 15 
-            COM(4,15,[0,1,2,1,3,0]), //X(XX)(XX)
-            PTR(17),
-            PTR(14),
-        ], 
-        vec![ // 16 
-            COM(5,16,[0,2,1,3,4,0]), //XX(XXX)
+            COM(6,25,[0,1,2,5,3,4]), //XX(XX)XX
+            COM(5,31,[0,1,2,3,4,3]), //XX(X(XX))X
+            COM(4,8,[0,1,2,3,0,0]), //X(X(XX))
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(15),
+            PTR(16, false),
+            PTR(14, false),
         ], 
          // FUN7Braun.ilv
-        vec![ // 17 
+        vec![ // 16 
             COM(3,6,[1,2,0,2,0,0]), //XX(XX)
-            PTR(21),
+            PTR(19, false),
+        ], 
+        vec![ // 17 
+            COM(4,11,[0,1,2,3,2,0]), //XX(XX)X
+            COM(5,11,[0,1,2,4,3,0]), //XX(XX)X
+            COM(4,8,[0,1,2,3,0,0]), //X(X(XX))
+            COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
         vec![ // 18 
-            COM(5,16,[0,3,1,2,4,0]), //XX(XXX)
+            COM(5,39,[0,3,1,4,2,4]), //XX(XX)(XX)
+            COM(5,45,[0,1,4,2,3,4]), //X(XX)(X(XX))
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(17),
+            PTR(17, false),
         ], 
         vec![ // 19 
-            COM(6,46,[0,2,1,3,4,5]), //XX(XXXX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(18),
-        ], 
-        vec![ // 20 
-            COM(5,40,[1,0,3,4,2,4]), //X(XXX)(XX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-        ], 
-        vec![ // 21 
-            COM(4,11,[0,2,1,3,3,0]), //XX(XX)X
-            PTR(20),
-            PTR(19),
+            COM(4,4,[0,2,3,1,0,0]), //XXXX
+            PTR(18, false),
+            PTR(16, false),
         ], 
          // FUN8Braun.fromList
-        vec![ // 22 
+        vec![ // 20 
             COM(3,2,[2,0,1,0,0,0]), //XXX
             COM(2,0,[1,0,0,0,0,0]), //X
-            PTR(23),
+            PTR(21, false),
         ], 
-        vec![ // 23 
-            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
-            PTR(24),
-            PTR(22),
+        vec![ // 21 
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(22, false),
+            PTR(20, false),
         ], 
          // FUN9Braun.insertTree
-        vec![ // 24 
-            COM(5,24,[0,1,4,2,3,4]), //X(XX)XXX
-            COM(5,46,[4,0,1,3,2,2]), //XX(XXXX)
-            PTR(25),
-            COM(5,4,[3,0,1,2,0,0]), //XXXX
+        vec![ // 22 
+            COM(5,46,[0,4,1,4,2,3]), //XX(XXXX)
+            PTR(23, false),
+            PTR(24, false),
+            COM(2,0,[1,0,0,0,0,0]), //X
             COM(2,0,[1,0,0,0,0,0]), //X
         ], 
-        vec![ // 25 
-            COM(6,30,[0,2,1,3,5,4]), //XX(XXX)X
-            COM(5,4,[3,0,1,2,0,0]), //XXXX
-            PTR(24),
+        vec![ // 23 
+            COM(6,53,[0,1,2,3,5,4]), //X(XX(XX)X)
+            COM(3,2,[2,0,1,0,0,0]), //XXX
+            COM(4,6,[0,1,2,3,0,0]), //XX(XX)
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
+            PTR(24, false),
+            PTR(22, false),
         ], 
-         // FUN10NanoPrelude.replicate
-        vec![ // 26 
-            COM(4,10,[0,1,3,2,3,0]), //X(XX)XX
-            PTR(29),
-            PTR(28),
+         // FUN10Braun.Branch
+        vec![ // 24 
+            COM(5,18,[0,4,1,2,3,0]), //X(XXXX)
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
+         // FUN11NanoPrelude.replicate
+        vec![ // 25 
+            COM(3,2,[0,2,1,0,0,0]), //XXX
+            PTR(27, false),
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+        vec![ // 26 
+            COM(5,12,[0,1,4,2,3,0]), //X(XXX)X
+            COM(5,34,[0,1,4,2,4,3]), //X(XX(XX))X
+            PRM(LE,false),
+            INT(0),
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+        ], 
         vec![ // 27 
-            COM(4,7,[0,1,3,2,0,0]), //X(XXX)
-            PTR(26),
+            COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
+            PTR(26, false),
+            PTR(25, false),
             PRM(SUB,false),
             INT(1),
         ], 
+         // FUN12NanoPrelude.enumFromTo
         vec![ // 28 
-            COM(4,16,[0,3,1,2,3,0]), //XX(XXX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(27),
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(30, false),
+            PTR(35, false),
         ], 
         vec![ // 29 
-            COM(6,28,[0,4,1,2,5,3]), //XXX(XX)X
-            PRM(LE,false),
-            INT(0),
-        ], 
-         // FUN11NanoPrelude.enumFromTo
-        vec![ // 30 
-            COM(5,15,[0,1,4,2,3,0]), //X(XX)(XX)
-            PTR(32),
-            PTR(31),
-            PTR(36),
-        ], 
-        vec![ // 31 
             COM(3,2,[0,2,1,0,0,0]), //XXX
             PRM(LE,false),
         ], 
-         // FUN12NanoPrelude.takeWhile
-        vec![ // 32 
+        vec![ // 30 
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
+            PTR(31, false),
+            PTR(29, false),
+        ], 
+         // FUN13NanoPrelude.takeWhile
+        vec![ // 31 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(35),
+            PTR(34, false),
+        ], 
+        vec![ // 32 
+            COM(5,40,[0,3,4,1,2,4]), //X(XXX)(XX)
+            COM(4,8,[0,1,2,3,0,0]), //X(X(XX))
+            COM(2,0,[0,0,0,0,0,0]), //X
+            COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
         vec![ // 33 
-            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
+            COM(4,4,[0,1,3,2,0,0]), //XXXX
+            PTR(32, false),
         ], 
         vec![ // 34 
-            COM(5,42,[1,3,0,2,3,4]), //XXX(XXX)
+            COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(33, false),
         ], 
+         // FUN14NanoPrelude.enumFrom
         vec![ // 35 
-            COM(6,48,[5,0,1,3,2,4]), //XX(XX(XX))
-            COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(34),
-            PTR(33),
-        ], 
-         // FUN13NanoPrelude.enumFrom
-        vec![ // 36 
             COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(36),
+            PTR(35, false),
             PRM(ADD,false),
             INT(1),
         ], 

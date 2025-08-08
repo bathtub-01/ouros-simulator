@@ -15,7 +15,8 @@ pub enum AluOp {
 #[derive(Clone, PartialEq, Debug)]
 pub enum Atom {
     NOP,
-    PTR(usize),
+    /// (addr, unique flag)
+    PTR(usize, bool),
     COM(Arity, u8, [Idx; HOLES]), // represent Pat with an u8
     INT(i32),
     /// (operator, conditon revert bit)
@@ -34,7 +35,7 @@ impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Atom::NOP => write!(f, "NOP"),
-            Atom::PTR(p) => write!(f, "PTR({})", p),
+            Atom::PTR(p, _) => write!(f, "PTR({})", p),
             Atom::COM(arity, pat, holes) => {
                 // Format the array of Idx values as a comma-separated list
                 let holes_str = holes
@@ -94,7 +95,7 @@ pub fn app_length(app: &App) -> usize {
 #[test]
 fn app_length_spec() {
     use Atom::*;
-    let a: App = [PTR(0), INT(1), INT(2), INT(3), NOP, NOP, NOP, NOP];
+    let a: App = [PTR(0, false), INT(1), INT(2), INT(3), NOP, NOP, NOP, NOP];
     let b: App = [Y, Y, Y, Y, Y, Y, Y, Y];
     assert_eq!(app_length(&a), 4);
     assert_eq!(app_length(&b), APP_LENGTH);

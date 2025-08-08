@@ -3,6 +3,7 @@ mod hw_module;
 
 use std::fs::{self, File};
 use std::io::prelude::*;
+use std::io::{self, Write};
 use std::path::Path;
 
 use hardware::ouros::ouros_core::OurosCore;
@@ -253,10 +254,13 @@ fn run_benchmarks() -> std::io::Result<()> {
     );
     let mut counter = 0;
     let results = benchmarks.map(|p| {
+        let res = simulate(&p, 100);
         counter += 1;
-        println!("{}/{} finished.", counter, benchmarks.len());
-        simulate(&p, 100)
+        print!("\r{}/{} finished.", counter, benchmarks.len());
+        io::stdout().flush().unwrap();
+        res
     });
+    println!();
     results
         .iter()
         .zip(names)
@@ -265,6 +269,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    // inspect_prog(&DEADLOCK)
+    // inspect_prog(&SUMPUZ)
     run_benchmarks()
 }

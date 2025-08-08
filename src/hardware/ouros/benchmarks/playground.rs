@@ -20,7 +20,7 @@ pub static BOOL_AND: LazyLock<Program> = LazyLock::new(|| {
     vec![
         // main
         vec![ // 0
-            PTR(1),
+            PTR(1, false),
             COM(2,0,[0,0,0,0,0,0]), // X
             COM(2,0,[1,0,0,0,0,0]), // X
         ],
@@ -43,9 +43,9 @@ pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
     vec![
         // main
         vec![ // 0
-            PTR(4),
-            PTR(2),
-            PTR(2)
+            PTR(4, false),
+            PTR(2, false),
+            PTR(2, false)
         ],
         // tfAnd
         vec![ // 1
@@ -55,14 +55,14 @@ pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
         // b
         vec![ // 2
             COM(4,15,[0,1,2,1,3,0]), // X(XX)(XX)
-            PTR(1),
-            PTR(3), // a
+            PTR(1, false),
+            PTR(3, false), // a
             COM(2,0,[0,0,0,0,0,0]), // T
             COM(2,0,[1,0,0,0,0,0]), // F
         ],
         // a
         vec![ // 3
-            PTR(1),
+            PTR(1, false),
             COM(2,0,[0,0,0,0,0,0]), // X
         ],
         // tfOr
@@ -87,20 +87,20 @@ pub static ALU_OP: LazyLock<Program> = LazyLock::new(|| {
             PRM(EQ, false),
             INT(42),
             INT(42),
-            PTR(2),
-            PTR(1)
+            PTR(2, false),
+            PTR(1, false)
         ],
         // a * b
         vec![ // 1
             PRM(MUL, false),
-            PTR(3),
-            PTR(4)
+            PTR(3, false),
+            PTR(4, false)
         ],
         // a - b
         vec![ // 2
             PRM(SUB, false),
-            PTR(3),
-            PTR(4)
+            PTR(3, false),
+            PTR(4, false)
         ],
         // a
         vec![ // 3
@@ -111,7 +111,7 @@ pub static ALU_OP: LazyLock<Program> = LazyLock::new(|| {
         // b
         vec![ // 4
             PRM(MUL, false),
-            PTR(3),
+            PTR(3, false),
             INT(2)
         ],
     ]
@@ -122,13 +122,13 @@ pub static MAP_Y: LazyLock<Program> = LazyLock::new(|| {
     vec![
          // FUN0Map.main
         vec![ // 0 
-            PTR(4),
+            PTR(4, false),
             PRM(ADD,false),
             INT(0),
-            PTR(3),
+            PTR(3, false),
         ], 
         vec![ // 1 
-            PTR(9),
+            PTR(9, false),
             INT(0),
             INT(49),
         ], 
@@ -138,15 +138,15 @@ pub static MAP_Y: LazyLock<Program> = LazyLock::new(|| {
             INT(1),
         ], 
         vec![ // 3 
-            PTR(6),
-            PTR(2),
-            PTR(1),
+            PTR(6, false),
+            PTR(2, false),
+            PTR(1, false),
         ], 
          // FUN1NanoPrelude.foldr'
         vec![ // 4 
             COM(4,7,[0,1,2,3,0,0]), //X(XXX)
             Y,
-            PTR(5),
+            PTR(5, false),
         ], 
         vec![ // 5 
             COM(5,16,[4,2,0,1,3,0]), //XX(XXX)
@@ -156,7 +156,7 @@ pub static MAP_Y: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 6 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(8),
+            PTR(8, false),
         ], 
         vec![ // 7 
             COM(5,15,[0,1,3,2,4,0]), //X(XX)(XX)
@@ -165,14 +165,14 @@ pub static MAP_Y: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 8 
             COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(7),
+            PTR(7, false),
         ], 
          // FUN3NanoPrelude.enumFromTo
         vec![ // 9 
             COM(5,15,[0,1,4,2,3,0]), //X(XX)(XX)
-            PTR(11),
-            PTR(10),
-            PTR(15),
+            PTR(11, false),
+            PTR(10, false),
+            PTR(15, false),
         ], 
         vec![ // 10 
             COM(3,2,[0,2,1,0,0,0]), //XXX
@@ -182,7 +182,7 @@ pub static MAP_Y: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 11 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(14),
+            PTR(14, false),
         ], 
         vec![ // 12 
             COM(4,6,[0,2,1,3,0,0]), //XX(XX)
@@ -195,14 +195,14 @@ pub static MAP_Y: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 14 
             COM(6,48,[5,0,1,3,2,4]), //XX(XX(XX))
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(13),
-            PTR(12),
+            PTR(13, false),
+            PTR(12, false),
         ], 
          // FUN5NanoPrelude.enumFrom
         vec![ // 15 
             COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(15),
+            PTR(15, false),
             PRM(ADD,false),
             INT(1),
         ], 
@@ -223,19 +223,19 @@ pub static DEADLOCK: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 0 
             COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
             PRM(ADD,false),
-            PTR(5),
+            PTR(5, false),
             PRM(MUL,false),
             INT(2),
-            PTR(2),
+            PTR(2, false),
         ], 
         vec![ // 1 
-            PTR(12),
+            PTR(12, false),
             INT(1),
             INT(50),
         ], 
         vec![ // 2 
-            PTR(6),
-            PTR(1),
+            PTR(6, false),
+            PTR(1, false),
         ], 
         vec![ // 3 
             COM(3,2,[0,2,1,0,0,0]), //XXX
@@ -243,21 +243,21 @@ pub static DEADLOCK: LazyLock<Program> = LazyLock::new(|| {
         ], 
         vec![ // 4 
             COM(6,44,[0,1,5,2,3,4]), //X(XX)(XXX)
-            PTR(9),
-            PTR(3),
-            PTR(12),
+            PTR(9, false),
+            PTR(3, false),
+            PTR(12, false),
             INT(1),
             INT(10),
         ], 
         vec![ // 5 
             COM(4,17,[0,3,1,2,3,0]), //XX(X(XX))
             PRM(ADD,false),
-            PTR(6),
-            PTR(4),
+            PTR(6, false),
+            PTR(4, false),
         ], 
          // FUN1NanoPrelude.sum
         vec![ // 6 
-            PTR(7),
+            PTR(7, false),
             PRM(ADD,false),
             INT(0),
         ], 
@@ -265,7 +265,7 @@ pub static DEADLOCK: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 7 
             COM(4,7,[0,1,2,3,0,0]), //X(XXX)
             Y,
-            PTR(8),
+            PTR(8, false),
         ], 
         vec![ // 8 
             COM(5,16,[4,2,0,1,3,0]), //XX(XXX)
@@ -275,7 +275,7 @@ pub static DEADLOCK: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 9 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(11),
+            PTR(11, false),
         ], 
         vec![ // 10 
             COM(5,15,[0,1,3,2,4,0]), //X(XX)(XX)
@@ -284,14 +284,14 @@ pub static DEADLOCK: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 11 
             COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(10),
+            PTR(10, false),
         ], 
          // FUN4NanoPrelude.enumFromTo
         vec![ // 12 
             COM(5,15,[0,1,4,2,3,0]), //X(XX)(XX)
-            PTR(14),
-            PTR(13),
-            PTR(18),
+            PTR(14, false),
+            PTR(13, false),
+            PTR(18, false),
         ], 
         vec![ // 13 
             COM(3,2,[0,2,1,0,0,0]), //XXX
@@ -301,7 +301,7 @@ pub static DEADLOCK: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 14 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(17),
+            PTR(17, false),
         ], 
         vec![ // 15 
             COM(4,6,[0,2,1,3,0,0]), //XX(XX)
@@ -314,14 +314,14 @@ pub static DEADLOCK: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 17 
             COM(6,48,[5,0,1,3,2,4]), //XX(XX(XX))
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(16),
-            PTR(15),
+            PTR(16, false),
+            PTR(15, false),
         ], 
          // FUN6NanoPrelude.enumFrom
         vec![ // 18 
             COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(18),
+            PTR(18, false),
             PRM(ADD,false),
             INT(1),
         ], 

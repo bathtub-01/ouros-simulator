@@ -155,11 +155,11 @@ enum WORKs {
 /// select the first pointer to deref, returns (arg position, pointer value)
 fn select_1st_arg(app: &App) -> (usize, usize) {
     match app[0] {
-        Atom::PTR(p) => (0, p),
+        Atom::PTR(p, _) => (0, p),
         Atom::PRM(_, _) => match app[1] {
-            Atom::PTR(p) => (1, p),
+            Atom::PTR(p, _) => (1, p),
             Atom::INT(_) => match app[2] {
-                Atom::PTR(p) => (2, p),
+                Atom::PTR(p, _) => (2, p),
                 _ => unreachable!(),
             },
             _ => unreachable!(),
@@ -171,7 +171,7 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
 /// select the next strict arg, returns (arg position, pointer value)
 fn select_next_arg(app: &App, current: usize) -> (usize, usize) {
     match app[2] {
-        Atom::PTR(p) => (2, p),
+        Atom::PTR(p, _) => (2, p),
         _ => unreachable!(),
     }
 }
@@ -211,7 +211,7 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
         (vec_to_app(res_v), None)
     } else {
         let mut wb_app = res_v[APP_LENGTH..res_v.len()].to_vec();
-        wb_app.insert(0, Atom::PTR(free_addr));
+        wb_app.insert(0, Atom::PTR(free_addr, true));
         (
             vec_to_app(res_v[0..APP_LENGTH].to_vec()),
             Some(vec_to_app(wb_app)),
@@ -222,39 +222,57 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
 #[test]
 fn deref_spec() {
     use Atom::*;
-    let app: App = [PTR(0), INT(1), PTR(2), INT(3), NOP, NOP, NOP, NOP];
-    let target1: App = [PTR(11), PTR(22), PTR(33), PTR(44), PTR(55), NOP, NOP, NOP];
+    let app: App = [
+        PTR(0, true),
+        INT(1),
+        PTR(2, true),
+        INT(3),
+        NOP,
+        NOP,
+        NOP,
+        NOP,
+    ];
+    let target1: App = [
+        PTR(11, true),
+        PTR(22, true),
+        PTR(33, true),
+        PTR(44, true),
+        PTR(55, true),
+        NOP,
+        NOP,
+        NOP,
+    ];
     let target2: App = [
-        PTR(11),
-        PTR(22),
-        PTR(33),
-        PTR(44),
-        PTR(55),
-        PTR(66),
-        PTR(77),
+        PTR(11, true),
+        PTR(22, true),
+        PTR(33, true),
+        PTR(44, true),
+        PTR(55, true),
+        PTR(66, true),
+        PTR(77, true),
         NOP,
     ];
     let res1: App = [
-        PTR(0),
+        PTR(0, true),
         INT(1),
-        PTR(11),
-        PTR(22),
-        PTR(33),
-        PTR(44),
-        PTR(55),
+        PTR(11, true),
+        PTR(22, true),
+        PTR(33, true),
+        PTR(44, true),
+        PTR(55, true),
         INT(3),
     ];
     let res2_1: App = [
-        PTR(11),
-        PTR(22),
-        PTR(33),
-        PTR(44),
-        PTR(55),
-        PTR(66),
-        PTR(77),
+        PTR(11, true),
+        PTR(22, true),
+        PTR(33, true),
+        PTR(44, true),
+        PTR(55, true),
+        PTR(66, true),
+        PTR(77, true),
         INT(1),
     ];
-    let res2_2: App = [PTR(42), PTR(2), INT(3), NOP, NOP, NOP, NOP, NOP];
+    let res2_2: App = [PTR(42, true), PTR(2, true), INT(3), NOP, NOP, NOP, NOP, NOP];
     assert_eq!(deref(&app, 2, &target1, 42), (res1, None));
     assert_eq!(deref(&app, 0, &target2, 42), (res2_1, Some(res2_2)));
 }
@@ -630,7 +648,7 @@ impl DrfHeap {
         let local_stack: bool = *s1 == IAs1::ExistWHNF || *s1 == IAs1::ExistIAWorkingAtNewFrame;
         let more_strict_args: bool = {
             match ia[0] {
-                Atom::PTR(_) => false,
+                Atom::PTR(_, _) => false,
                 Atom::PRM(_, _) => *self.arg_id.value() == 1 && !is_int(&ia[2]),
                 // more on this to support strict args in the future
                 _ => unreachable!(),
@@ -984,19 +1002,22 @@ impl DrfHeap {
 
     fn consume_next_sub(&mut self) {
         if self.port_b_fire() {
-            // if self.input.port_b_bits.heap_addr == 117 {
-            //     println!("117 comes!");
-            // }
             let addr = self.input.port_b_bits.heap_addr;
             let app = extend_to_app(&self.input.port_b_bits.load);
             self.heap_mem.write_b(addr, HeapCell { exist: true, app });
             self.holder_in_sub.connect(&self.input.port_b_bits.clone());
             // when the same heap cell is read in the same cycle, leave it to port_a
-            if self.demand_heap.input.port_a.addr == addr {
+            if self.demand_heap.input.port_a.addr == addr
+                && !self
+                    .thread_stack
+                    .iter()
+                    .any(|s| stack_cell_with(s.top(), |(_, a)| *a == addr))
+            {
                 self.demand_heap.read_b(0); // demand flag of `main` is always false
             } else {
                 self.demand_heap.read_b(addr);
             }
+            // self.demand_heap.read_b(addr);
             self.stm_sub.connect(&StmSub::WORK);
         } else {
             self.stm_sub.connect(&StmSub::IDLE);
@@ -1089,7 +1110,7 @@ impl DrfHeap {
             }
             IAs1::ExistIAWorkingNormal => {
                 // change this to `self.push_target(false);` will disable stack riding
-                self.push_target(true);
+                self.push_target(false);
             }
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
@@ -1330,9 +1351,9 @@ impl HwModule for DrfHeap {
 
     fn tick_children(&mut self) {
         // println!(
-        //     "ram[262]: {}-{:?}",
-        //     self.heap_mem.ram[262].exist,
-        //     self.heap_mem.ram[262].app,
+        //     "ram[214]: {}-{:?}",
+        //     self.heap_mem.ram[214].exist,
+        //     self.heap_mem.ram[214].app,
         //     // self.heap_mem.ram[167].exist,
         //     // self.heap_mem.ram[167].app
         // );

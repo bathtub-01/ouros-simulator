@@ -1,18 +1,18 @@
 use crate::hardware::ouros::program::{AluOp, Atom, Program};
 use std::sync::LazyLock;
 use AluOp::*;
-use Atom::*;
-
+use Atom::*; 
+ 
 // Functions in this file: 15
-// Apps in this file: 35
-// Combinators in this file: 49
+// Apps in this file: 39
+// Combinators in this file: 59
 #[rustfmt::skip]
 pub static MSS: LazyLock<Program> = LazyLock::new(|| {
     vec![
          // FUN0Mss.main
         vec![ // 0 
-            PTR(3),
-            PTR(2),
+            PTR(3, false),
+            PTR(2, false),
         ], 
         vec![ // 1 
             PRM(SUB,false),
@@ -20,182 +20,204 @@ pub static MSS: LazyLock<Program> = LazyLock::new(|| {
             INT(20),
         ], 
         vec![ // 2 
-            PTR(28),
-            PTR(1),
+            PTR(31, false),
+            PTR(1, false),
             INT(20),
         ], 
          // FUN1Mss.mss
         vec![ // 3 
-            COM(5,20,[0,1,2,3,4,0]), //X(XX(XX))
-            PTR(4),
-            PTR(9),
-            PTR(12),
-            PTR(13),
+            COM(4,8,[0,1,2,3,0,0]), //X(X(XX))
+            PTR(5, false),
+            PTR(4, false),
+            PTR(15, false),
+        ], 
+        vec![ // 4 
+            PTR(11, false),
+            PTR(14, false),
         ], 
          // FUN2NanoPrelude.maximum
-        vec![ // 4 
-            COM(4,6,[3,0,1,2,0,0]), //XX(XX)
-            INT(0),
-            PTR(7),
-            PTR(6),
-        ], 
         vec![ // 5 
-            COM(3,9,[0,1,2,2,1,0]), //XXXXX
-            PRM(LE,true),
+            COM(3,2,[2,0,1,0,0,0]), //XXX
+            INT(0),
+            PTR(7, false),
         ], 
         vec![ // 6 
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
-            PTR(5),
-            COM(1,0,[0,0,0,0,0,0]), //X
+            COM(3,5,[0,1,2,2,0,0]), //X(XX)X
+            COM(3,4,[0,2,2,1,0,0]), //XXXX
+            PRM(LE,true),
+        ], 
+        vec![ // 7 
+            PTR(8, false),
+            PTR(6, false),
         ], 
          // FUN3NanoPrelude.foldr
-        vec![ // 7 
+        vec![ // 8 
             COM(4,7,[0,1,2,3,0,0]), //X(XXX)
             Y,
-            PTR(8),
+            PTR(10, false),
         ], 
-        vec![ // 8 
-            COM(5,16,[4,2,0,1,3,0]), //XX(XXX)
-            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
-        ], 
-         // FUN4NanoPrelude.map
         vec![ // 9 
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
-            Y,
-            PTR(11),
         ], 
         vec![ // 10 
-            COM(5,15,[0,1,3,2,4,0]), //X(XX)(XX)
+            COM(5,16,[4,2,0,1,3,0]), //XX(XXX)
+            PTR(9, false),
+        ], 
+         // FUN4NanoPrelude.map
+        vec![ // 11 
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            Y,
+            PTR(13, false),
+        ], 
+        vec![ // 12 
+            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 11 
+        vec![ // 13 
             COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(10),
+            PTR(12, false),
         ], 
          // FUN5NanoPrelude.sum
-        vec![ // 12 
-            PTR(7),
+        vec![ // 14 
+            PTR(8, false),
             PRM(ADD,false),
             INT(0),
         ], 
          // FUN6Mss.segments
-        vec![ // 13 
-            COM(4,6,[0,1,2,3,0,0]), //XX(XX)
-            PTR(14),
-            PTR(20),
-            PTR(22),
-        ], 
-         // FUN7Data.List_Type.concatMap
-        vec![ // 14 
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
-            Y,
-            PTR(16),
-        ], 
         vec![ // 15 
-            COM(5,15,[0,1,3,2,4,0]), //X(XX)(XX)
-            PTR(17),
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(16, false),
+            PTR(25, false),
         ], 
         vec![ // 16 
-            COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
-            COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(15),
+            PTR(17, false),
+            PTR(23, false),
         ], 
-         // FUN8Data.List_Type.++
+         // FUN7Data.List_Type.concatMap
         vec![ // 17 
-            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(19),
+            PTR(19, false),
         ], 
         vec![ // 18 
-            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
+            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(20, false),
         ], 
         vec![ // 19 
-            COM(4,6,[3,1,0,2,0,0]), //XX(XX)
-            PTR(18),
-        ], 
-         // FUN9Mss.tails
-        vec![ // 20 
-            COM(3,2,[2,0,1,0,0,0]), //XXX
+            COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(21),
+            PTR(18, false),
+        ], 
+         // FUN8Data.List_Type.++
+        vec![ // 20 
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
+            Y,
+            PTR(22, false),
         ], 
         vec![ // 21 
-            COM(4,40,[0,0,2,3,1,3]), //X(XXX)(XX)
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(20),
         ], 
-         // FUN10Mss.inits
         vec![ // 22 
-            COM(4,17,[3,0,1,2,3,0]), //XX(X(XX))
-            PTR(24),
-            PTR(23),
-            COM(1,0,[0,0,0,0,0,0]), //X
+            COM(4,6,[3,1,0,2,0,0]), //XX(XX)
+            PTR(21, false),
         ], 
+         // FUN9Mss.tails
         vec![ // 23 
-            COM(6,17,[0,3,1,2,3,0]), //XX(X(XX))
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(22),
-            PTR(25),
+            COM(3,2,[2,0,1,0,0,0]), //XXX
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(24, false),
         ], 
         vec![ // 24 
+            COM(4,11,[0,1,1,3,2,0]), //XX(XX)X
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(23, false),
+        ], 
+         // FUN10Mss.inits
+        vec![ // 25 
+            COM(5,48,[4,0,1,2,3,4]), //XX(XX(XX))
+            PTR(27, false),
+            COM(3,1,[0,1,0,0,0,0]), //XX
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(26, false),
+        ], 
+        vec![ // 26 
+            COM(4,17,[0,3,1,2,3,0]), //XX(X(XX))
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(25, false),
+            PTR(28, false),
+        ], 
+        vec![ // 27 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             COM(2,0,[0,0,0,0,0,0]), //X
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
          // FUN11NanoPrelude.init
-        vec![ // 25 
+        vec![ // 28 
             COM(3,2,[2,0,1,0,0,0]), //XXX
             ERR(1),
-            PTR(27),
-        ], 
-        vec![ // 26 
-            COM(6,6,[0,2,1,3,0,0]), //XX(XX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(25),
-        ], 
-        vec![ // 27 
-            COM(4,16,[3,0,1,2,3,0]), //XX(XXX)
-            COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(26),
-        ], 
-         // FUN12NanoPrelude.enumFromTo
-        vec![ // 28 
-            COM(5,15,[0,1,4,2,3,0]), //X(XX)(XX)
-            PTR(30),
-            PTR(29),
-            PTR(34),
+            PTR(30, false),
         ], 
         vec![ // 29 
+            COM(5,17,[0,1,2,3,4,0]), //XX(X(XX))
+            COM(3,1,[0,1,0,0,0,0]), //XX
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+        vec![ // 30 
+            COM(6,47,[0,1,2,3,5,4]), //XX(X(XX)X)
+            COM(3,6,[2,0,1,2,0,0]), //XX(XX)
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(29, false),
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(28, false),
+        ], 
+         // FUN12NanoPrelude.enumFromTo
+        vec![ // 31 
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(33, false),
+            PTR(38, false),
+        ], 
+        vec![ // 32 
             COM(3,2,[0,2,1,0,0,0]), //XXX
             PRM(LE,false),
         ], 
+        vec![ // 33 
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
+            PTR(34, false),
+            PTR(32, false),
+        ], 
          // FUN13NanoPrelude.takeWhile
-        vec![ // 30 
+        vec![ // 34 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(33),
+            PTR(37, false),
         ], 
-        vec![ // 31 
-            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
+        vec![ // 35 
+            COM(5,40,[0,3,4,1,2,4]), //X(XXX)(XX)
+            COM(4,8,[0,1,2,3,0,0]), //X(X(XX))
+            COM(2,0,[0,0,0,0,0,0]), //X
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 32 
-            COM(5,42,[1,3,0,2,3,4]), //XXX(XXX)
-            COM(2,0,[0,0,0,0,0,0]), //X
+        vec![ // 36 
+            COM(4,4,[0,1,3,2,0,0]), //XXXX
+            PTR(35, false),
         ], 
-        vec![ // 33 
-            COM(6,48,[5,0,1,3,2,4]), //XX(XX(XX))
+        vec![ // 37 
+            COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(32),
-            PTR(31),
+            PTR(36, false),
         ], 
          // FUN14NanoPrelude.enumFrom
-        vec![ // 34 
+        vec![ // 38 
             COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(34),
+            PTR(38, false),
             PRM(ADD,false),
             INT(1),
         ], 

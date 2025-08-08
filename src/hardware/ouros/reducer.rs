@@ -148,7 +148,7 @@ impl HwModule for Reducer {
                     let app3 = &mut self.app3_holder;
                     let trans = |h: &Hole| match h {
                         Hole::Arg(a) => in_app.load[is[*a as usize] as usize + 1].clone(),
-                        Hole::Ptr(p) => Atom::PTR(*p as usize + self.input.free_addr),
+                        Hole::Ptr(p) => Atom::PTR(*p as usize + self.input.free_addr, true),
                     };
                     let gen_res = |v: &Vec<Hole>, a: &mut [Atom]| {
                         for i in 0..a.len() {
@@ -195,9 +195,9 @@ impl HwModule for Reducer {
                     let mut app1_app: [Atom; HOLES - 1] = Default::default();
 
                     spine_app[0] = in_app.load[1].clone();
-                    spine_app[1] = Atom::PTR(self.input.free_addr);
+                    spine_app[1] = Atom::PTR(self.input.free_addr, false);
                     app1_app[0] = in_app.load[1].clone();
-                    app1_app[1] = Atom::PTR(self.input.free_addr);
+                    app1_app[1] = Atom::PTR(self.input.free_addr, false);
 
                     self.spine_holder.1.load = spine_app;
                     self.app1_holder.1.load = app1_app;
@@ -263,9 +263,9 @@ fn reducer_spec() {
         input.in_app.stack_idx = 101;
         input.in_app.load = [
             COM(6, 48, [2, 0, 1, 3, 4, 5]), // XX(XX(XX))
-            PTR(0),
-            PTR(1),
-            PTR(2),
+            PTR(0, true),
+            PTR(1, true),
+            PTR(2, true),
             INT(3),
             INT(4),
             INT(5),
@@ -282,9 +282,9 @@ fn reducer_spec() {
         input.in_app.stack_idx = 202;
         input.in_app.load = [
             COM(3, 6, [0, 2, 1, 2, 0, 0]), // XX(XX)
-            PTR(0),
-            PTR(1),
-            PTR(2),
+            PTR(0, true),
+            PTR(1, true),
+            PTR(2, true),
             INT(3),
             INT(4),
             INT(5),

@@ -4,16 +4,16 @@ use AluOp::*;
 use Atom::*; 
  
 // Functions in this file: 23
-// Apps in this file: 105
-// Combinators in this file: 155
+// Apps in this file: 106
+// Combinators in this file: 175
 #[rustfmt::skip]
 pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
     vec![
          // FUN0Adjoxo.main
         vec![ // 0 
-            PTR(5),
-            PTR(4),
-            PTR(2),
+            PTR(5, false),
+            PTR(4, false),
+            PTR(2, false),
         ], 
         vec![ // 1 
             COM(4,2,[3,0,1,0,0,0]), //XXX
@@ -23,7 +23,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 2 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(2),
-            PTR(1),
+            PTR(1, false),
         ], 
         vec![ // 3 
             COM(4,2,[3,0,1,0,0,0]), //XXX
@@ -33,194 +33,199 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 4 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(1),
-            PTR(3),
+            PTR(3, false),
         ], 
          // FUN1Adjoxo.adjudicate
         vec![ // 5 
-            COM(4,42,[0,2,3,1,2,3]), //XXX(XXX)
-            PTR(15),
-            PTR(6),
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            COM(3,6,[0,2,1,2,0,0]), //XX(XX)
+            PTR(13, false),
+            PTR(6, false),
         ], 
         vec![ // 6 
             COM(5,12,[0,1,4,3,2,0]), //X(XXX)X
-            PTR(69),
-            PTR(73),
+            PTR(70, false),
+            PTR(73, false),
             COM(2,0,[1,0,0,0,0,0]), //X
         ], 
         vec![ // 7 
-            COM(5,12,[0,1,3,4,2,0]), //X(XXX)X
-            PTR(69),
-            PTR(73),
-            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(70, false),
+            COM(3,0,[2,0,0,0,0,0]), //X
+            COM(2,0,[1,0,0,0,0,0]), //X
         ], 
         vec![ // 8 
-            PTR(69),
-            COM(3,0,[2,0,0,0,0,0]), //X
-            COM(2,0,[1,0,0,0,0,0]), //X
-        ], 
-        vec![ // 9 
-            PTR(69),
+            PTR(70, false),
             COM(3,0,[2,0,0,0,0,0]), //X
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 10 
-            COM(5,12,[0,1,4,3,2,0]), //X(XXX)X
-            PTR(69),
-            PTR(73),
+        vec![ // 9 
+            COM(6,24,[0,1,5,2,3,4]), //X(XX)XXX
+            COM(6,54,[0,1,2,5,4,3]), //X(X(XXX)X)
+            PTR(19, false),
+            PTR(70, false),
+            PTR(73, false),
             COM(2,0,[1,0,0,0,0,0]), //X
         ], 
+        vec![ // 10 
+            COM(5,30,[0,1,2,4,4,3]), //XX(XXX)X
+            COM(5,30,[0,4,1,4,2,3]), //XX(XXX)X
+            PTR(19, false),
+            PTR(9, false),
+            PTR(8, false),
+        ], 
         vec![ // 11 
-            COM(5,30,[0,3,1,3,4,2]), //XX(XXX)X
-            PTR(22),
-            PTR(10),
-            PTR(9),
+            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            PTR(14, false),
+            PTR(16, false),
+            PTR(16, false),
         ], 
         vec![ // 12 
-            COM(5,30,[0,4,1,3,4,2]), //XX(XXX)X
-            PTR(22),
-            PTR(11),
-            PTR(8),
+            COM(5,58,[0,1,4,2,4,3]), //X(XX(XXX))
+            COM(5,47,[0,4,1,2,4,3]), //XX(X(XX)X)
+            PTR(11, false),
+            PTR(10, false),
+            PTR(7, false),
         ], 
         vec![ // 13 
-            COM(4,15,[0,1,2,1,3,0]), //X(XX)(XX)
-            PTR(16),
-            PTR(19),
-        ], 
-        vec![ // 14 
-            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
-            COM(4,39,[0,3,1,3,2,3]), //XX(XX)(XX)
-            PTR(13),
-            PTR(12),
-        ], 
-        vec![ // 15 
-            COM(3,6,[0,2,1,2,0,0]), //XX(XX)
-            PTR(14),
-            PTR(7),
+            COM(5,28,[0,4,1,2,4,3]), //XXX(XX)X
+            PTR(12, false),
+            PTR(70, false),
+            PTR(73, false),
+            COM(2,0,[0,0,0,0,0,0]), //X
         ], 
          // FUN2Adjoxo.cmp
-        vec![ // 16 
-            COM(4,10,[0,1,3,2,3,0]), //X(XX)XX
-            PTR(18),
-            PTR(17),
+        vec![ // 14 
+            COM(5,12,[0,1,4,2,3,0]), //X(XXX)X
+            COM(3,2,[0,2,1,0,0,0]), //XXX
+            PTR(15, false),
+            COM(3,0,[1,0,0,0,0,0]), //X
             COM(3,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 17 
-            COM(5,9,[0,3,4,1,2,0]), //XXXXX
+        vec![ // 15 
+            COM(5,29,[0,1,4,2,4,3]), //X(XX)(XX)X
+            COM(5,46,[0,4,1,4,2,3]), //XX(XXXX)
+            PRM(EQ,false),
             PRM(LE,false),
             COM(3,0,[2,0,0,0,0,0]), //X
-            COM(3,0,[1,0,0,0,0,0]), //X
-        ], 
-        vec![ // 18 
-            COM(5,28,[0,3,4,1,4,2]), //XXX(XX)X
-            PRM(EQ,false),
         ], 
          // FUN3NanoPrelude.length
-        vec![ // 19 
+        vec![ // 16 
             Y,
-            PTR(21),
+            PTR(18, false),
             INT(0),
         ], 
-        vec![ // 20 
-            COM(5,7,[2,0,3,1,0,0]), //X(XXX)
+        vec![ // 17 
+            COM(6,49,[0,1,4,2,5,3]), //XX(X(XXX))
+            COM(4,6,[3,2,0,1,0,0]), //XX(XX)
+            COM(2,0,[0,0,0,0,0,0]), //X
             PRM(ADD,false),
             INT(1),
         ], 
-        vec![ // 21 
-            COM(4,16,[3,2,0,1,2,0]), //XX(XXX)
-            PTR(20),
+        vec![ // 18 
+            COM(3,4,[0,1,2,2,0,0]), //XXXX
+            PTR(17, false),
         ], 
          // FUN4Adjoxo.hasLine
-        vec![ // 22 
-            COM(5,40,[0,1,2,4,3,4]), //X(XXX)(XX)
-            PTR(54),
-            PTR(55),
-            PTR(53),
-            PTR(50),
+        vec![ // 19 
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            PTR(58, false),
+            PTR(57, false),
+            PTR(53, false),
         ], 
-        vec![ // 23 
+        vec![ // 20 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(7),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 24 
+        vec![ // 21 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(5),
-            PTR(23),
+            PTR(20, false),
+        ], 
+        vec![ // 22 
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            INT(3),
+            PTR(21, false),
+        ], 
+        vec![ // 23 
+            PTR(59, false),
+            PTR(22, false),
+        ], 
+        vec![ // 24 
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            INT(9),
+            COM(2,0,[0,0,0,0,0,0]), //X
         ], 
         vec![ // 25 
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            INT(3),
-            PTR(24),
+            INT(5),
+            PTR(24, false),
         ], 
         vec![ // 26 
-            PTR(55),
-            PTR(25),
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            INT(1),
+            PTR(25, false),
         ], 
         vec![ // 27 
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            INT(9),
-            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(59, false),
+            PTR(26, false),
         ], 
         vec![ // 28 
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            INT(5),
-            PTR(27),
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            PTR(58, false),
+            PTR(27, false),
+            PTR(23, false),
         ], 
         vec![ // 29 
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            INT(1),
-            PTR(28),
-        ], 
-        vec![ // 30 
-            COM(5,40,[0,1,2,4,3,4]), //X(XXX)(XX)
-            PTR(54),
-            PTR(55),
-            PTR(29),
-            PTR(26),
-        ], 
-        vec![ // 31 
-            COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(9),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 32 
+        vec![ // 30 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(6),
-            PTR(31),
+            PTR(29, false),
         ], 
-        vec![ // 33 
+        vec![ // 31 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(3),
-            PTR(32),
+            PTR(30, false),
+        ], 
+        vec![ // 32 
+            PTR(59, false),
+            PTR(31, false),
+        ], 
+        vec![ // 33 
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            PTR(58, false),
+            PTR(32, false),
+            PTR(28, false),
         ], 
         vec![ // 34 
-            COM(5,40,[0,1,2,4,3,4]), //X(XXX)(XX)
-            PTR(54),
-            PTR(55),
-            PTR(33),
-            PTR(30),
-        ], 
-        vec![ // 35 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(8),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 36 
+        vec![ // 35 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(5),
-            PTR(35),
+            PTR(34, false),
         ], 
-        vec![ // 37 
+        vec![ // 36 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(2),
-            PTR(36),
+            PTR(35, false),
+        ], 
+        vec![ // 37 
+            PTR(59, false),
+            PTR(36, false),
         ], 
         vec![ // 38 
-            COM(5,40,[0,1,2,4,3,4]), //X(XXX)(XX)
-            PTR(54),
-            PTR(55),
-            PTR(37),
-            PTR(34),
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            PTR(58, false),
+            PTR(37, false),
+            PTR(33, false),
         ], 
         vec![ // 39 
             COM(4,2,[3,0,1,0,0,0]), //XXX
@@ -230,167 +235,170 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 40 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(4),
-            PTR(39),
+            PTR(39, false),
         ], 
         vec![ // 41 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(1),
-            PTR(40),
+            PTR(40, false),
         ], 
         vec![ // 42 
-            COM(5,40,[0,1,2,4,3,4]), //X(XXX)(XX)
-            PTR(54),
-            PTR(55),
-            PTR(41),
-            PTR(38),
+            PTR(59, false),
+            PTR(41, false),
         ], 
         vec![ // 43 
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            PTR(58, false),
+            PTR(42, false),
+            PTR(38, false),
+        ], 
+        vec![ // 44 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(9),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 44 
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            INT(8),
-            PTR(43),
-        ], 
         vec![ // 45 
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            INT(7),
-            PTR(44),
+            INT(8),
+            PTR(44, false),
         ], 
         vec![ // 46 
-            COM(5,40,[0,1,2,4,3,4]), //X(XXX)(XX)
-            PTR(54),
-            PTR(55),
-            PTR(45),
-            PTR(42),
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            INT(7),
+            PTR(45, false),
         ], 
         vec![ // 47 
+            PTR(59, false),
+            PTR(46, false),
+        ], 
+        vec![ // 48 
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            PTR(58, false),
+            PTR(47, false),
+            PTR(43, false),
+        ], 
+        vec![ // 49 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(6),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 48 
+        vec![ // 50 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(5),
-            PTR(47),
-        ], 
-        vec![ // 49 
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            INT(4),
-            PTR(48),
-        ], 
-        vec![ // 50 
-            COM(5,40,[0,1,2,4,3,4]), //X(XXX)(XX)
-            PTR(54),
-            PTR(55),
-            PTR(49),
-            PTR(46),
+            PTR(49, false),
         ], 
         vec![ // 51 
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            INT(4),
+            PTR(50, false),
+        ], 
+        vec![ // 52 
+            PTR(59, false),
+            PTR(51, false),
+        ], 
+        vec![ // 53 
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            PTR(58, false),
+            PTR(52, false),
+            PTR(48, false),
+        ], 
+        vec![ // 54 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(3),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 52 
+        vec![ // 55 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(2),
-            PTR(51),
+            PTR(54, false),
         ], 
-        vec![ // 53 
+        vec![ // 56 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(1),
-            PTR(52),
+            PTR(55, false),
+        ], 
+        vec![ // 57 
+            PTR(59, false),
+            PTR(56, false),
         ], 
          // FUN5Data.Bool.||
-        vec![ // 54 
+        vec![ // 58 
             COM(3,2,[1,2,0,0,0,0]), //XXX
             COM(2,0,[1,0,0,0,0,0]), //X
         ], 
          // FUN6Adjoxo.subset
-        vec![ // 55 
-            COM(4,7,[0,1,2,3,0,0]), //X(XXX)
-            PTR(56),
-            PTR(58),
+        vec![ // 59 
+            COM(4,6,[0,1,2,3,0,0]), //XX(XX)
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(60, false),
+            PTR(62, false),
         ], 
          // FUN7NanoPrelude.null
-        vec![ // 56 
+        vec![ // 60 
             COM(3,2,[2,0,1,0,0,0]), //XXX
             COM(2,0,[1,0,0,0,0,0]), //X
-            PTR(57),
+            PTR(61, false),
         ], 
-        vec![ // 57 
+        vec![ // 61 
             COM(3,0,[0,0,0,0,0,0]), //X
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
          // FUN8Adjoxo.diff
-        vec![ // 58 
-            COM(4,6,[2,0,1,3,0,0]), //XX(XX)
-            COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(68),
-        ], 
-        vec![ // 59 
-            COM(4,7,[0,1,2,3,0,0]), //X(XXX)
-            PTR(58),
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-        ], 
-        vec![ // 60 
-            COM(5,16,[0,2,1,3,4,0]), //XX(XXX)
-            PTR(58),
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-        ], 
-        vec![ // 61 
-            COM(6,42,[0,2,4,1,3,5]), //XXX(XXX)
-            PTR(16),
-            PTR(58),
-        ], 
         vec![ // 62 
-            COM(6,26,[0,1,4,5,2,3]), //X(XXX)XX
-            COM(5,48,[0,4,1,2,3,4]), //XX(XX(XX))
+            COM(4,5,[0,3,1,2,0,0]), //X(XX)X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(69, false),
         ], 
         vec![ // 63 
-            COM(4,10,[0,1,3,2,3,0]), //X(XX)XX
-            PTR(62),
-            PTR(61),
-            COM(4,2,[3,0,1,0,0,0]), //XXX
+            COM(6,34,[0,1,2,3,5,4]), //X(XX(XX))X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            COM(4,8,[0,1,2,3,0,0]), //X(X(XX))
         ], 
         vec![ // 64 
-            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
-            COM(4,42,[0,2,3,1,2,3]), //XXX(XXX)
-            PTR(63),
-            PTR(60),
+            COM(4,10,[0,1,3,2,1,0]), //X(XX)XX
+            PTR(63, false),
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(62, false),
         ], 
         vec![ // 65 
-            COM(5,38,[0,1,2,4,3,4]), //X(XX)X(XX)
-            COM(5,37,[0,1,3,4,2,4]), //XXXX(XX)
-            PTR(64),
+            COM(5,34,[0,1,0,2,4,3]), //X(XX(XX))X
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            COM(5,38,[0,1,4,2,3,4]), //X(XX)X(XX)
+            PTR(14, false),
+            PTR(62, false),
         ], 
         vec![ // 66 
+            COM(5,39,[0,1,2,4,3,4]), //XX(XX)(XX)
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
             COM(3,6,[0,2,1,2,0,0]), //XX(XX)
-            PTR(65),
-            PTR(59),
         ], 
         vec![ // 67 
-            COM(5,40,[1,0,3,4,2,4]), //X(XXX)(XX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
+            COM(4,20,[0,1,3,2,3,0]), //X(XX(XX))
+            PTR(66, false),
+            PTR(65, false),
+            PTR(64, false),
         ], 
         vec![ // 68 
-            COM(4,11,[0,2,1,3,3,0]), //XX(XX)X
-            PTR(67),
-            PTR(66),
+            COM(5,48,[0,4,1,2,3,4]), //XX(XX(XX))
+            PTR(67, false),
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(62, false),
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+        ], 
+        vec![ // 69 
+            COM(5,39,[0,3,1,4,2,4]), //XX(XX)(XX)
+            COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(68, false),
         ], 
          // FUN9Adjoxo.report
-        vec![ // 69 
-            COM(4,14,[0,2,3,1,3,0]), //XXX(XX)
-            PTR(70),
-            PTR(71),
-        ], 
         vec![ // 70 
-            COM(5,17,[3,0,1,2,4,0]), //XX(X(XX))
+            COM(5,10,[0,4,1,2,3,0]), //X(XX)XX
+            COM(4,41,[0,1,2,3,1,3]), //X(X(XX))(XX)
             INT(3),
-            PTR(71),
-            PTR(72),
+            PTR(71, false),
+            PTR(72, false),
         ], 
          // FUN10Adjoxo.side
         vec![ // 71 
@@ -406,180 +414,196 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
         ], 
          // FUN12Adjoxo.analysis
         vec![ // 73 
-            COM(5,30,[0,4,1,3,4,2]), //XX(XXX)X
-            PTR(22),
-            PTR(79),
+            COM(5,11,[0,1,2,4,3,0]), //XX(XX)X
+            COM(4,11,[0,3,1,3,2,0]), //XX(XX)X
+            PTR(19, false),
+            PTR(79, false),
             COM(3,0,[1,0,0,0,0,0]), //X
         ], 
         vec![ // 74 
-            COM(6,54,[0,1,2,3,4,5]), //X(X(XXX)X)
-            PTR(58),
-            PTR(58),
-            PTR(98),
+            PTR(98, false),
             INT(1),
             INT(9),
         ], 
         vec![ // 75 
-            COM(5,40,[0,1,3,4,2,4]), //X(XXX)(XX)
-            PTR(86),
-            PTR(89),
+            PTR(62, false),
+            PTR(74, false),
         ], 
         vec![ // 76 
-            COM(3,5,[0,1,2,2,0,0]), //X(XX)X
-            PTR(75),
-            PTR(74),
+            PTR(82, false),
+            PTR(86, false),
         ], 
         vec![ // 77 
-            COM(5,16,[0,1,2,3,4,0]), //XX(XXX)
-            PTR(82),
-            PTR(84),
-            PTR(76),
+            COM(5,57,[0,1,2,4,3,4]), //X(X(XX)(XX))
+            PTR(76, false),
+            PTR(88, false),
         ], 
         vec![ // 78 
-            COM(5,28,[0,3,4,1,4,2]), //XXX(XX)X
-            PTR(80),
+            COM(5,45,[0,1,4,2,3,4]), //X(XX)(X(XX))
+            PTR(77, false),
+            PTR(91, false),
+            PTR(62, false),
+            PTR(75, false),
         ], 
         vec![ // 79 
-            COM(4,10,[0,1,3,2,3,0]), //X(XX)XX
-            PTR(78),
-            PTR(77),
+            COM(5,29,[0,1,4,2,4,3]), //X(XX)(XX)X
+            COM(4,11,[0,3,1,3,2,0]), //XX(XX)X
+            PTR(80, false),
+            PTR(78, false),
             COM(3,0,[0,0,0,0,0,0]), //X
         ], 
          // FUN13Adjoxo.gridFull
         vec![ // 80 
-            COM(4,4,[0,2,3,1,0,0]), //XXXX
-            PTR(81),
+            COM(3,2,[0,2,1,0,0,0]), //XXX
+            PTR(81, false),
             INT(9),
         ], 
         vec![ // 81 
-            COM(5,57,[0,1,2,3,2,4]), //X(X(XX)(XX))
+            COM(6,31,[0,1,2,3,5,4]), //XX(X(XX))X
+            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
             PRM(EQ,false),
             PRM(ADD,false),
-            PTR(19),
+            PTR(16, false),
+            PTR(16, false),
         ], 
          // FUN14NanoPrelude.foldr1
         vec![ // 82 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(83),
+            PTR(85, false),
         ], 
         vec![ // 83 
-            COM(6,47,[5,0,1,2,3,4]), //XX(X(XX)X)
-            ERR(0),
-            COM(4,46,[3,2,0,1,2,3]), //XX(XXXX)
-            COM(6,6,[0,2,1,3,0,0]), //XX(XX)
+            COM(5,17,[0,1,2,3,4,0]), //XX(X(XX))
+            COM(3,1,[0,1,0,0,0,0]), //XX
+            COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-         // FUN15Adjoxo.bestOf
         vec![ // 84 
-            COM(4,4,[0,2,3,1,0,0]), //XXXX
-            PTR(85),
-            COM(3,0,[2,0,0,0,0,0]), //X
+            COM(5,33,[0,1,2,4,3,4]), //X(X(XX)X)X
+            COM(3,6,[2,1,0,2,0,0]), //XX(XX)
+            PTR(83, false),
         ], 
         vec![ // 85 
+            COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
+            ERR(0),
+            PTR(84, false),
+        ], 
+         // FUN15Adjoxo.bestOf
+        vec![ // 86 
+            COM(4,4,[0,2,3,1,0,0]), //XXXX
+            PTR(87, false),
+            COM(3,0,[2,0,0,0,0,0]), //X
+        ], 
+        vec![ // 87 
             COM(4,32,[2,3,0,0,1,3]), //X(XXXX)X
             COM(3,0,[0,0,0,0,0,0]), //X
             COM(3,0,[2,0,0,0,0,0]), //X
         ], 
          // FUN16NanoPrelude.map
-        vec![ // 86 
+        vec![ // 88 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(88),
+            PTR(90, false),
         ], 
-        vec![ // 87 
-            COM(5,15,[0,1,3,2,4,0]), //X(XX)(XX)
+        vec![ // 89 
+            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 88 
+        vec![ // 90 
             COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(87),
+            PTR(89, false),
         ], 
          // FUN17Adjoxo.moveval
-        vec![ // 89 
-            COM(6,58,[0,1,4,2,5,3]), //X(XX(XXX))
-            PTR(90),
-            PTR(73),
-            PTR(91),
+        vec![ // 91 
+            COM(6,25,[0,1,2,5,3,4]), //XX(XX)XX
+            COM(5,21,[0,1,2,4,3,0]), //X(X(XXX))
+            PTR(92, false),
+            PTR(73, false),
+            PTR(93, false),
         ], 
          // FUN18Adjoxo.inverse
-        vec![ // 90 
+        vec![ // 92 
             COM(4,4,[3,0,1,2,0,0]), //XXXX
             COM(3,0,[0,0,0,0,0,0]), //X
             COM(3,0,[2,0,0,0,0,0]), //X
             COM(3,0,[1,0,0,0,0,0]), //X
         ], 
          // FUN19Adjoxo.insert
-        vec![ // 91 
-            COM(4,19,[0,1,2,3,3,0]), //X(X(XX)X)
-            Y,
-            PTR(97),
-            PTR(96),
-        ], 
-        vec![ // 92 
-            COM(4,16,[0,1,0,2,3,0]), //XX(XXX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-        ], 
         vec![ // 93 
-            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
+            COM(4,20,[0,1,3,2,3,0]), //X(XX(XX))
+            Y,
+            PTR(97, false),
+            PTR(96, false),
         ], 
         vec![ // 94 
-            COM(5,42,[0,1,3,2,3,4]), //XXX(XXX)
+            COM(5,11,[0,1,2,4,3,0]), //XX(XX)X
+            COM(5,29,[0,1,4,2,4,3]), //X(XX)(XX)X
+            COM(5,41,[0,1,2,4,3,4]), //X(X(XX))(XX)
             PRM(LE,false),
+            COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
         vec![ // 95 
-            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
-            PTR(94),
-            PTR(93),
+            COM(5,11,[0,1,2,4,3,0]), //XX(XX)X
+            COM(6,24,[0,1,5,2,3,4]), //X(XX)XXX
+            COM(5,48,[0,4,1,2,3,4]), //XX(XX(XX))
+            PTR(94, false),
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
         ], 
         vec![ // 96 
-            COM(5,40,[0,1,3,4,2,3]), //X(XXX)(XX)
-            COM(4,42,[0,2,3,1,2,3]), //XXX(XXX)
-            PTR(95),
-            PTR(92),
+            COM(4,11,[0,3,1,3,2,0]), //XX(XX)X
+            PTR(95, false),
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
         vec![ // 97 
-            COM(6,40,[5,0,3,1,2,4]), //X(XXX)(XX)
+            COM(5,16,[0,1,2,4,3,0]), //XX(XXX)
+            COM(4,6,[0,1,2,3,0,0]), //XX(XX)
+            COM(3,2,[2,0,1,0,0,0]), //XXX
             COM(4,2,[3,0,1,0,0,0]), //XXX
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
          // FUN20NanoPrelude.enumFromTo
         vec![ // 98 
-            COM(5,15,[0,1,4,2,3,0]), //X(XX)(XX)
-            PTR(100),
-            PTR(99),
-            PTR(104),
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(100, false),
+            PTR(105, false),
         ], 
         vec![ // 99 
             COM(3,2,[0,2,1,0,0,0]), //XXX
             PRM(LE,false),
         ], 
-         // FUN21NanoPrelude.takeWhile
         vec![ // 100 
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
+            PTR(101, false),
+            PTR(99, false),
+        ], 
+         // FUN21NanoPrelude.takeWhile
+        vec![ // 101 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(103),
-        ], 
-        vec![ // 101 
-            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
-            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(104, false),
         ], 
         vec![ // 102 
-            COM(5,42,[1,3,0,2,3,4]), //XXX(XXX)
+            COM(5,40,[0,3,4,1,2,4]), //X(XXX)(XX)
+            COM(4,8,[0,1,2,3,0,0]), //X(X(XX))
             COM(2,0,[0,0,0,0,0,0]), //X
+            COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
         vec![ // 103 
-            COM(6,48,[5,0,1,3,2,4]), //XX(XX(XX))
+            COM(4,4,[0,1,3,2,0,0]), //XXXX
+            PTR(102, false),
+        ], 
+        vec![ // 104 
+            COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(102),
-            PTR(101),
+            PTR(103, false),
         ], 
          // FUN22NanoPrelude.enumFrom
-        vec![ // 104 
+        vec![ // 105 
             COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(104),
+            PTR(105, false),
             PRM(ADD,false),
             INT(1),
         ], 

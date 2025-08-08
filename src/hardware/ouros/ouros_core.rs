@@ -150,7 +150,7 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize>(
 
 pub fn is_ptr(atom: &Atom) -> bool {
     match atom {
-        Atom::PTR(_) => true,
+        Atom::PTR(_, _) => true,
         _ => false,
     }
 }
