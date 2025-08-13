@@ -67,6 +67,24 @@ fn extend_to_app<const N: usize>(atms: &[Atom; N]) -> App {
     extended
 }
 
+/// cancel all the unique PTRs in an app
+fn dash_app(app: &App) -> App {
+    let mut res = app.clone();
+    for atom in res.iter_mut() {
+        if let Atom::PTR(p, _) = atom {
+            *atom = Atom::PTR(*p, false);
+        }
+    }
+    res
+}
+
+fn is_unique_ptr(a: &Atom) -> bool {
+    match a {
+        Atom::PTR(_, true) => true,
+        _ => false,
+    }
+}
+
 enum HeapPort {
     A,
     B,
@@ -96,6 +114,8 @@ pub struct DrfHeapStat {
     pub heap_stm: Vec<Stm>,
     pub serving_id: Vec<u8>,
     pub stm_cycles: [u32; 4],
+    pub heap_update: u32,
+    pub update_avoided: u32,
 }
 
 /// branch conditions for `consume_next()`
@@ -196,22 +216,23 @@ fn vec_to_app(v: Vec<Atom>) -> App {
 ///   `app2` need to be written back
 fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Option<App>) {
     assert!(is_ptr(&app[arg_id]));
+    let unique: bool = match app[arg_id] {
+        Atom::PTR(_, true) => true,
+        _ => false,
+    };
+    let target_dashed = if unique { target } else { &dash_app(target) };
     let app_len = app_length(app);
     let target_len = app_length(target);
-    // // TODO: fix this with runtime splition
-    // if app_len + target_len - 1 > APP_LENGTH {
-    //     panic!("dheap: deref: deref result too long!");
-    // }
     let mut res_v: Vec<Atom> = Vec::new();
 
     res_v.extend_from_slice(&app[0..arg_id]);
-    res_v.extend_from_slice(&target[0..target_len]);
+    res_v.extend_from_slice(&target_dashed[0..target_len]);
     res_v.extend_from_slice(&app[arg_id + 1..app_len]);
     if res_v.len() <= APP_LENGTH {
         (vec_to_app(res_v), None)
     } else {
         let mut wb_app = res_v[APP_LENGTH..res_v.len()].to_vec();
-        wb_app.insert(0, Atom::PTR(free_addr, true));
+        wb_app.insert(0, Atom::PTR(free_addr, unique));
         (
             vec_to_app(res_v[0..APP_LENGTH].to_vec()),
             Some(vec_to_app(wb_app)),
@@ -311,7 +332,7 @@ pub struct DrfHeap {
     holder_out: (bool, ActiveApp), // output-reg: (valid, app)
     holder_out_sub: (bool, ActiveApp),
     working: Register<bool>, // track whether the machine is working
-    addr_bumper: Register<usize>,
+    pub addr_bumper: Register<usize>,
     arg_id: Register<usize>,
     stat: DrfHeapStat,
     stat_detail_lv: u8,
@@ -433,15 +454,6 @@ impl DrfHeap {
             }
             Stm::RESUME => true,
         };
-        // if !(out_clear && local && !borrowed) {
-        //     println!(
-        //         "STRANGE!OUT CLEAR {}, LOCAL {}, BORROWED {}, stm {:?}",
-        //         out_clear,
-        //         local,
-        //         borrowed,
-        //         self.stm.value()
-        //     );
-        // }
         out_clear && local && !borrowed
     }
 
@@ -467,12 +479,12 @@ impl DrfHeap {
     }
 
     pub fn out_main_bits(&self) -> ActiveApp {
+        let dmder = &self.holder_in.value().load;
+        let target = &self.heap_mem.dout_a().app;
         if self.holder_out.0 {
-            // println!("return earlier");
             return self.holder_out.1.clone();
         }
 
-        // println!("we're here!");
         match *self.stm.value() {
             Stm::IDLE => Default::default(),
             Stm::WHNF => {
@@ -482,14 +494,14 @@ impl DrfHeap {
             Stm::IA => {
                 let ias1 = self.getIAs1();
                 if ias1 == IAs1::ExistIAFresh {
-                    return self.gen_active_app(self.heap_mem.dout_a().app.clone());
+                    return self.gen_active_app(self.dash_when_shared());
                 }
                 match self.getIAs2(&ias1) {
                     IAs2::NoMoreArgsCanEmit => {
                         let (updated_dmder, _) = deref(
                             &self.holder_in.value().load,
                             *self.arg_id.value(),
-                            &self.heap_mem.dout_a().app,
+                            target,
                             self.free_addr_local(),
                         );
                         self.gen_active_app(updated_dmder)
@@ -525,7 +537,7 @@ impl DrfHeap {
                     let load = extend_to_app(&self.holder_in_sub.value().load);
                     ActiveApp {
                         stack_idx: self.find_dmder_stk(),
-                        load,
+                        load: dash_app(&load),
                     }
                 }
                 _ => Default::default(),
@@ -740,7 +752,7 @@ impl DrfHeap {
         let addr = current_stk.top().unwrap().1;
         let cell = HeapCell {
             exist: true,
-            app: self.input.port_a_bits.load.clone(),
+            app: dash_app(&self.input.port_a_bits.load),
         };
         current_stk.pop();
         match p {
@@ -754,7 +766,7 @@ impl DrfHeap {
         let addr = *self.addr_holder.value();
         let cell = HeapCell {
             exist: true,
-            app: self.holder_in.value().load.clone(),
+            app: dash_app(&self.holder_in.value().load),
         };
         match p {
             HeapPort::A => self.heap_mem.write_a(addr, cell),
@@ -790,7 +802,7 @@ impl DrfHeap {
                 true,
                 ActiveApp {
                     stack_idx: self.find_dmder_stk(),
-                    load,
+                    load: dash_app(&load), // NOTE: can be improved, but need more info
                 },
             );
         }
@@ -950,6 +962,30 @@ impl DrfHeap {
         }
     }
 
+    fn can_avoid_update(&self) -> bool {
+        match &self.heap_mem.dout_a().app[0] {
+            Atom::PTR(_, true) => true,
+            Atom::PRM(_, _) => match &self.heap_mem.dout_a().app[1] {
+                Atom::PTR(_, true) => true,
+                _ => match &self.heap_mem.dout_a().app[2] {
+                    Atom::PTR(_, true) => true,
+                    _ => false,
+                },
+            },
+            _ => false,
+        }
+    }
+
+    fn dash_when_shared(&self) -> App {
+        let dmder = &self.holder_in.value().load;
+        let target = &self.heap_mem.dout_a().app;
+        if is_unique_ptr(&dmder[*self.arg_id.value()]) {
+            target.clone()
+        } else {
+            dash_app(&target)
+        }
+    }
+
     /// consumes the next task; must not use heap port b!
     fn consume_next(&mut self) {
         self.holder_in.connect(&self.input.port_a_bits.clone());
@@ -984,12 +1020,6 @@ impl DrfHeap {
                 self.heap_mem.read_a(current_stk.second().unwrap().1);
                 self.addr_holder.connect(&current_top);
                 self.frame_stack[self.input.port_a_bits.stack_idx as usize].pop();
-                // println!(
-                //     "enter2 RESUME: stk{}-{:?}-{:?}",
-                //     self.input.port_a_bits.stack_idx,
-                //     current_stk.second().unwrap(),
-                //     self.heap_mem.ram[current_stk.second().unwrap().1].app
-                // );
                 self.stm.connect(&Stm::RESUME);
             }
             CONSUMEs::InputWHNFNoDmderNoFrame => {
@@ -1041,6 +1071,7 @@ impl DrfHeap {
                 self.find_pop_read(find_new_frame(whnf_addr), true);
                 port_big_deref = HeapPort::B;
                 self.stm.connect(&Stm::RESUME);
+                self.stat.heap_update += 1;
             }
             WHNFs::NoNewFrame => {
                 if let Some((stk_id, stack)) = self
@@ -1053,7 +1084,14 @@ impl DrfHeap {
                     stack.pop();
                     self.frame_stack[stk_id].pop();
                 }
-                self.write_whnf(HeapPort::B);
+                if self.can_avoid_update() {
+                    /* update avoided */
+                    self.stat.update_avoided += 1;
+                } else {
+                    self.stat.heap_update += 1;
+                    self.write_whnf(HeapPort::B);
+                }
+                // self.write_whnf(HeapPort::B);
                 port_big_deref = HeapPort::A;
                 if write_back == None {
                     self.consume_next();
@@ -1110,12 +1148,12 @@ impl DrfHeap {
             }
             IAs1::ExistIAWorkingNormal => {
                 // change this to `self.push_target(false);` will disable stack riding
-                self.push_target(false);
+                self.push_target(true);
             }
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
+                self.put_output(self.holder_in.value().stack_idx, self.dash_when_shared());
                 self.push_target(false);
-                self.put_output(self.holder_in.value().stack_idx, target.clone());
             }
         }
 
@@ -1169,19 +1207,6 @@ impl DrfHeap {
     }
 
     fn step_resume(&mut self) {
-        // println!(
-        //     "RESUME!, stk{} top: {:?}-{:?}",
-        //     self.holder_in.value().stack_idx,
-        //     self.thread_stack[self.holder_in.value().stack_idx as usize]
-        //         .top()
-        //         .unwrap(),
-        //     self.heap_mem.ram[self.thread_stack[self.holder_in.value().stack_idx as usize]
-        //         .top()
-        //         .unwrap()
-        //         .1]
-        //         .app
-        // );
-
         self.write_whnf(HeapPort::B);
         match self.getRESUMEs() {
             RESUMEs::TopInWHNF => {

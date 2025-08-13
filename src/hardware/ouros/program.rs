@@ -35,7 +35,7 @@ impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Atom::NOP => write!(f, "NOP"),
-            Atom::PTR(p, _) => write!(f, "PTR({})", p),
+            Atom::PTR(p, unique) => write!(f, "PTR({},{})", p, unique),
             Atom::COM(arity, pat, holes) => {
                 // Format the array of Idx values as a comma-separated list
                 let holes_str = holes

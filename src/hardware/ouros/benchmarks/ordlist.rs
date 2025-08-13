@@ -3,9 +3,9 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Functions in this file: 12
-// Apps in this file: 43
-// Combinators in this file: 68
+// Functions in this file: 11
+// Apps in this file: 38
+// Combinators in this file: 62
 #[rustfmt::skip]
 pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| {
     vec![
@@ -17,227 +17,203 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| {
             INT(1),
         ], 
         vec![ // 1 
-            PTR(42, false),
+            COM(3,1,[1,0,0,0,0,0]), //XX
             COM(2,0,[1,0,0,0,0,0]), //X
         ], 
         vec![ // 2 
-            PTR(42, false),
+            COM(3,1,[1,0,0,0,0,0]), //XX
             PTR(1, false),
         ], 
         vec![ // 3 
-            PTR(42, false),
+            COM(3,1,[1,0,0,0,0,0]), //XX
             PTR(2, false),
         ], 
         vec![ // 4 
-            PTR(42, false),
+            COM(3,1,[1,0,0,0,0,0]), //XX
             PTR(3, false),
         ], 
          // FUN1Ordlist.top
         vec![ // 5 
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
-            PTR(12, false),
-            PTR(11, false),
-        ], 
-        vec![ // 6 
-            PTR(20, false),
-            COM(2,0,[0,0,0,0,0,0]), //X
-        ], 
-        vec![ // 7 
-            PTR(17, false),
+            COM(5,48,[0,1,2,4,3,4]), //XX(XX(XX))
+            COM(1,0,[0,0,0,0,0,0]), //X
+            PTR(8, false),
+            PTR(7, false),
             PTR(6, false),
         ], 
-        vec![ // 8 
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
-            PTR(7, false),
-            PTR(33, false),
+        vec![ // 6 
+            COM(5,15,[0,1,2,3,4,0]), //X(XX)(XX)
+            PTR(13, false),
+            PTR(16, false),
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(32, false),
         ], 
-        vec![ // 9 
-            PTR(20, false),
-            COM(2,0,[1,0,0,0,0,0]), //X
-        ], 
-        vec![ // 10 
-            PTR(17, false),
-            PTR(9, false),
-        ], 
-        vec![ // 11 
-            COM(5,41,[0,1,2,4,3,4]), //X(X(XX))(XX)
-            PTR(14, false),
+        vec![ // 7 
+            COM(6,57,[0,1,2,3,4,5]), //X(X(XX)(XX))
             PTR(10, false),
-            PTR(33, false),
-            PTR(8, false),
+            PTR(13, false),
+            PTR(16, false),
+            COM(2,0,[1,0,0,0,0,0]), //X
+            PTR(32, false),
         ], 
          // FUN2NanoPrelude.and
-        vec![ // 12 
+        vec![ // 8 
             COM(3,2,[2,0,1,0,0,0]), //XXX
             COM(2,0,[1,0,0,0,0,0]), //X
-            PTR(13, false),
+            PTR(9, false),
         ], 
-        vec![ // 13 
-            COM(4,5,[0,3,1,2,0,0]), //X(XX)X
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+        vec![ // 9 
+            COM(4,6,[2,0,1,3,0,0]), //XX(XX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(12, false),
+            PTR(8, false),
         ], 
          // FUN3Data.List_Type.++
-        vec![ // 14 
+        vec![ // 10 
             COM(4,5,[0,1,3,2,0,0]), //X(XX)X
             Y,
-            PTR(16, false),
+            PTR(12, false),
         ], 
-        vec![ // 15 
-            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+        vec![ // 11 
+            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 16 
+        vec![ // 12 
             COM(4,6,[3,1,0,2,0,0]), //XX(XX)
-            PTR(15, false),
+            PTR(11, false),
         ], 
          // FUN4NanoPrelude.map
-        vec![ // 17 
+        vec![ // 13 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(19, false),
+            PTR(15, false),
         ], 
-        vec![ // 18 
-            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+        vec![ // 14 
+            COM(5,15,[0,1,3,2,4,0]), //X(XX)(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 19 
+        vec![ // 15 
             COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(18, false),
+            PTR(14, false),
         ], 
          // FUN5Ordlist.prop
-        vec![ // 20 
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
-            PTR(21, false),
-            PTR(28, false),
+        vec![ // 16 
+            COM(5,44,[0,1,4,2,3,4]), //X(XX)(XXX)
+            PTR(18, false),
+            PTR(19, false),
+            PTR(17, false),
         ], 
-        vec![ // 21 
-            COM(4,45,[0,1,3,1,2,3]), //X(XX)(X(XX))
-            PTR(22, false),
-            PTR(23, false),
+        vec![ // 17 
+            COM(4,7,[0,1,2,3,0,0]), //X(XXX)
+            PTR(19, false),
+            PTR(25, false),
         ], 
          // FUN6Ordlist.implies
-        vec![ // 22 
+        vec![ // 18 
             COM(2,1,[1,0,0,0,0,0]), //XX
             COM(2,0,[1,0,0,0,0,0]), //X
         ], 
          // FUN7Ordlist.ord
-        vec![ // 23 
+        vec![ // 19 
             COM(3,2,[2,0,1,0,0,0]), //XXX
             COM(2,0,[1,0,0,0,0,0]), //X
-            PTR(26, false),
-        ], 
-        vec![ // 24 
-            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
-            COM(4,8,[0,1,2,3,0,0]), //X(X(XX))
-            PTR(27, false),
-        ], 
-        vec![ // 25 
-            COM(6,33,[0,1,2,5,3,4]), //X(X(XX)X)X
-            COM(3,6,[0,2,1,2,0,0]), //XX(XX)
-            PTR(24, false),
-            PTR(22, false),
             PTR(23, false),
+        ], 
+        vec![ // 20 
+            COM(4,7,[0,1,2,3,0,0]), //X(XXX)
+            PTR(19, false),
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 26 
-            COM(4,6,[0,1,2,3,0,0]), //XX(XX)
-            COM(3,2,[2,0,1,0,0,0]), //XXX
+        vec![ // 21 
+            COM(6,40,[0,1,2,4,3,5]), //X(XXX)(XX)
+            PTR(24, false),
+            PTR(18, false),
+        ], 
+        vec![ // 22 
+            COM(4,11,[0,2,1,3,3,0]), //XX(XX)X
+            PTR(21, false),
+            PTR(20, false),
+        ], 
+        vec![ // 23 
+            COM(4,6,[3,0,1,2,0,0]), //XX(XX)
             COM(2,0,[1,0,0,0,0,0]), //X
-            PTR(25, false),
+            PTR(22, false),
         ], 
          // FUN8Data.Bool.&&
-        vec![ // 27 
+        vec![ // 24 
             COM(2,1,[1,0,0,0,0,0]), //XX
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
          // FUN9Ordlist.ins
-        vec![ // 28 
+        vec![ // 25 
             COM(4,20,[0,1,3,2,3,0]), //X(XX(XX))
             Y,
-            PTR(32, false),
             PTR(31, false),
+            PTR(26, false),
+        ], 
+        vec![ // 26 
+            COM(4,16,[0,1,0,2,3,0]), //XX(XXX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+        ], 
+        vec![ // 27 
+            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+        ], 
+        vec![ // 28 
+            COM(5,42,[0,1,3,2,3,4]), //XXX(XXX)
+            PTR(18, false),
         ], 
         vec![ // 29 
-            COM(5,11,[0,1,2,4,3,0]), //XX(XX)X
-            COM(5,29,[0,1,4,2,4,3]), //X(XX)(XX)X
-            COM(5,41,[0,1,2,4,3,4]), //X(X(XX))(XX)
-            PTR(22, false),
-            COM(4,2,[3,0,1,0,0,0]), //XXX
+            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
+            PTR(28, false),
+            PTR(27, false),
         ], 
         vec![ // 30 
-            COM(5,11,[0,1,2,4,3,0]), //XX(XX)X
-            COM(6,24,[0,1,5,2,3,4]), //X(XX)XXX
-            COM(5,48,[0,4,1,2,3,4]), //XX(XX(XX))
-            PTR(29, false),
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
-        ], 
-        vec![ // 31 
-            COM(4,11,[0,3,1,3,2,0]), //XX(XX)X
-            PTR(30, false),
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-        ], 
-        vec![ // 32 
-            COM(5,16,[0,1,2,3,4,0]), //XX(XXX)
-            COM(4,6,[0,1,2,3,0,0]), //XX(XX)
-            COM(3,2,[2,0,1,0,0,0]), //XXX
             COM(4,2,[3,1,0,0,0,0]), //XXX
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
+        vec![ // 31 
+            COM(5,38,[0,1,4,2,3,4]), //X(XX)X(XX)
+            COM(6,47,[5,0,1,2,4,3]), //XX(X(XX)X)
+            PTR(30, false),
+            COM(4,42,[0,2,3,1,2,3]), //XXX(XXX)
+            PTR(29, false),
+        ], 
          // FUN10Ordlist.boolList
-        vec![ // 33 
+        vec![ // 32 
             COM(3,2,[2,0,1,0,0,0]), //XXX
-            PTR(41, false),
-            PTR(34, false),
+            PTR(37, false),
+            PTR(33, false),
+        ], 
+        vec![ // 33 
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            COM(2,0,[0,0,0,0,0,0]), //X
+            COM(2,0,[0,0,0,0,0,0]), //X
         ], 
         vec![ // 34 
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            COM(2,0,[0,0,0,0,0,0]), //X
-            COM(2,0,[0,0,0,0,0,0]), //X
-        ], 
-        vec![ // 35 
+            COM(5,15,[0,1,2,3,4,0]), //X(XX)(XX)
+            PTR(13, false),
             COM(4,2,[3,0,1,0,0,0]), //XXX
             COM(2,0,[1,0,0,0,0,0]), //X
+            PTR(32, false),
         ], 
-        vec![ // 36 
-            PTR(17, false),
-            PTR(35, false),
-        ], 
-        vec![ // 37 
-            COM(3,3,[0,1,2,0,0,0]), //X(XX)
-            PTR(36, false),
-            PTR(33, false),
-        ], 
-        vec![ // 38 
+        vec![ // 35 
+            COM(6,57,[0,1,2,3,4,5]), //X(X(XX)(XX))
+            PTR(10, false),
+            PTR(13, false),
             COM(4,2,[3,0,1,0,0,0]), //XXX
             COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(32, false),
         ], 
-        vec![ // 39 
-            PTR(17, false),
-            PTR(38, false),
+        vec![ // 36 
+            COM(3,6,[0,2,1,2,0,0]), //XX(XX)
+            PTR(35, false),
+            PTR(34, false),
         ], 
-        vec![ // 40 
-            COM(5,41,[0,1,2,4,3,4]), //X(X(XX))(XX)
-            PTR(14, false),
-            PTR(39, false),
-            PTR(33, false),
-            PTR(37, false),
-        ], 
-        vec![ // 41 
+        vec![ // 37 
             COM(4,15,[0,1,3,2,3,0]), //X(XX)(XX)
-            PTR(14, false),
-            PTR(33, false),
-            PTR(40, false),
-        ], 
-         // FUN11Ordlist.S
-        vec![ // 42 
-            COM(3,3,[0,2,1,0,0,0]), //X(XX)
-            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(10, false),
+            PTR(32, false),
+            PTR(36, false),
         ], 
     ]
 });

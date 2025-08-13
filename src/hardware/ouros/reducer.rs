@@ -14,6 +14,13 @@ use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
+fn dash_atom(atom: &Atom) -> Atom {
+    match atom {
+        Atom::PTR(p, _) => Atom::PTR(*p, false),
+        _ => atom.clone(),
+    }
+}
+
 #[derive(Default)]
 pub struct ReducerInput {
     pub in_valid: bool,
@@ -148,6 +155,7 @@ impl HwModule for Reducer {
                     let app3 = &mut self.app3_holder;
                     let trans = |h: &Hole| match h {
                         Hole::Arg(a) => in_app.load[is[*a as usize] as usize + 1].clone(),
+                        // newly created PTRs are unique by default
                         Hole::Ptr(p) => Atom::PTR(*p as usize + self.input.free_addr, true),
                     };
                     let gen_res = |v: &Vec<Hole>, a: &mut [Atom]| {
@@ -164,6 +172,35 @@ impl HwModule for Reducer {
                     gen_res(&res.app1, &mut app1.1.load);
                     gen_res(&res.app2, &mut app2.1.load);
                     gen_res(&res.app3, &mut app3.1.load);
+                    // handle 1-bit ref counting
+                    let mut temp_res: Vec<Atom> = Vec::new();
+                    temp_res.extend_from_slice(&spine.1.load);
+                    temp_res.extend_from_slice(&app1.1.load);
+                    temp_res.extend_from_slice(&app2.1.load);
+                    temp_res.extend_from_slice(&app3.1.load);
+                    let set_flag = |arr: &mut [Atom]| {
+                        for atom in arr.iter_mut() {
+                            match atom {
+                                Atom::PTR(p, _) => {
+                                    let same_ptrs = temp_res
+                                        .iter()
+                                        .filter(|atm| match atm {
+                                            Atom::PTR(pp, _) => p == pp,
+                                            _ => false,
+                                        })
+                                        .count();
+                                    if same_ptrs > 1 {
+                                        *atom = Atom::PTR(*p, false);
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    };
+                    set_flag(&mut spine.1.load);
+                    set_flag(&mut app1.1.load);
+                    set_flag(&mut app2.1.load);
+                    set_flag(&mut app3.1.load);
                     // append the spine for over-applied cases:
                     // e.g., S a b c x y = a c (b c) x y
                     let before = arity as usize + 1;
@@ -194,9 +231,9 @@ impl HwModule for Reducer {
                     let mut spine_app: App = self.input.in_app.load.clone();
                     let mut app1_app: [Atom; HOLES - 1] = Default::default();
 
-                    spine_app[0] = in_app.load[1].clone();
+                    spine_app[0] = dash_atom(&in_app.load[1]);
                     spine_app[1] = Atom::PTR(self.input.free_addr, false);
-                    app1_app[0] = in_app.load[1].clone();
+                    app1_app[0] = dash_atom(&in_app.load[1]);
                     app1_app[1] = Atom::PTR(self.input.free_addr, false);
 
                     self.spine_holder.1.load = spine_app;
@@ -282,7 +319,7 @@ fn reducer_spec() {
         input.in_app.stack_idx = 202;
         input.in_app.load = [
             COM(3, 6, [0, 2, 1, 2, 0, 0]), // XX(XX)
-            PTR(0, true),
+            PTR(0, false),
             PTR(1, true),
             PTR(2, true),
             INT(3),

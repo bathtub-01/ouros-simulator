@@ -152,6 +152,13 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         stats.4.b_reads,
         stats.4.b_writes,
     )?;
+    writeln!(
+        log,
+        "heap cell consumed: {}, heap update: {}, avoided: {}",
+        ouros.dheap.addr_bumper.value(),
+        stats.0.heap_update,
+        stats.0.update_avoided
+    );
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 
     for (i, s) in stats
@@ -269,6 +276,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    // inspect_prog(&SUMPUZ)
+    // inspect_prog(&FIB)
     run_benchmarks()
 }

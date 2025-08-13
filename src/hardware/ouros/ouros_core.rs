@@ -23,7 +23,7 @@ impl HwInput for OurosCoreInput {}
 // TODO: add more detailed FIFO depth configuration.
 pub struct OurosCore {
     pub input: OurosCoreInput,
-    dheap: DrfHeap,
+    pub dheap: DrfHeap,
     reducer: Reducer,
     alu: Alu,
 
