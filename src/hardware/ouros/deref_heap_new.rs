@@ -442,7 +442,7 @@ impl DrfHeap {
             Stm::IDLE => false,
             Stm::WHNF => match self.getWHNFs() {
                 WHNFs::MoreDmders | WHNFs::NewFrame => self.need_spit(),
-                WHNFs::NoNewFrame => true,
+                WHNFs::NoNewFrame => !self.can_avoid_update(),
             },
             Stm::IA => {
                 let ias1 = self.getIAs1();

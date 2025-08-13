@@ -276,6 +276,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    // inspect_prog(&FIB)
+    // inspect_prog(&MSS)
     run_benchmarks()
 }
