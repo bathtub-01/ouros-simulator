@@ -33,7 +33,7 @@ pub static BOOL_AND: LazyLock<Program> = LazyLock::new(|| {
 });
 
 /**
--- the computation in a should be shared
+-- the computation in `a` should be shared
 main = let a = tfAnd T
            b = ftAnd (a T) (a F)
        in tfOr b b
@@ -324,6 +324,40 @@ pub static DEADLOCK: LazyLock<Program> = LazyLock::new(|| {
             PTR(18, false),
             PRM(ADD,false),
             INT(1),
+        ], 
+    ]
+});
+
+/**
+Use `seq` to create new threads:
+main = let a = tfAnd T
+           b = ftAnd (a T) (a F)
+       in seq a (tfOr b b)
+ */
+#[rustfmt::skip]
+pub static USE_SEQ: LazyLock<Program> = LazyLock::new(|| {
+    vec![
+         // FUN0Playground.main
+        vec![ // 0 
+            PTR(2, false),
+            INT(1),
+            PTR(1, false),
+        ], 
+        vec![ // 1 
+            PRM(MUL,false),
+            INT(3),
+            INT(3),
+        ], 
+         // FUN1Playground.sumPair
+        vec![ // 2 
+            COM(4,16,[0,2,1,2,3,0]), //XX(XXX)
+            SEQ(false),
+            PTR(3, false),
+        ], 
+        vec![ // 3 
+            COM(4,16,[0,3,1,2,3,0]), //XX(XXX)
+            SEQ(false),
+            PRM(ADD,false),
         ], 
     ]
 });

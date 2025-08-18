@@ -6,7 +6,7 @@
 //           +-----------------+
 
 use super::config::*;
-use super::ouros_core::{is_int, is_prm};
+use super::ouros_core::{is_int, is_prm, is_seq_evaluated};
 use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{DualPortMem, Register, Stack};
@@ -76,6 +76,21 @@ fn dash_app(app: &App) -> App {
         }
     }
     res
+}
+
+/// setup the evaluated flag in seq if the 1st arg is an Int
+fn mask_seq(app: &App) -> App {
+    match app[0] {
+        Atom::SEQ(false) => match app[1] {
+            Atom::INT(_) => {
+                let mut res: App = app.clone();
+                res[0] = Atom::SEQ(true);
+                res
+            }
+            _ => app.clone(),
+        },
+        _ => app.clone(),
+    }
 }
 
 fn is_unique_ptr(a: &Atom) -> bool {
@@ -176,12 +191,17 @@ enum WORKs {
 fn select_1st_arg(app: &App) -> (usize, usize) {
     match app[0] {
         Atom::PTR(p, _) => (0, p),
-        Atom::PRM(_, _) => match app[1] {
+        Atom::PRM(_, _) | Atom::SEQ(false) => match app[1] {
             Atom::PTR(p, _) => (1, p),
             Atom::INT(_) => match app[2] {
                 Atom::PTR(p, _) => (2, p),
                 _ => unreachable!(),
             },
+            _ => unreachable!(),
+        },
+        Atom::SEQ(true) => match app[2] {
+            Atom::PTR(p, _) => (2, p),
+            // NOTE: currently rejecting things like `seq a 1` (direct it to reducer will be easier)
             _ => unreachable!(),
         },
         _ => unreachable!(),
@@ -225,9 +245,25 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
     let target_len = app_length(target);
     let mut res_v: Vec<Atom> = Vec::new();
 
-    res_v.extend_from_slice(&app[0..arg_id]);
-    res_v.extend_from_slice(&target_dashed[0..target_len]);
-    res_v.extend_from_slice(&app[arg_id + 1..app_len]);
+    match app[0] {
+        Atom::SEQ(false) => {
+            assert_eq!(arg_id, 1);
+            let mut res = app.clone();
+            res[0] = Atom::SEQ(true);
+            return (res, None);
+        }
+        Atom::SEQ(true) => {
+            assert_eq!(arg_id, 2);
+            res_v.extend_from_slice(&target_dashed[0..target_len]);
+            res_v.extend_from_slice(&app[3..app_len]);
+        }
+        _ => {
+            res_v.extend_from_slice(&app[0..arg_id]);
+            res_v.extend_from_slice(&target_dashed[0..target_len]);
+            res_v.extend_from_slice(&app[arg_id + 1..app_len]);
+        }
+    }
+
     if res_v.len() <= APP_LENGTH {
         (vec_to_app(res_v), None)
     } else {
@@ -661,7 +697,7 @@ impl DrfHeap {
         let more_strict_args: bool = {
             match ia[0] {
                 Atom::PTR(_, _) => false,
-                Atom::PRM(_, _) => *self.arg_id.value() == 1 && !is_int(&ia[2]),
+                Atom::PRM(_, _) | Atom::SEQ(_) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
                 // more on this to support strict args in the future
                 _ => unreachable!(),
             }
@@ -673,8 +709,8 @@ impl DrfHeap {
             IAs2::NextStrictArgNewStk
         } else {
             if (is_ptr(&ia[0])
-                || (is_prm(&ia[0]) && is_int(&ia[1]))
-                || (is_prm(&ia[0]) && is_int(&ia[2])))
+                || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
+                || is_seq_evaluated(&ia[0]))
                 && target_in_whnf
             {
                 IAs2::NoMoreArgsCanEmit
@@ -962,10 +998,11 @@ impl DrfHeap {
         }
     }
 
+    /// if the resolved pointer is unique, update can be avoided
     fn can_avoid_update(&self) -> bool {
         match &self.heap_mem.dout_a().app[0] {
             Atom::PTR(_, true) => true,
-            Atom::PRM(_, _) => match &self.heap_mem.dout_a().app[1] {
+            Atom::PRM(_, _) | Atom::SEQ(_) => match &self.heap_mem.dout_a().app[1] {
                 Atom::PTR(_, true) => true,
                 _ => match &self.heap_mem.dout_a().app[2] {
                     Atom::PTR(_, true) => true,
@@ -988,15 +1025,18 @@ impl DrfHeap {
 
     /// consumes the next task; must not use heap port b!
     fn consume_next(&mut self) {
-        self.holder_in.connect(&self.input.port_a_bits.clone());
+        let in_app = mask_seq(&self.input.port_a_bits.load);
+        self.holder_in.connect(&ActiveApp {
+            stack_idx: self.input.port_a_bits.stack_idx,
+            load: in_app.clone(),
+        });
         match self.getCONSUMEs() {
             CONSUMEs::NoInput => {
                 self.stm.connect(&Stm::IDLE);
                 return;
             }
             CONSUMEs::InputIA => {
-                let ia = &self.input.port_a_bits.load;
-                self.select_1st_arg_read(&ia.clone());
+                self.select_1st_arg_read(&in_app);
                 self.ia_addr.connect(
                     &self.thread_stack[self.input.port_a_bits.stack_idx as usize]
                         .top()

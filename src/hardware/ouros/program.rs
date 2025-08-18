@@ -22,6 +22,7 @@ pub enum Atom {
     /// (operator, conditon revert bit)
     PRM(AluOp, bool),
     Y,
+    SEQ(bool),
     ERR(u8),
 }
 
@@ -49,6 +50,7 @@ impl fmt::Display for Atom {
             Atom::INT(n) => write!(f, "INT({})", n),
             Atom::PRM(p, inv) => write!(f, "PRM({:?}, {})", p, inv),
             Atom::Y => write!(f, "Y"),
+            Atom::SEQ(evaluated) => write!(f, "SEQ({})", evaluated),
             Atom::ERR(e) => write!(f, "ERR({})", e),
         }
     }
@@ -79,6 +81,7 @@ fn arity_of(atom: &Atom) -> u8 {
         PRM(_, _) => 2,
         INT(_) => 1,
         Y => 1,
+        SEQ(_) => 2,
         _ => 0,
     }
 }

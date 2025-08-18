@@ -148,6 +148,20 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize>(
     }
 }
 
+pub fn is_seq(atom: &Atom) -> bool {
+    match atom {
+        Atom::SEQ(_) => true,
+        _ => false,
+    }
+}
+
+pub fn is_seq_evaluated(atom: &Atom) -> bool {
+    match atom {
+        Atom::SEQ(evaluated) => *evaluated,
+        _ => false,
+    }
+}
+
 pub fn is_ptr(atom: &Atom) -> bool {
     match atom {
         Atom::PTR(_, _) => true,
@@ -298,7 +312,7 @@ impl HwModule for OurosCore {
                     self.buffers_reducer_1.input.din = self.dheap.out_main_bits().clone();
                     self.dheap.input.out_main_ready = self.buffers_reducer_1.in_ready();
                 } else {
-                    // connect to dheap
+                    // connect to dheap (`seq a b` will also go this way)
                     self.buffers_dheap_a_0.input.in_valid = true;
                     self.buffers_dheap_a_0.input.din = self.dheap.out_main_bits().clone();
                     self.dheap.input.out_main_ready = self.buffers_dheap_a_0.in_ready();
@@ -384,12 +398,6 @@ impl HwModule for OurosCore {
     }
 
     fn tick_children(&mut self) {
-        // if self.arbiter_dheap_b.out_valid() && self.arbiter_dheap_b.input.out_ready {
-        //     println!(
-        //         "arbiter fire: {:?}",
-        //         self.arbiter_dheap_b.out_bits(self.arbiter_dheap_b.select())
-        //     );
-        // }
         self.dheap.tick();
         self.reducer.tick();
         self.alu.tick();
@@ -431,6 +439,7 @@ fn ouros_core_spec() {
         (&ALU_OP, INT(162)),
         (&MAP_Y, INT(1275)),
         (&DEADLOCK, INT(29380)),
+        (&USE_SEQ, INT(10)),
     ];
 
     for (p, r) in progs {
