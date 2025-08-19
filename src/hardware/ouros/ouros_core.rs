@@ -8,10 +8,25 @@ use crate::hw_module::{HwInput, HwModule};
 
 use super::alu::{Alu, AluStat};
 use super::config::*;
-// use super::deref_heap::{DrfHeap, DrfHeapStat};
 use super::deref_heap_new::{DrfHeap, DrfHeapStat};
 use super::program::{is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use super::reducer::{Reducer, ReducerStat};
+
+enum DESTs {
+    ToDHeap,
+    ToALU,
+    ToReducer,
+}
+
+fn get_dests(app: &App) -> DESTs {
+    if is_prm(&app[0]) && is_int(&app[1]) && is_int(&app[2]) {
+        DESTs::ToALU
+    } else if !is_whnf(&app) && is_comb(&app[0]) {
+        DESTs::ToReducer
+    } else {
+        DESTs::ToDHeap
+    }
+}
 
 #[derive(Default)]
 pub struct OurosCoreInput {
@@ -296,50 +311,42 @@ impl HwModule for OurosCore {
             });
 
             if self.dheap.out_main_valid() {
-                if is_prm(&self.dheap.out_main_bits().load[0])
-                    && is_int(&self.dheap.out_main_bits().load[1])
-                    && is_int(&self.dheap.out_main_bits().load[2])
-                {
-                    // connect to alu
-                    self.buffers_alu_1.input.in_valid = true;
-                    self.buffers_alu_1.input.din = self.dheap.out_main_bits().clone();
-                    self.dheap.input.out_main_ready = self.buffers_alu_1.in_ready();
-                } else if !is_whnf(&self.dheap.out_main_bits().load)
-                    && is_comb(&self.dheap.out_main_bits().load[0])
-                {
-                    // connect to reducer
-                    self.buffers_reducer_1.input.in_valid = true;
-                    self.buffers_reducer_1.input.din = self.dheap.out_main_bits().clone();
-                    self.dheap.input.out_main_ready = self.buffers_reducer_1.in_ready();
-                } else {
-                    // connect to dheap (`seq a b` will also go this way)
-                    self.buffers_dheap_a_0.input.in_valid = true;
-                    self.buffers_dheap_a_0.input.din = self.dheap.out_main_bits().clone();
-                    self.dheap.input.out_main_ready = self.buffers_dheap_a_0.in_ready();
+                match get_dests(&self.dheap.out_main_bits().load) {
+                    DESTs::ToDHeap => {
+                        self.buffers_dheap_a_0.input.in_valid = true;
+                        self.buffers_dheap_a_0.input.din = self.dheap.out_main_bits().clone();
+                        self.dheap.input.out_main_ready = self.buffers_dheap_a_0.in_ready();
+                    }
+                    DESTs::ToALU => {
+                        self.buffers_alu_1.input.in_valid = true;
+                        self.buffers_alu_1.input.din = self.dheap.out_main_bits().clone();
+                        self.dheap.input.out_main_ready = self.buffers_alu_1.in_ready();
+                    }
+                    DESTs::ToReducer => {
+                        self.buffers_reducer_1.input.in_valid = true;
+                        self.buffers_reducer_1.input.din = self.dheap.out_main_bits().clone();
+                        self.dheap.input.out_main_ready = self.buffers_reducer_1.in_ready();
+                    }
                 }
             }
 
             if self.dheap.out_sub_valid() {
-                if is_prm(&self.dheap.out_sub_bits().load[0])
-                    && is_int(&self.dheap.out_sub_bits().load[1])
-                    && is_int(&self.dheap.out_sub_bits().load[2])
-                {
-                    // connect to alu
-                    self.buffers_alu_2.input.in_valid = true;
-                    self.buffers_alu_2.input.din = self.dheap.out_sub_bits().clone();
-                    self.dheap.input.out_sub_ready = self.buffers_alu_2.in_ready();
-                } else if !is_whnf(&self.dheap.out_sub_bits().load)
-                    && is_comb(&self.dheap.out_sub_bits().load[0])
-                {
-                    // connect to reducer
-                    self.buffers_reducer_3.input.in_valid = true;
-                    self.buffers_reducer_3.input.din = self.dheap.out_sub_bits().clone();
-                    self.dheap.input.out_sub_ready = self.buffers_reducer_3.in_ready();
-                } else {
-                    // connect to dheap
-                    self.buffers_dheap_a_3.input.in_valid = true;
-                    self.buffers_dheap_a_3.input.din = self.dheap.out_sub_bits().clone();
-                    self.dheap.input.out_sub_ready = self.buffers_dheap_a_3.in_ready();
+                match get_dests(&self.dheap.out_sub_bits().load) {
+                    DESTs::ToDHeap => {
+                        self.buffers_dheap_a_3.input.in_valid = true;
+                        self.buffers_dheap_a_3.input.din = self.dheap.out_sub_bits().clone();
+                        self.dheap.input.out_sub_ready = self.buffers_dheap_a_3.in_ready();
+                    }
+                    DESTs::ToALU => {
+                        self.buffers_alu_2.input.in_valid = true;
+                        self.buffers_alu_2.input.din = self.dheap.out_sub_bits().clone();
+                        self.dheap.input.out_sub_ready = self.buffers_alu_2.in_ready();
+                    }
+                    DESTs::ToReducer => {
+                        self.buffers_reducer_3.input.in_valid = true;
+                        self.buffers_reducer_3.input.din = self.dheap.out_sub_bits().clone();
+                        self.dheap.input.out_sub_ready = self.buffers_reducer_3.in_ready();
+                    }
                 }
             }
 
@@ -356,26 +363,22 @@ impl HwModule for OurosCore {
             self.reducer.input.app3_ready = self.buffers_dheap_b_2.in_ready();
 
             if self.reducer.spine().0 {
-                if is_prm(&self.reducer.spine().1.load[0])
-                    && is_int(&self.reducer.spine().1.load[1])
-                    && is_int(&self.reducer.spine().1.load[2])
-                {
-                    // connect to alu
-                    self.buffers_alu_0.input.in_valid = true;
-                    self.buffers_alu_0.input.din = self.reducer.spine().1.clone();
-                    self.reducer.input.spine_ready = self.buffers_alu_0.in_ready();
-                } else if !is_whnf(&self.reducer.spine().1.load)
-                    && is_comb(&self.reducer.spine().1.load[0])
-                {
-                    // connect to reducer
-                    self.buffers_reducer_0.input.in_valid = true;
-                    self.buffers_reducer_0.input.din = self.reducer.spine().1.clone();
-                    self.reducer.input.spine_ready = self.buffers_reducer_0.in_ready();
-                } else {
-                    // connect to dheap
-                    self.buffers_dheap_a_1.input.in_valid = true;
-                    self.buffers_dheap_a_1.input.din = self.reducer.spine().1.clone();
-                    self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
+                match get_dests(&self.reducer.spine().1.load) {
+                    DESTs::ToDHeap => {
+                        self.buffers_dheap_a_1.input.in_valid = true;
+                        self.buffers_dheap_a_1.input.din = self.reducer.spine().1.clone();
+                        self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
+                    }
+                    DESTs::ToALU => {
+                        self.buffers_alu_0.input.in_valid = true;
+                        self.buffers_alu_0.input.din = self.reducer.spine().1.clone();
+                        self.reducer.input.spine_ready = self.buffers_alu_0.in_ready();
+                    }
+                    DESTs::ToReducer => {
+                        self.buffers_reducer_0.input.in_valid = true;
+                        self.buffers_reducer_0.input.din = self.reducer.spine().1.clone();
+                        self.reducer.input.spine_ready = self.buffers_reducer_0.in_ready();
+                    }
                 }
             }
 

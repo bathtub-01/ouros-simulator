@@ -256,8 +256,9 @@ macro_rules! benchmarks {
 /// run the benchmark suite with less stat details
 fn run_benchmarks() -> std::io::Result<()> {
     let (benchmarks, names) = benchmarks!(
-        ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2, SUMPUZ,
-        TAUT, WHILEX
+        // ADJOXO,
+        BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2, SUMPUZ, TAUT,
+        WHILEX
     );
     let mut counter = 0;
     let results = benchmarks.map(|p| {
@@ -276,6 +277,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    // inspect_prog(&MSS)
+    // inspect_prog(&ADJOXO)
     run_benchmarks()
 }

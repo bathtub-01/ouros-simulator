@@ -202,7 +202,10 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
         Atom::SEQ(true) => match app[2] {
             Atom::PTR(p, _) => (2, p),
             // NOTE: currently rejecting things like `seq a 1` (direct it to reducer will be easier)
-            _ => unreachable!(),
+            _ => {
+                println!("app: {:?}", app);
+                unreachable!()
+            }
         },
         _ => unreachable!(),
     }
