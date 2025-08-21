@@ -277,6 +277,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    // inspect_prog(&ADJOXO)
-    run_benchmarks()
+    inspect_prog(&TAUT)
+    // run_benchmarks()
 }

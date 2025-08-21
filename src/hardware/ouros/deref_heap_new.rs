@@ -6,7 +6,7 @@
 //           +-----------------+
 
 use super::config::*;
-use super::ouros_core::{is_int, is_prm, is_seq_evaluated};
+use super::ouros_core::{is_int, is_lit_atom, is_prm, is_seq_evaluated};
 use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{DualPortMem, Register, Stack};
@@ -78,17 +78,18 @@ fn dash_app(app: &App) -> App {
     res
 }
 
-/// setup the evaluated flag in seq if the 1st arg is an Int
+/// setup the evaluated flag in seq if the 1st arg is a literal
 fn mask_seq(app: &App) -> App {
     match app[0] {
-        Atom::SEQ(false) => match app[1] {
-            Atom::INT(_) => {
+        Atom::SEQ(false) => {
+            if is_lit_atom(&app[1]) {
                 let mut res: App = app.clone();
                 res[0] = Atom::SEQ(true);
                 res
+            } else {
+                app.clone()
             }
-            _ => app.clone(),
-        },
+        }
         _ => app.clone(),
     }
 }
@@ -193,11 +194,11 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
         Atom::PTR(p, _) => (0, p),
         Atom::PRM(_, _) | Atom::SEQ(false) => match app[1] {
             Atom::PTR(p, _) => (1, p),
-            Atom::INT(_) => match app[2] {
+            Atom::NOP => unreachable!(),
+            _ => match app[2] {
                 Atom::PTR(p, _) => (2, p),
                 _ => unreachable!(),
             },
-            _ => unreachable!(),
         },
         Atom::SEQ(true) => match app[2] {
             Atom::PTR(p, _) => (2, p),
@@ -250,10 +251,14 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
 
     match app[0] {
         Atom::SEQ(false) => {
-            assert_eq!(arg_id, 1);
-            let mut res = app.clone();
-            res[0] = Atom::SEQ(true);
-            return (res, None);
+            if arg_id == 1 {
+                let mut res = app.clone();
+                res[0] = Atom::SEQ(true);
+                return (res, None);
+            } else {
+                /* do nothing when arg_id == 2 */
+                return (app.clone(), None);
+            }
         }
         Atom::SEQ(true) => {
             assert_eq!(arg_id, 2);
@@ -1005,12 +1010,20 @@ impl DrfHeap {
     fn can_avoid_update(&self) -> bool {
         match &self.heap_mem.dout_a().app[0] {
             Atom::PTR(_, true) => true,
-            Atom::PRM(_, _) | Atom::SEQ(_) => match &self.heap_mem.dout_a().app[1] {
-                Atom::PTR(_, true) => true,
+            Atom::PRM(_, _) => match &self.heap_mem.dout_a().app[1] {
+                Atom::PTR(_, unique) => *unique,
                 _ => match &self.heap_mem.dout_a().app[2] {
                     Atom::PTR(_, true) => true,
                     _ => false,
                 },
+            },
+            Atom::SEQ(false) => match &self.heap_mem.dout_a().app[1] {
+                Atom::PTR(_, unique) => *unique,
+                _ => false,
+            },
+            Atom::SEQ(true) => match &self.heap_mem.dout_a().app[2] {
+                Atom::PTR(_, unique) => *unique,
+                _ => false,
             },
             _ => false,
         }
@@ -1402,9 +1415,10 @@ impl HwModule for DrfHeap {
             if self.out_sub_fire() {
                 self.stat.active_threads += 1;
             }
-            self.stat
-                .work_threads
-                .push((occupied as u8, self.stat.active_threads));
+            self.stat.work_threads.push((
+                occupied as u8,
+                self.stat.active_threads + if *self.stm.value() != Stm::IDLE { 1 } else { 0 },
+            ));
         }
 
         if self.stat_detail_lv >= DLV_STM_DIST {

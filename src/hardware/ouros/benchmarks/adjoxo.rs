@@ -4,8 +4,8 @@ use AluOp::*;
 use Atom::*; 
  
 // Functions in this file: 23
-// Apps in this file: 107
-// Combinators in this file: 157
+// Apps in this file: 106
+// Combinators in this file: 156
 #[rustfmt::skip]
 pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
     vec![
@@ -420,14 +420,14 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
             COM(6,54,[0,1,2,3,4,5]), //X(X(XXX)X)
             PTR(59, false),
             PTR(59, false),
-            PTR(100, false),
+            PTR(99, false),
             INT(1),
             INT(9),
         ], 
         vec![ // 76 
             COM(5,40,[0,1,3,4,2,4]), //X(XXX)(XX)
-            PTR(88, false),
-            PTR(91, false),
+            PTR(87, false),
+            PTR(90, false),
         ], 
         vec![ // 77 
             COM(3,5,[0,1,2,2,0,0]), //X(XX)X
@@ -476,121 +476,115 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
         ], 
          // FUN15Adjoxo.bestOf
         vec![ // 85 
-            COM(5,42,[0,3,4,1,4,2]), //XXX(XXX)
-            PTR(87, false),
-            SEQ(false),
+            COM(4,4,[0,2,3,1,0,0]), //XXXX
+            PTR(86, false),
             COM(3,0,[2,0,0,0,0,0]), //X
         ], 
         vec![ // 86 
-            COM(4,18,[2,3,0,0,1,0]), //X(XXXX)
+            COM(4,32,[2,3,0,0,1,3]), //X(XXXX)X
             COM(3,0,[0,0,0,0,0,0]), //X
             COM(3,0,[2,0,0,0,0,0]), //X
         ], 
-        vec![ // 87 
-            COM(4,42,[0,2,3,1,3,3]), //XXX(XXX)
-            PTR(86, false),
-            SEQ(false),
-        ], 
          // FUN16NanoPrelude.map
-        vec![ // 88 
+        vec![ // 87 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(90, false),
+            PTR(89, false),
         ], 
-        vec![ // 89 
+        vec![ // 88 
             COM(5,15,[0,1,3,2,4,0]), //X(XX)(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 90 
+        vec![ // 89 
             COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(89, false),
+            PTR(88, false),
         ], 
          // FUN17Adjoxo.moveval
-        vec![ // 91 
+        vec![ // 90 
             COM(6,58,[0,1,4,2,5,3]), //X(XX(XXX))
-            PTR(92, false),
+            PTR(91, false),
             PTR(74, false),
-            PTR(93, false),
+            PTR(92, false),
         ], 
          // FUN18Adjoxo.inverse
-        vec![ // 92 
+        vec![ // 91 
             COM(4,4,[3,0,1,2,0,0]), //XXXX
             COM(3,0,[0,0,0,0,0,0]), //X
             COM(3,0,[2,0,0,0,0,0]), //X
             COM(3,0,[1,0,0,0,0,0]), //X
         ], 
          // FUN19Adjoxo.insert
-        vec![ // 93 
+        vec![ // 92 
             COM(4,19,[0,1,2,3,3,0]), //X(X(XX)X)
             Y,
-            PTR(99, false),
             PTR(98, false),
+            PTR(97, false),
         ], 
-        vec![ // 94 
+        vec![ // 93 
             COM(4,16,[0,1,0,2,3,0]), //XX(XXX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 95 
+        vec![ // 94 
             COM(4,6,[0,2,1,3,0,0]), //XX(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 96 
+        vec![ // 95 
             COM(5,42,[0,1,3,2,3,4]), //XXX(XXX)
             PRM(LE,false),
         ], 
-        vec![ // 97 
+        vec![ // 96 
             COM(4,6,[0,2,1,3,0,0]), //XX(XX)
-            PTR(96, false),
             PTR(95, false),
-        ], 
-        vec![ // 98 
-            COM(5,40,[0,1,3,4,2,3]), //X(XXX)(XX)
-            COM(4,42,[0,2,3,1,2,3]), //XXX(XXX)
-            PTR(97, false),
             PTR(94, false),
         ], 
-        vec![ // 99 
+        vec![ // 97 
+            COM(5,40,[0,1,3,4,2,3]), //X(XXX)(XX)
+            COM(4,42,[0,2,3,1,2,3]), //XXX(XXX)
+            PTR(96, false),
+            PTR(93, false),
+        ], 
+        vec![ // 98 
             COM(6,40,[5,0,3,1,2,4]), //X(XXX)(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
          // FUN20NanoPrelude.enumFromTo
-        vec![ // 100 
+        vec![ // 99 
             COM(5,15,[0,1,4,2,3,0]), //X(XX)(XX)
-            PTR(102, false),
             PTR(101, false),
-            PTR(106, false),
+            PTR(100, false),
+            PTR(105, false),
         ], 
-        vec![ // 101 
+        vec![ // 100 
             COM(3,2,[0,2,1,0,0,0]), //XXX
             PRM(LE,false),
         ], 
          // FUN21NanoPrelude.takeWhile
-        vec![ // 102 
+        vec![ // 101 
             COM(3,3,[0,1,2,0,0,0]), //X(XX)
             Y,
-            PTR(105, false),
+            PTR(104, false),
         ], 
-        vec![ // 103 
+        vec![ // 102 
             COM(4,6,[0,2,1,3,0,0]), //XX(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
         ], 
-        vec![ // 104 
+        vec![ // 103 
             COM(5,42,[1,3,0,2,3,4]), //XXX(XXX)
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 105 
+        vec![ // 104 
             COM(6,48,[5,0,1,3,2,4]), //XX(XX(XX))
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(104, false),
             PTR(103, false),
+            PTR(102, false),
         ], 
          // FUN22NanoPrelude.enumFrom
-        vec![ // 106 
+        vec![ // 105 
             COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(106, false),
+            PTR(105, false),
             PRM(ADD,false),
             INT(1),
         ], 

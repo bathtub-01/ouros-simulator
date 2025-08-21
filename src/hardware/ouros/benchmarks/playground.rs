@@ -361,3 +361,143 @@ pub static USE_SEQ: LazyLock<Program> = LazyLock::new(|| {
         ], 
     ]
 });
+
+#[rustfmt::skip]
+pub static BANG: LazyLock<Program> = LazyLock::new(|| {
+    vec![
+         // FUN0Playground.main
+        vec![ // 0 
+            PTR(8, false),
+            PTR(7, false),
+            PTR(4, false),
+            PTR(2, false),
+        ], 
+        vec![ // 1 
+            PTR(22, false),
+            INT(30),
+            INT(200),
+        ], 
+        vec![ // 2 
+            PTR(12, false),
+            PTR(1, false),
+        ], 
+        vec![ // 3 
+            PTR(22, false),
+            INT(30),
+            INT(100),
+        ], 
+        vec![ // 4 
+            PTR(12, false),
+            PTR(3, false),
+        ], 
+        vec![ // 5 
+            PTR(15, false),
+            INT(1),
+            INT(50),
+        ], 
+        vec![ // 6 
+            PTR(12, false),
+            PTR(5, false),
+        ], 
+        vec![ // 7 
+            PRM(EQ,false),
+            PTR(6, false),
+            INT(50),
+        ], 
+         // FUN1Playground.sumOrMul
+        vec![ // 8 
+            COM(4,12,[0,1,2,3,3,0]), //X(XXX)X
+            PTR(11, false),
+            PTR(10, false),
+        ], 
+        vec![ // 9 
+            COM(5,40,[1,0,3,4,2,4]), //X(XXX)(XX)
+            PRM(SUB,false),
+        ], 
+        vec![ // 10 
+            COM(4,11,[0,2,1,3,3,0]), //XX(XX)X
+            PTR(9, false),
+            PRM(ADD,false),
+        ], 
+        vec![ // 11 
+            COM(4,48,[0,2,0,3,1,3]), //XX(XX(XX))
+            SEQ(false),
+        ], 
+         // FUN2Playground.lastEle
+        vec![ // 12 
+            COM(3,2,[2,0,1,0,0,0]), //XXX
+            ERR(0),
+            PTR(14, false),
+        ], 
+        vec![ // 13 
+            COM(4,1,[0,1,0,0,0,0]), //XX
+            PTR(12, false),
+        ], 
+        vec![ // 14 
+            COM(3,6,[2,1,0,2,0,0]), //XX(XX)
+            PTR(13, false),
+        ], 
+         // FUN3NanoPrelude.enumFromTo
+        vec![ // 15 
+            COM(5,15,[0,1,4,2,3,0]), //X(XX)(XX)
+            PTR(17, false),
+            PTR(16, false),
+            PTR(21, false),
+        ], 
+        vec![ // 16 
+            COM(3,2,[0,2,1,0,0,0]), //XXX
+            PRM(LE,false),
+        ], 
+         // FUN4NanoPrelude.takeWhile
+        vec![ // 17 
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            Y,
+            PTR(20, false),
+        ], 
+        vec![ // 18 
+            COM(4,6,[0,2,1,3,0,0]), //XX(XX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+        ], 
+        vec![ // 19 
+            COM(5,42,[1,3,0,2,3,4]), //XXX(XXX)
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+        vec![ // 20 
+            COM(6,48,[5,0,1,3,2,4]), //XX(XX(XX))
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(19, false),
+            PTR(18, false),
+        ], 
+         // FUN5NanoPrelude.enumFrom
+        vec![ // 21 
+            COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(21, false),
+            PRM(ADD,false),
+            INT(1),
+        ], 
+         // FUN6NanoPrelude.replicate
+        vec![ // 22 
+            COM(4,10,[0,1,3,2,3,0]), //X(XX)XX
+            PTR(25, false),
+            PTR(24, false),
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+        vec![ // 23 
+            COM(4,7,[0,1,3,2,0,0]), //X(XXX)
+            PTR(22, false),
+            PRM(SUB,false),
+            INT(1),
+        ], 
+        vec![ // 24 
+            COM(4,16,[0,3,1,2,3,0]), //XX(XXX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(23, false),
+        ], 
+        vec![ // 25 
+            COM(6,28,[0,4,1,2,5,3]), //XXX(XX)X
+            PRM(LE,false),
+            INT(0),
+        ], 
+    ]
+});

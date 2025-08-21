@@ -18,10 +18,17 @@ enum DESTs {
     ToReducer,
 }
 
+fn is_lit_seq(app: &App) -> bool {
+    match app[0] {
+        Atom::SEQ(true) => is_lit_atom(&app[2]),
+        _ => false,
+    }
+}
+
 fn get_dests(app: &App) -> DESTs {
     if is_prm(&app[0]) && is_int(&app[1]) && is_int(&app[2]) {
         DESTs::ToALU
-    } else if !is_whnf(&app) && is_comb(&app[0]) {
+    } else if !is_whnf(&app) && (is_comb(&app[0]) || is_lit_seq(&app)) {
         DESTs::ToReducer
     } else {
         DESTs::ToDHeap
@@ -181,6 +188,13 @@ pub fn is_ptr(atom: &Atom) -> bool {
     match atom {
         Atom::PTR(_, _) => true,
         _ => false,
+    }
+}
+
+pub fn is_lit_atom(atom: &Atom) -> bool {
+    match atom {
+        Atom::NOP | Atom::PTR(_, _) => false,
+        _ => true,
     }
 }
 

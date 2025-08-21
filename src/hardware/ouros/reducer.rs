@@ -116,7 +116,8 @@ impl Reducer {
                     .count()
                 }
                 Atom::Y => 1,
-                _ => panic!("reducer: app head is not combinator!"),
+                Atom::SEQ(true) => 0,
+                _ => panic!("reducer: app head is not a valid combinator!"),
             }
         } else {
             0
@@ -245,7 +246,17 @@ impl HwModule for Reducer {
                     self.spine_holder.0 = true;
                     self.app1_holder.0 = true;
                 }
-                _ => panic!("reducer: app head is not combinator!"),
+                Atom::SEQ(true) => {
+                    let in_app = &self.input.in_app;
+                    let mut spine_app: App = Default::default();
+                    for (i, atom) in in_app.load.iter().skip(2).enumerate() {
+                        spine_app[i] = atom.clone();
+                    }
+                    self.spine_holder.1.load = spine_app;
+                    self.spine_holder.1.stack_idx = in_app.stack_idx;
+                    self.spine_holder.0 = true;
+                }
+                _ => panic!("reducer: app head is not a valid combinator!"),
             }
         }
     }
