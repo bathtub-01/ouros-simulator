@@ -367,7 +367,6 @@ pub struct DrfHeap {
     holder_in_sub: Register<FrozenApp>,
     addr_holder: Register<usize>,
     ia_addr: Register<usize>,
-    father_stk: Register<u8>,
     thread_stack: [AddrStack; 8],
     frame_stack: [FrameStack; 8],
     heap_mem: DualPortMem<HeapCell>,
@@ -392,7 +391,6 @@ impl DrfHeap {
             holder_in_sub: Default::default(),
             addr_holder: Default::default(),
             ia_addr: Default::default(),
-            father_stk: Default::default(),
             thread_stack: std::array::from_fn(|_| Stack::new()),
             frame_stack: std::array::from_fn(|_| Stack::new()),
             heap_mem: DualPortMem::new(heap_size),
@@ -640,13 +638,6 @@ impl DrfHeap {
             .iter()
             .any(find_more_dmder(*self.addr_holder.value()))
         {
-            // println!("MoreDmders!");
-            // println!(
-            //     "addr holder: {}, stack top: {:?}, stack depth: {}",
-            //     self.addr_holder.value(),
-            //     self.thread_stack[0].top(),
-            //     self.thread_stack[0].elements()
-            // );
             WHNFs::MoreDmders
         } else {
             if self
@@ -662,11 +653,6 @@ impl DrfHeap {
     }
 
     fn getIAs1(&self) -> IAs1 {
-        // println!(
-        //     "exist: {} working: {}",
-        //     self.heap_mem.dout_a().exist,
-        //     *self.working_heap.dout_a()
-        // );
         let target = &self.heap_mem.dout_a().app;
         let stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
         if !self.heap_mem.dout_a().exist {
@@ -890,11 +876,6 @@ impl DrfHeap {
     fn push_target(&mut self, new_frame: bool) {
         let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
         self.working_heap.write_b(*self.addr_holder.value(), true);
-        // println!(
-        //     "pushed: {}, stack depth: {}",
-        //     *self.addr_holder.value(),
-        //     current_stk.elements()
-        // );
         current_stk.push((new_frame, *self.addr_holder.value()));
     }
 
@@ -1059,7 +1040,6 @@ impl DrfHeap {
                         .unwrap()
                         .1,
                 );
-                self.father_stk.connect(&self.input.port_a_bits.stack_idx);
                 self.stm.connect(&Stm::IA);
             }
             CONSUMEs::InputWHNFWithDmder => {
@@ -1172,15 +1152,7 @@ impl DrfHeap {
         let mut updated_dmder = dmder.clone();
         let target = self.heap_mem.dout_a().app.clone();
         let ias1 = self.getIAs1();
-        // if *self.addr_holder.value() == 117 {
-        //     println!(
-        //         "117: exist: {} working: {}, {:?},{:?}",
-        //         self.heap_mem.dout_a().exist,
-        //         *self.working_heap.dout_a(),
-        //         self.heap_mem.dout_a().app,
-        //         ias1
-        //     );
-        // }
+
         match ias1 {
             IAs1::NoExist => {
                 self.push_target(false);
@@ -1487,7 +1459,6 @@ impl HwModule for DrfHeap {
         self.holder_in_sub.tick();
         self.addr_bumper.tick();
         self.arg_id.tick();
-        self.father_stk.tick();
         self.addr_holder.tick();
         self.ia_addr.tick();
     }
