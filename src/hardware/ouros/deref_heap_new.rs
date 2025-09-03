@@ -903,9 +903,6 @@ impl DrfHeap {
     /// take shortcuts, unless 'sensitive cases' are encountered
     fn step_to_next(&mut self, s1: &IAs1) {
         if self.is_sensitive(s1) {
-            // if self.input.port_a_valid {
-            //     println!("sensi! returning: {:?}", self.input.port_a_bits.load);
-            // }
             self.stm.connect(&Stm::IDLE);
         } else {
             self.consume_next();
@@ -1210,9 +1207,6 @@ impl DrfHeap {
                 self.select_next_arg_read(&updated_dmder);
             }
             IAs2::NoMoreArgsNoEmit => {
-                // if *self.ia_addr.value() == 242 {
-                //     println!("updating ram[242]: {:?}", updated_dmder);
-                // }
                 self.cancel_new_frame(&ias1);
                 self.heap_mem.write_b(
                     *self.ia_addr.value(),
@@ -1222,9 +1216,6 @@ impl DrfHeap {
                     },
                 );
                 self.step_to_next(&ias1);
-                // if self.heap_mem.input.port_b.addr == 242 {
-                //     println!("writing 242!");
-                // }
             }
             IAs2::NoMoreArgsCanEmit => {
                 self.cancel_new_frame(&ias1);
