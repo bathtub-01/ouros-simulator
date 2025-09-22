@@ -9,6 +9,7 @@ use super::config::*;
 use super::ouros_core::{is_int, is_lit_atom, is_prm, is_seq_evaluated};
 use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use crate::hardware::common::memory::DualPortMemStat;
+use crate::hardware::common::stack::StackOp;
 use crate::hardware::common::{DualPortMem, Register, Stack};
 use crate::hardware::ouros::ouros_core::is_ptr;
 use crate::hardware::utils::fire;
@@ -31,7 +32,7 @@ impl HwInput for DrfHeapInput {}
 
 type StackCell = (bool, usize);
 type AddrStack = Stack<StackCell, 512>;
-type FrameRecord = [usize; 8];
+type FrameRecord = [usize; MAX_THREADS];
 type FrameStack = Stack<FrameRecord, 64>;
 
 fn stack_cell_with(cell: Option<&StackCell>, p: impl FnOnce(&StackCell) -> bool) -> bool {
@@ -367,8 +368,8 @@ pub struct DrfHeap {
     holder_in_sub: Register<FrozenApp>,
     addr_holder: Register<usize>,
     ia_addr: Register<usize>,
-    thread_stack: [AddrStack; 8],
-    frame_stack: [FrameStack; 8],
+    thread_stack: [AddrStack; MAX_THREADS],
+    frame_stack: [FrameStack; MAX_THREADS],
     heap_mem: DualPortMem<HeapCell>,
     demand_heap: DualPortMem<bool>,
     working_heap: DualPortMem<bool>,
@@ -471,7 +472,7 @@ impl DrfHeap {
     }
 
     pub fn port_b_ready(&self) -> bool {
-        let out_clear = !self.holder_out_sub.0 || self.input.out_sub_ready;
+        let out_clear = true; // !self.holder_out_sub.0 || self.input.out_sub_ready;
         let local: bool = match *self.stm_sub.value() {
             StmSub::IDLE => true,
             StmSub::WORK => match self.getWORKs() {
@@ -480,6 +481,9 @@ impl DrfHeap {
                 WORKs::DmderNotFound => false,
             },
         };
+        // if !local {
+        //     println!("sub waiting: {}", self.holder_in_sub.value().heap_addr);
+        // }
         let borrowed: bool = match *self.stm.value() {
             Stm::IDLE => false,
             Stm::WHNF => match self.getWHNFs() {
@@ -892,11 +896,6 @@ impl DrfHeap {
         let current_stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
         let same1 = returning_app == *self.addr_holder.value();
         let same2 = stack_cell_with(current_stk.top(), |(_, addr)| *addr == returning_app);
-        // if self.input.port_a_valid
-        //     && self.input.port_a_bits.stack_idx == self.holder_in.value().stack_idx
-        // {
-        //     panic!("strange shit!");
-        // }
         (sensitive1 && same1) || (sensitive2 && same2)
     }
 
@@ -1261,8 +1260,7 @@ impl DrfHeap {
     }
 
     fn handle_port_a(&mut self) {
-        // halt the machine if output is not consumed yet
-        // TODO: to maintain the reading signals on memories
+        // TODO: we don't need to hault the machine if buffer is big enough
         if self.holder_out.0 && !self.input.out_main_ready {
             return;
         }
@@ -1280,32 +1278,10 @@ impl DrfHeap {
             return;
         }
 
-        // if self.input.port_b_valid {
-        //     println!(
-        //         "before:b-in: {}-{:?}",
-        //         self.input.port_b_bits.heap_addr, self.input.port_b_bits.load
-        //     );
-        //     println!(
-        //         "before:b-write: {}-{:?}",
-        //         self.heap_mem.input.port_b.addr, self.heap_mem.input.port_b.din.app
-        //     )
-        // }
-
         match *self.stm_sub.value() {
             StmSub::IDLE => self.consume_next_sub(),
             StmSub::WORK => self.step_work(),
         }
-
-        // if self.input.port_b_valid {
-        //     println!(
-        //         "after:b-in: {}-{:?}",
-        //         self.input.port_b_bits.heap_addr, self.input.port_b_bits.load
-        //     );
-        //     println!(
-        //         "after:b-write: {}-{:?}",
-        //         self.heap_mem.input.port_b.addr, self.heap_mem.input.port_b.din.app
-        //     )
-        // }
     }
 }
 
@@ -1395,45 +1371,6 @@ impl HwModule for DrfHeap {
     }
 
     fn tick_children(&mut self) {
-        // println!(
-        //     "ram[214]: {}-{:?}",
-        //     self.heap_mem.ram[214].exist,
-        //     self.heap_mem.ram[214].app,
-        //     // self.heap_mem.ram[167].exist,
-        //     // self.heap_mem.ram[167].app
-        // );
-        // if self.heap_mem.input.port_a.is_write
-        //     && self.heap_mem.input.port_b.is_write
-        //     && self.heap_mem.input.port_a.addr == self.heap_mem.input.port_b.addr
-        // {
-        //     println!(
-        //         "strange write on {}, stm {}, port_b ready {}, ias1 {:?}, ias2 {:?}, port_a ready {}, consumes {:?}",
-        //         self.heap_mem.input.port_a.addr,
-        //         self.stm.value(),
-        //         self.port_b_ready(),
-        //         self.getIAs1(),
-        //         self.getIAs2(&self.getIAs1()),
-        //         self.port_a_ready(),
-        //         self.getCONSUMEs()
-        //     );
-        //     println!(
-        //         "port a stack id {}, current stack id {}",
-        //         self.input.port_a_bits.stack_idx,
-        //         self.holder_in.value().stack_idx
-        //     );
-        //     println!("port a write: {:?}", self.heap_mem.input.port_a.din.app);
-        //     println!("port b write: {:?}", self.heap_mem.input.port_b.din.app);
-        // }
-        // println!(
-        //     "sub-stm:{:?}, condition:{:?}, addr:{}",
-        //     self.stm_sub.value(),
-        //     self.getWORKs(),
-        //     self.holder_in_sub.value().heap_addr
-        // );
-        // if self.out_sub_fire() {
-        //     println!("sub out fire: {:?}", self.out_sub_bits());
-        // }
-
         self.stm.tick();
         self.stm_sub.tick();
         for stk in &mut self.thread_stack {

@@ -14,6 +14,8 @@ use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
+use super::ouros_core::is_nop;
+
 fn dash_atom(atom: &Atom) -> Atom {
     match atom {
         Atom::PTR(p, _) => Atom::PTR(*p, false),
@@ -55,7 +57,15 @@ pub struct Reducer {
 impl Reducer {
     pub fn new() -> Self {
         Self {
-            input: Default::default(),
+            input: ReducerInput {
+                in_valid: false,
+                in_app: Default::default(),
+                spine_ready: false,
+                app1_ready: false,
+                app2_ready: false,
+                app3_ready: false,
+                free_addr: Default::default(),
+            },
             decode_table: &DECODE_TABLE,
             spine_holder: Default::default(),
             app1_holder: Default::default(),
@@ -71,33 +81,77 @@ impl Reducer {
         self
     }
 
-    pub fn spine(&self) -> &(bool, ActiveApp) {
-        &self.spine_holder
+    /// (spine, app1, app2, app3)
+    pub fn out_bundle(
+        &self,
+    ) -> (
+        (bool, ActiveApp),
+        (bool, FrozenApp),
+        (bool, FrozenApp),
+        (bool, FrozenApp),
+    ) {
+        if REDUCER_PIPE {
+            (
+                self.spine_holder.clone(),
+                self.app1_holder.clone(),
+                self.app2_holder.clone(),
+                self.app3_holder.clone(),
+            )
+        } else {
+            self.gen_result()
+        }
     }
+    /*
+        pub fn spine(&self) -> &(bool, ActiveApp) {
+            if REDUCER_PIPE {
+                &self.spine_holder
+            } else {
+                unimplemented!()
+            }
+        }
 
-    pub fn app1(&self) -> &(bool, FrozenApp) {
-        &self.app1_holder
-    }
+        pub fn app1(&self) -> &(bool, FrozenApp) {
+            if REDUCER_PIPE {
+                &self.app1_holder
+            } else {
+                unimplemented!()
+            }
+        }
 
-    pub fn app2(&self) -> &(bool, FrozenApp) {
-        &self.app2_holder
-    }
+        pub fn app2(&self) -> &(bool, FrozenApp) {
+            if REDUCER_PIPE {
+                &self.app2_holder
+            } else {
+                unimplemented!()
+            }
+        }
 
-    pub fn app3(&self) -> &(bool, FrozenApp) {
-        &self.app3_holder
-    }
-
+        pub fn app3(&self) -> &(bool, FrozenApp) {
+            if REDUCER_PIPE {
+                &self.app3_holder
+            } else {
+                unimplemented!()
+            }
+        }
+    */
     pub fn in_ready(&self) -> bool {
-        // all holder registers should be either (1) free or (2) firing in this cycle
-        let spine = self.spine_holder.0;
-        let app1 = self.app1_holder.0;
-        let app2 = self.app2_holder.0;
-        let app3 = self.app3_holder.0;
+        if REDUCER_PIPE {
+            // all holder registers should be either (1) free or (2) firing in this cycle
+            let spine = self.spine_holder.0;
+            let app1 = self.app1_holder.0;
+            let app2 = self.app2_holder.0;
+            let app3 = self.app3_holder.0;
 
-        (!spine || fire(spine, self.input.spine_ready))
-            && (!app1 || fire(app1, self.input.app1_ready))
-            && (!app2 || fire(app2, self.input.app2_ready))
-            && (!app3 || fire(app3, self.input.app3_ready))
+            (!spine || fire(spine, self.input.spine_ready))
+                && (!app1 || fire(app1, self.input.app1_ready))
+                && (!app2 || fire(app2, self.input.app2_ready))
+                && (!app3 || fire(app3, self.input.app3_ready))
+        } else {
+            self.input.spine_ready
+                && self.input.app1_ready
+                && self.input.app2_ready
+                && self.input.app3_ready
+        }
     }
 
     /// The number of heap cells will be consumed in this cycle
@@ -127,137 +181,165 @@ impl Reducer {
     pub fn get_stat(&self) -> &ReducerStat {
         &self.stat
     }
+
+    pub fn in_fire(&self) -> bool {
+        fire(self.input.in_valid, self.in_ready())
+    }
+
+    fn gen_result(
+        &self,
+    ) -> (
+        (bool, ActiveApp),
+        (bool, FrozenApp),
+        (bool, FrozenApp),
+        (bool, FrozenApp),
+    ) {
+        let mut res_spine: (bool, ActiveApp) = Default::default();
+        let mut res_app1: (bool, FrozenApp) = Default::default();
+        let mut res_app2: (bool, FrozenApp) = Default::default();
+        let mut res_app3: (bool, FrozenApp) = Default::default();
+
+        match self.input.in_app.load[0] {
+            Atom::COM(arity, code, is) => {
+                let res = &self.decode_table[code as usize];
+                let in_app = &self.input.in_app;
+                let trans = |h: &Hole| match h {
+                    Hole::Arg(a) => in_app.load[is[*a as usize] as usize + 1].clone(),
+                    // newly created PTRs are unique by default
+                    Hole::Ptr(p) => Atom::PTR(*p as usize + self.input.free_addr, true),
+                };
+                let gen_res = |v: &Vec<Hole>, a: &mut [Atom]| {
+                    for i in 0..a.len() {
+                        if i < v.len() {
+                            a[i] = trans(&v[i]);
+                        } else {
+                            a[i] = Atom::NOP;
+                        }
+                    }
+                };
+                // perform reduction
+                gen_res(&res.spine, &mut res_spine.1.load);
+                gen_res(&res.app1, &mut res_app1.1.load);
+                gen_res(&res.app2, &mut res_app2.1.load);
+                gen_res(&res.app3, &mut res_app3.1.load);
+                // handle 1-bit ref counting
+                let mut temp_res: Vec<Atom> = Vec::new();
+                temp_res.extend_from_slice(&res_spine.1.load);
+                temp_res.extend_from_slice(&res_app1.1.load);
+                temp_res.extend_from_slice(&res_app2.1.load);
+                temp_res.extend_from_slice(&res_app3.1.load);
+                let set_flag = |arr: &mut [Atom]| {
+                    for atom in arr.iter_mut() {
+                        match atom {
+                            Atom::PTR(p, _) => {
+                                let same_ptrs = temp_res
+                                    .iter()
+                                    .filter(|atm| match atm {
+                                        Atom::PTR(pp, _) => p == pp,
+                                        _ => false,
+                                    })
+                                    .count();
+                                if same_ptrs > 1 {
+                                    *atom = Atom::PTR(*p, false);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                };
+                set_flag(&mut res_spine.1.load);
+                set_flag(&mut res_app1.1.load);
+                set_flag(&mut res_app2.1.load);
+                set_flag(&mut res_app3.1.load);
+                // append the spine for over-applied cases:
+                // e.g., S a b c x y = a c (b c) x y
+                let before = arity as usize + 1;
+                let after = res.spine.len();
+                for i in 0..(APP_LENGTH - before) {
+                    if after + i < APP_LENGTH {
+                        res_spine.1.load[after + i] = in_app.load[before + i].clone();
+                    } else if before + i < APP_LENGTH && in_app.load[before + i] != Atom::NOP {
+                        // over-sized result will be a runtime error..
+                        panic!("reducer: over-sized over-applied app!");
+                    } else {
+                        break;
+                    }
+                }
+                // pass the stack idx for the spine; heap addr for nested apps
+                res_spine.1.stack_idx = in_app.stack_idx;
+                res_app1.1.heap_addr = self.input.free_addr;
+                res_app2.1.heap_addr = self.input.free_addr + 1;
+                res_app3.1.heap_addr = self.input.free_addr + 2;
+            }
+            Atom::Y => {
+                let in_app = &self.input.in_app;
+                let mut spine_app: App = self.input.in_app.load.clone();
+                let mut app1_app: [Atom; HOLES - 1] = Default::default();
+
+                spine_app[0] = dash_atom(&in_app.load[1]);
+                spine_app[1] = Atom::PTR(self.input.free_addr, false);
+                app1_app[0] = dash_atom(&in_app.load[1]);
+                app1_app[1] = Atom::PTR(self.input.free_addr, false);
+
+                res_spine.1.load = spine_app;
+                res_app1.1.load = app1_app;
+
+                res_spine.1.stack_idx = in_app.stack_idx;
+                res_app1.1.heap_addr = self.input.free_addr;
+            }
+            Atom::SEQ(true) => {
+                let in_app = &self.input.in_app;
+                let mut spine_app: App = Default::default();
+                for (i, atom) in in_app.load.iter().skip(2).enumerate() {
+                    spine_app[i] = atom.clone();
+                }
+                res_spine.1.load = spine_app;
+                res_spine.1.stack_idx = in_app.stack_idx;
+            }
+            _ => { /* vacancy for non-busy case  */ }
+        }
+
+        if REDUCER_PIPE {
+            res_spine.0 = self.in_fire();
+            res_app1.0 = !is_nop(&res_app1.1.load[0]);
+            res_app2.0 = !is_nop(&res_app2.1.load[0]);
+            res_app3.0 = !is_nop(&res_app3.1.load[0]);
+        } else {
+            res_spine.0 = self.input.in_valid
+                && self.input.app1_ready
+                && self.input.app2_ready
+                && self.input.app3_ready;
+            res_app1.0 = self.in_fire() && !is_nop(&res_app1.1.load[0]);
+            res_app2.0 = self.in_fire() && !is_nop(&res_app2.1.load[0]);
+            res_app3.0 = self.in_fire() && !is_nop(&res_app3.1.load[0]);
+        }
+
+        (res_spine, res_app1, res_app2, res_app3)
+    }
 }
 
 impl HwModule for Reducer {
     fn update_local(&mut self) {
         // FIXME: looks a bit wrong..
-        if fire(self.spine().0, self.input.spine_ready) {
+        if fire(self.spine_holder.0, self.input.spine_ready) {
             self.spine_holder.0 = false;
         }
-        if fire(self.app1().0, self.input.app1_ready) {
+        if fire(self.app1_holder.0, self.input.app1_ready) {
             self.app1_holder.0 = false;
         }
-        if fire(self.app2().0, self.input.app2_ready) {
+        if fire(self.app2_holder.0, self.input.app2_ready) {
             self.app2_holder.0 = false;
         }
-        if fire(self.app3().0, self.input.app3_ready) {
+        if fire(self.app3_holder.0, self.input.app3_ready) {
             self.app3_holder.0 = false;
         }
 
-        if fire(self.input.in_valid, self.in_ready()) {
-            match self.input.in_app.load[0] {
-                Atom::COM(arity, code, is) => {
-                    let res = &self.decode_table[code as usize];
-                    let spine = &mut self.spine_holder;
-                    let in_app = &self.input.in_app;
-                    let app1 = &mut self.app1_holder;
-                    let app2 = &mut self.app2_holder;
-                    let app3 = &mut self.app3_holder;
-                    let trans = |h: &Hole| match h {
-                        Hole::Arg(a) => in_app.load[is[*a as usize] as usize + 1].clone(),
-                        // newly created PTRs are unique by default
-                        Hole::Ptr(p) => Atom::PTR(*p as usize + self.input.free_addr, true),
-                    };
-                    let gen_res = |v: &Vec<Hole>, a: &mut [Atom]| {
-                        for i in 0..a.len() {
-                            if i < v.len() {
-                                a[i] = trans(&v[i]);
-                            } else {
-                                a[i] = Atom::NOP;
-                            }
-                        }
-                    };
-                    // perform reduction
-                    gen_res(&res.spine, &mut spine.1.load);
-                    gen_res(&res.app1, &mut app1.1.load);
-                    gen_res(&res.app2, &mut app2.1.load);
-                    gen_res(&res.app3, &mut app3.1.load);
-                    // handle 1-bit ref counting
-                    let mut temp_res: Vec<Atom> = Vec::new();
-                    temp_res.extend_from_slice(&spine.1.load);
-                    temp_res.extend_from_slice(&app1.1.load);
-                    temp_res.extend_from_slice(&app2.1.load);
-                    temp_res.extend_from_slice(&app3.1.load);
-                    let set_flag = |arr: &mut [Atom]| {
-                        for atom in arr.iter_mut() {
-                            match atom {
-                                Atom::PTR(p, _) => {
-                                    let same_ptrs = temp_res
-                                        .iter()
-                                        .filter(|atm| match atm {
-                                            Atom::PTR(pp, _) => p == pp,
-                                            _ => false,
-                                        })
-                                        .count();
-                                    if same_ptrs > 1 {
-                                        *atom = Atom::PTR(*p, false);
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                    };
-                    set_flag(&mut spine.1.load);
-                    set_flag(&mut app1.1.load);
-                    set_flag(&mut app2.1.load);
-                    set_flag(&mut app3.1.load);
-                    // append the spine for over-applied cases:
-                    // e.g., S a b c x y = a c (b c) x y
-                    let before = arity as usize + 1;
-                    let after = res.spine.len();
-                    for i in 0..(APP_LENGTH - before) {
-                        if after + i < APP_LENGTH {
-                            spine.1.load[after + i] = in_app.load[before + i].clone();
-                        } else if before + i < APP_LENGTH && in_app.load[before + i] != Atom::NOP {
-                            // over-sized result will be a runtime error..
-                            panic!("reducer: over-sized over-applied app!");
-                        } else {
-                            break;
-                        }
-                    }
-                    // pass the stack idx for the spine; heap addr for nested apps
-                    spine.1.stack_idx = in_app.stack_idx;
-                    app1.1.heap_addr = self.input.free_addr;
-                    app2.1.heap_addr = self.input.free_addr + 1;
-                    app3.1.heap_addr = self.input.free_addr + 2;
-                    // valid for output
-                    spine.0 = true;
-                    app1.0 = app1.1.load[0] != Atom::NOP;
-                    app2.0 = app2.1.load[0] != Atom::NOP;
-                    app3.0 = app3.1.load[0] != Atom::NOP;
-                }
-                Atom::Y => {
-                    let in_app = &self.input.in_app;
-                    let mut spine_app: App = self.input.in_app.load.clone();
-                    let mut app1_app: [Atom; HOLES - 1] = Default::default();
-
-                    spine_app[0] = dash_atom(&in_app.load[1]);
-                    spine_app[1] = Atom::PTR(self.input.free_addr, false);
-                    app1_app[0] = dash_atom(&in_app.load[1]);
-                    app1_app[1] = Atom::PTR(self.input.free_addr, false);
-
-                    self.spine_holder.1.load = spine_app;
-                    self.app1_holder.1.load = app1_app;
-
-                    self.spine_holder.1.stack_idx = in_app.stack_idx;
-                    self.app1_holder.1.heap_addr = self.input.free_addr;
-
-                    self.spine_holder.0 = true;
-                    self.app1_holder.0 = true;
-                }
-                Atom::SEQ(true) => {
-                    let in_app = &self.input.in_app;
-                    let mut spine_app: App = Default::default();
-                    for (i, atom) in in_app.load.iter().skip(2).enumerate() {
-                        spine_app[i] = atom.clone();
-                    }
-                    self.spine_holder.1.load = spine_app;
-                    self.spine_holder.1.stack_idx = in_app.stack_idx;
-                    self.spine_holder.0 = true;
-                }
-                _ => panic!("reducer: app head is not a valid combinator!"),
-            }
+        if REDUCER_PIPE && fire(self.input.in_valid, self.in_ready()) {
+            let res = self.gen_result();
+            self.spine_holder = res.0;
+            self.app1_holder = res.1;
+            self.app2_holder = res.2;
+            self.app3_holder = res.3;
         }
     }
 
@@ -291,10 +373,10 @@ fn reducer_spec() {
     use Atom::*;
     let mut reducer = Reducer::new();
     let print_res = |r: &Reducer| {
-        println!("spine: {:?}", r.spine());
-        println!("app1: {:?}", r.app1());
-        println!("app2: {:?}", r.app2());
-        println!("app3: {:?}", r.app3());
+        // println!("spine: {:?}", r.spine());
+        // println!("app1: {:?}", r.app1());
+        // println!("app2: {:?}", r.app2());
+        // println!("app3: {:?}", r.app3());
         println!("==========================");
     };
 

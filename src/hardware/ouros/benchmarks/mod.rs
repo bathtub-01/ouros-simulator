@@ -39,3 +39,15 @@ pub use taut::*;
 
 pub mod whilex;
 pub use whilex::*;
+
+pub mod sumeuler;
+pub use sumeuler::*;
+
+pub mod treesum;
+pub use treesum::*;
+
+pub mod skiabseval;
+pub use skiabseval::*;
+
+pub mod treepari;
+pub use treepari::*;

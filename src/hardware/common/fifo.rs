@@ -21,15 +21,15 @@ pub struct FIFOStat {
     pub length_per_cycle: Vec<u8>,
 }
 
-/// FIFO, with size N. Supports pipelining when full.
-pub struct FIFO<T: Clone + Default, const N: usize> {
+/// FIFO, with size N. Optionally support pipelining.
+pub struct FIFO<T: Clone + Default, const N: usize, const P: bool> {
     pub input: FIFOInput<T>,
-    queue: VecDeque<T>,
+    pub queue: VecDeque<T>,
     stat: FIFOStat,
     record_stat: bool,
 }
 
-impl<T: Clone + Default, const N: usize> FIFO<T, N> {
+impl<T: Clone + Default, const N: usize, const P: bool> FIFO<T, N, P> {
     pub fn new() -> Self {
         Self {
             input: Default::default(),
@@ -45,7 +45,7 @@ impl<T: Clone + Default, const N: usize> FIFO<T, N> {
     }
 
     pub fn in_ready(&self) -> bool {
-        self.queue.len() < N || fire(self.input.out_ready, self.out_valid())
+        self.queue.len() < N || (P && fire(self.input.out_ready, self.out_valid()))
     }
 
     pub fn out_valid(&self) -> bool {
@@ -64,13 +64,12 @@ impl<T: Clone + Default, const N: usize> FIFO<T, N> {
     }
 }
 
-impl<T: Clone + Default, const N: usize> HwModule for FIFO<T, N> {
+impl<T: Clone + Default, const N: usize, const P: bool> HwModule for FIFO<T, N, P> {
     fn update_local(&mut self) {
         if fire(self.out_valid(), self.input.out_ready) {
             self.queue.pop_front();
         }
 
-        // to allow pipelining
         if fire(self.input.in_valid, self.in_ready()) {
             self.queue.push_back(self.input.din.clone());
         }
@@ -87,7 +86,7 @@ impl<T: Clone + Default, const N: usize> HwModule for FIFO<T, N> {
 
 #[test]
 fn fifo_spec() {
-    let mut fifo: FIFO<u32, 4> = FIFO::new();
+    let mut fifo: FIFO<u32, 4, true> = FIFO::new();
 
     fifo.tick();
 

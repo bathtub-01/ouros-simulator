@@ -4,6 +4,8 @@
 //  input ==>|     ALU    |===> output
 //           +------------+
 
+use super::program::AluOp::*;
+use super::program::Atom::*;
 use crate::{
     hardware::{
         ouros::{
@@ -43,7 +45,16 @@ pub struct Alu {
 
 impl Alu {
     pub fn new() -> Self {
-        Default::default()
+        Alu {
+            input: AluInput {
+                input_valid: false,
+                input_bits: Default::default(),
+                output_ready: true,
+            },
+            holder: Default::default(),
+            stat: Default::default(),
+            stat_detail_lv: Default::default(),
+        }
     }
 
     pub fn detail(mut self, lv: u8) -> Self {
@@ -60,31 +71,34 @@ impl Alu {
     }
 
     pub fn input_ready(&self) -> bool {
-        !self.holder.0 || self.output_fire()
+        if ALU_PIPE {
+            !self.holder.0 || self.output_fire()
+        } else {
+            self.output_fire()
+        }
     }
 
     pub fn output_valid(&self) -> bool {
-        self.holder.0
+        if ALU_PIPE {
+            self.holder.0
+        } else {
+            self.input.input_valid
+        }
     }
 
-    pub fn output_bits(&self) -> &ActiveApp {
-        &self.holder.1
+    pub fn output_bits(&self) -> ActiveApp {
+        if ALU_PIPE {
+            self.holder.1.clone()
+        } else {
+            self.gen_result()
+        }
     }
 
     pub fn get_stat(&self) -> &AluStat {
         &self.stat
     }
-}
 
-impl HwModule for Alu {
-    fn update_local(&mut self) {
-        use super::program::AluOp::*;
-        use super::program::Atom::*;
-
-        if self.output_fire() {
-            self.holder.0 = false;
-        }
-
+    fn gen_result(&self) -> ActiveApp {
         fn take_int(atom: &Atom) -> i32 {
             match *atom {
                 INT(i) => i,
@@ -94,47 +108,47 @@ impl HwModule for Alu {
             }
         }
 
-        if self.input_fire() {
-            let oprand1: i32 = take_int(&self.input.input_bits.load[1]);
-            let oprand2: i32 = take_int(&self.input.input_bits.load[2]);
-            let res: Atom;
+        let oprand1: i32 = take_int(&self.input.input_bits.load[1]);
+        let oprand2: i32 = take_int(&self.input.input_bits.load[2]);
+        let res: Atom;
 
-            fn comb_bool(b: bool, inv: &bool) -> Atom {
-                if b ^ inv {
-                    COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
-                } else {
-                    COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
-                }
+        fn comb_bool(b: bool, inv: &bool) -> Atom {
+            if b ^ inv {
+                COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
+            } else {
+                COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
             }
+        }
 
-            match &self.input.input_bits.load[0] {
-                PRM(op, inv) => match op {
-                    EQ => {
-                        res = comb_bool(oprand1 == oprand2, inv);
-                    }
-                    LE => {
-                        res = comb_bool(oprand1 <= oprand2, inv);
-                    }
-                    LT => {
-                        res = comb_bool(oprand1 < oprand2, inv);
-                    }
-                    ADD => {
-                        res = INT(oprand1 + oprand2);
-                    }
-                    SUB => {
-                        res = INT(oprand1 - oprand2);
-                    }
-                    MUL => {
-                        res = INT(oprand1 * oprand2);
-                    }
-                },
-                _ => {
-                    panic!("alu: app head is not an primitive op!");
+        match &self.input.input_bits.load[0] {
+            PRM(op, inv) => match op {
+                EQ => {
+                    res = comb_bool(oprand1 == oprand2, inv);
                 }
+                LE => {
+                    res = comb_bool(oprand1 <= oprand2, inv);
+                }
+                LT => {
+                    res = comb_bool(oprand1 < oprand2, inv);
+                }
+                ADD => {
+                    res = INT(oprand1 + oprand2);
+                }
+                SUB => {
+                    res = INT(oprand1 - oprand2);
+                }
+                MUL => {
+                    res = INT(oprand1 * oprand2);
+                }
+            },
+            _ => {
+                panic!("alu: app head is not an primitive op!");
             }
-            self.holder.0 = true;
-            self.holder.1.stack_idx = self.input.input_bits.stack_idx;
-            self.holder.1.load = {
+        }
+
+        ActiveApp {
+            stack_idx: self.input.input_bits.stack_idx,
+            load: {
                 let mut arr: App = Default::default();
                 arr[0] = res;
                 for i in 3..APP_LENGTH {
@@ -145,7 +159,20 @@ impl HwModule for Alu {
                     }
                 }
                 arr
-            }
+            },
+        }
+    }
+}
+
+impl HwModule for Alu {
+    fn update_local(&mut self) {
+        if fire(self.holder.0, self.input.output_ready) {
+            self.holder.0 = false;
+        }
+
+        if self.input_fire() {
+            self.holder.0 = true;
+            self.holder.1 = self.gen_result();
         }
     }
 

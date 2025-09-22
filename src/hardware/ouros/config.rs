@@ -6,6 +6,11 @@ pub struct OurosConfig {
     heap_size: usize,
     thread_stack_size: usize,
 }
+pub const MAX_THREADS: usize = 4;
+pub const BUFFER_SIZE: usize = MAX_THREADS + 1;
+
+pub const ALU_PIPE: bool = true;
+pub const REDUCER_PIPE: bool = true;
 
 // system-wise setup, changing them will require also modifying the compiler
 pub const HOLES: usize = 6;

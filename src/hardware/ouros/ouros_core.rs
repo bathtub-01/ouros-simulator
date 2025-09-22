@@ -4,6 +4,7 @@ use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{Arbiter, FIFO};
 use crate::hardware::ouros::program::app_length;
+use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
 use super::alu::{Alu, AluStat};
@@ -42,33 +43,32 @@ pub struct OurosCoreInput {
 
 impl HwInput for OurosCoreInput {}
 
-// TODO: add more detailed FIFO depth configuration.
 pub struct OurosCore {
     pub input: OurosCoreInput,
     pub dheap: DrfHeap,
     reducer: Reducer,
     alu: Alu,
 
-    buffers_dheap_a_0: FIFO<ActiveApp, 8>,
-    buffers_dheap_a_1: FIFO<ActiveApp, 8>,
-    buffers_dheap_a_2: FIFO<ActiveApp, 8>,
-    buffers_dheap_a_3: FIFO<ActiveApp, 8>,
+    buffers_dheap_a_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_dheap_a_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_dheap_a_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_dheap_a_3: FIFO<ActiveApp, BUFFER_SIZE, false>,
     arbiter_dheap_a: Arbiter<ActiveApp, 4>,
 
-    buffers_dheap_b_0: FIFO<FrozenApp, 8>,
-    buffers_dheap_b_1: FIFO<FrozenApp, 8>,
-    buffers_dheap_b_2: FIFO<FrozenApp, 8>,
+    buffers_dheap_b_0: FIFO<FrozenApp, BUFFER_SIZE, true>,
+    buffers_dheap_b_1: FIFO<FrozenApp, BUFFER_SIZE, true>,
+    buffers_dheap_b_2: FIFO<FrozenApp, BUFFER_SIZE, true>,
     arbiter_dheap_b: Arbiter<FrozenApp, 3>,
 
-    buffers_reducer_0: FIFO<ActiveApp, 8>,
-    buffers_reducer_1: FIFO<ActiveApp, 8>,
-    buffers_reducer_2: FIFO<ActiveApp, 8>,
-    buffers_reducer_3: FIFO<ActiveApp, 8>,
+    buffers_reducer_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_reducer_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_reducer_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_reducer_3: FIFO<ActiveApp, BUFFER_SIZE, false>,
     arbiter_reducer: Arbiter<ActiveApp, 4>,
 
-    buffers_alu_0: FIFO<ActiveApp, 8>,
-    buffers_alu_1: FIFO<ActiveApp, 8>,
-    buffers_alu_2: FIFO<ActiveApp, 8>,
+    buffers_alu_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_alu_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_alu_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
     arbiter_alu: Arbiter<ActiveApp, 3>,
 }
 
@@ -153,8 +153,8 @@ fn assign_some<T: Clone>(sink: &mut T, source: Option<&T>) {
 }
 
 /// Connect input buffers of the arbiter
-fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize>(
-    buffers: [&mut FIFO<T, N>; A],
+fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: bool>(
+    buffers: [&mut FIFO<T, N, P>; A],
     arbiter: &mut Arbiter<T, A>,
 ) {
     // first handle arbiter's inputs
@@ -180,6 +180,13 @@ pub fn is_seq(atom: &Atom) -> bool {
 pub fn is_seq_evaluated(atom: &Atom) -> bool {
     match atom {
         Atom::SEQ(evaluated) => *evaluated,
+        _ => false,
+    }
+}
+
+pub fn is_nop(atom: &Atom) -> bool {
+    match atom {
+        Atom::NOP => true,
         _ => false,
     }
 }
@@ -222,10 +229,8 @@ pub fn is_prm(atom: &Atom) -> bool {
 impl HwModule for OurosCore {
     fn update_local(&mut self) {
         /*
-        NOTICE: there is a combinatory logic ring in the whole cicuit,
-        which is critical to allow pipelining when buffers are full.
-        Due to the combinatory logic ring, the order of assigning inputs
-        matters and might be buggy here.
+        NOTICE: there is an assignment ring in the circuit, the order of
+        assigning inputs matters and might be buggy here.
         Keep this in mind if anything strange occurs in the future..
          */
         // set default inputs (for conditionally linked ports)
@@ -241,8 +246,15 @@ impl HwModule for OurosCore {
         self.buffers_alu_1.input.default_input();
         self.buffers_alu_2.input.default_input();
 
+        // self.dheap.input.out_main_ready = true;
+        // self.dheap.input.out_sub_ready = true;
+        // self.reducer.input.spine_ready = false;
+        // self.alu.input.output_ready = true;
+
         // connect start signal
         self.dheap.input.start = self.input.start;
+
+        self.reducer.input.free_addr = self.dheap.free_addr();
 
         // this 'kind of' fixes the ring problem
         for _ in 0..3 {
@@ -364,33 +376,36 @@ impl HwModule for OurosCore {
                 }
             }
 
-            self.buffers_dheap_b_0.input.in_valid = self.reducer.app1().0;
-            self.buffers_dheap_b_0.input.din = self.reducer.app1().1.clone();
             self.reducer.input.app1_ready = self.buffers_dheap_b_0.in_ready();
-
-            self.buffers_dheap_b_1.input.in_valid = self.reducer.app2().0;
-            self.buffers_dheap_b_1.input.din = self.reducer.app2().1.clone();
             self.reducer.input.app2_ready = self.buffers_dheap_b_1.in_ready();
-
-            self.buffers_dheap_b_2.input.in_valid = self.reducer.app3().0;
-            self.buffers_dheap_b_2.input.din = self.reducer.app3().1.clone();
             self.reducer.input.app3_ready = self.buffers_dheap_b_2.in_ready();
 
-            if self.reducer.spine().0 {
-                match get_dests(&self.reducer.spine().1.load) {
+            let reducer_output = self.reducer.out_bundle();
+
+            self.buffers_dheap_b_0.input.in_valid = reducer_output.1 .0;
+            self.buffers_dheap_b_0.input.din = reducer_output.1 .1;
+
+            self.buffers_dheap_b_1.input.in_valid = reducer_output.2 .0;
+            self.buffers_dheap_b_1.input.din = reducer_output.2 .1;
+
+            self.buffers_dheap_b_2.input.in_valid = reducer_output.3 .0;
+            self.buffers_dheap_b_2.input.din = reducer_output.3 .1;
+
+            if reducer_output.0 .0 {
+                match get_dests(&reducer_output.0 .1.load) {
                     DESTs::ToDHeap => {
                         self.buffers_dheap_a_1.input.in_valid = true;
-                        self.buffers_dheap_a_1.input.din = self.reducer.spine().1.clone();
+                        self.buffers_dheap_a_1.input.din = reducer_output.0 .1;
                         self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
                     }
                     DESTs::ToALU => {
                         self.buffers_alu_0.input.in_valid = true;
-                        self.buffers_alu_0.input.din = self.reducer.spine().1.clone();
+                        self.buffers_alu_0.input.din = reducer_output.0 .1;
                         self.reducer.input.spine_ready = self.buffers_alu_0.in_ready();
                     }
                     DESTs::ToReducer => {
                         self.buffers_reducer_0.input.in_valid = true;
-                        self.buffers_reducer_0.input.din = self.reducer.spine().1.clone();
+                        self.buffers_reducer_0.input.din = reducer_output.0 .1;
                         self.reducer.input.spine_ready = self.buffers_reducer_0.in_ready();
                     }
                 }
@@ -399,18 +414,17 @@ impl HwModule for OurosCore {
             if self.alu.output_valid() {
                 if !is_whnf(&self.alu.output_bits().load) {
                     self.buffers_reducer_2.input.in_valid = true;
-                    self.buffers_reducer_2.input.din = self.alu.output_bits().clone();
+                    self.buffers_reducer_2.input.din = self.alu.output_bits();
                     self.alu.input.output_ready = self.buffers_reducer_2.in_ready();
                 } else {
                     self.buffers_dheap_a_2.input.in_valid = true;
-                    self.buffers_dheap_a_2.input.din = self.alu.output_bits().clone();
+                    self.buffers_dheap_a_2.input.din = self.alu.output_bits();
                     self.alu.input.output_ready = self.buffers_dheap_a_2.in_ready();
                 }
             }
         }
 
         // gc control signals
-        self.reducer.input.free_addr = self.dheap.free_addr();
         self.dheap.input.addr_consumed = self.reducer.addr_consumed();
     }
 

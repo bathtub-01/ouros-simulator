@@ -3,9 +3,9 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Functions in this file: 22
-// Apps in this file: 75
-// Combinators in this file: 112
+// Functions in this file: 21
+// Apps in this file: 73
+// Combinators in this file: 111
 #[rustfmt::skip]
 pub static TAUT: LazyLock<Program> = LazyLock::new(|| {
     vec![
@@ -328,11 +328,11 @@ pub static TAUT: LazyLock<Program> = LazyLock::new(|| {
         vec![ // 58 
             PTR(5, false),
             COM(6,1,[5,0,0,0,0,0]), //XX
-            PTR(69, false),
+            PTR(67, false),
         ], 
         vec![ // 59 
             PTR(64, false),
-            PTR(66, false),
+            COM(7,2,[2,0,1,0,0,0]), //XXX
             PTR(58, false),
         ], 
         vec![ // 60 
@@ -346,12 +346,12 @@ pub static TAUT: LazyLock<Program> = LazyLock::new(|| {
         ], 
         vec![ // 62 
             PTR(5, false),
-            PTR(68, false),
-            PTR(69, false),
+            PTR(66, false),
+            PTR(67, false),
         ], 
         vec![ // 63 
             PTR(64, false),
-            PTR(66, false),
+            COM(7,2,[2,0,1,0,0,0]), //XXX
             PTR(62, false),
         ], 
          // FUN18NanoPrelude.foldr1
@@ -366,55 +366,44 @@ pub static TAUT: LazyLock<Program> = LazyLock::new(|| {
             COM(4,46,[3,2,0,1,2,3]), //XX(XXXX)
             COM(6,6,[0,2,1,3,0,0]), //XX(XX)
         ], 
-         // FUN19Taut.And
+         // FUN19Taut.imp
         vec![ // 66 
-            COM(4,16,[0,2,1,2,3,0]), //XX(XXX)
-            SEQ(false),
-            PTR(67, false),
-        ], 
-        vec![ // 67 
-            COM(4,16,[0,3,1,2,3,0]), //XX(XXX)
-            SEQ(false),
-            COM(7,2,[2,0,1,0,0,0]), //XXX
-        ], 
-         // FUN20Taut.imp
-        vec![ // 68 
             COM(5,15,[0,1,2,3,4,0]), //X(XX)(XX)
             COM(7,2,[4,0,1,0,0,0]), //XXX
             COM(6,1,[5,0,0,0,0,0]), //XX
             INT(42),
             COM(6,1,[5,0,0,0,0,0]), //XX
         ], 
-         // FUN21Taut.names
-        vec![ // 69 
+         // FUN20Taut.names
+        vec![ // 67 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(0),
-            PTR(74, false),
+            PTR(72, false),
         ], 
-        vec![ // 70 
+        vec![ // 68 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(5),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 71 
+        vec![ // 69 
             COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(4),
+            PTR(68, false),
+        ], 
+        vec![ // 70 
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            INT(3),
+            PTR(69, false),
+        ], 
+        vec![ // 71 
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            INT(2),
             PTR(70, false),
         ], 
         vec![ // 72 
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            INT(3),
-            PTR(71, false),
-        ], 
-        vec![ // 73 
-            COM(4,2,[3,0,1,0,0,0]), //XXX
-            INT(2),
-            PTR(72, false),
-        ], 
-        vec![ // 74 
-            COM(4,2,[3,0,1,0,0,0]), //XXX
             INT(1),
-            PTR(73, false),
+            PTR(71, false),
         ], 
     ]
 });

@@ -1,7 +1,7 @@
 use crate::hw_module::{HwInput, HwModule};
 
-#[derive(Default)]
-enum StackOp {
+#[derive(Default, Debug, PartialEq)]
+pub enum StackOp {
     #[default]
     NOP, // non-op
     PUSH, // push one
@@ -9,10 +9,10 @@ enum StackOp {
     MOD,  // modify top
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct StackInput<T: Clone + Default> {
-    op: StackOp,
-    din: T,
+    pub op: StackOp,
+    pub din: T,
 }
 
 impl<T: Clone + Default> HwInput for StackInput<T> {

@@ -1,8 +1,8 @@
 use crate::hardware::ouros::program::{AluOp, Atom, Program};
 use std::sync::LazyLock;
 use AluOp::*;
-use Atom::*; 
- 
+use Atom::*;
+
 // Functions in this file: 2
 // Apps in this file: 4
 // Combinators in this file: 3
