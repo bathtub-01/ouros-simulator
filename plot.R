@@ -33,6 +33,7 @@ plot <- ggplot(data_long, aes(x = time, y = value, color = metric)) +
     values = c("occupied" = "#5e81ac", "active" = "#bf616a"), # Custom colors for each line
     labels = c("Used resources", "Active threads") # New, custom labels for the legend
   ) +
+  scale_y_continuous(limits = c(0, 4)) +
   theme(
     plot.title = element_text(size = 12, hjust = 0.5),
     axis.title = element_text(size = 10),
@@ -44,7 +45,7 @@ plot <- ggplot(data_long, aes(x = time, y = value, color = metric)) +
     axis.ticks.length = unit(-0.15, "cm"),
     
     # Legend inside plot with black border
-    legend.position.inside = c(0.65, 0.3),
+    legend.position.inside = c(0.65, 0.15),
     legend.direction = "horizontal",  # Key change: horizontal layout
     legend.box.just = "center",      # Centers items in the legend box
     legend.text = element_text(size = 8, margin = margin(r = 1)),  # Smaller legend text
@@ -143,7 +144,7 @@ data_long <- pivot_longer(data, cols = -time, names_to = "variable", values_to =
 ggplot(data_long, aes(x = time, y = value)) +
   geom_line(color = "#5e81ac", linewidth = 0.5)+
   facet_wrap(~ variable, ncol = 3, scales = "free_y") +
-  scale_y_continuous(limits = c(0, 8)) +  # Force y-axis range
+  scale_y_continuous(limits = c(0, 5)) +  # Force y-axis range
   labs(x = "Cycle", y = "Buffer Depth") +
   theme_bw()
 ggsave("simu-out/buffer-util.pdf", width = 20, height = 16, units = "cm")

@@ -51,3 +51,6 @@ pub use skiabseval::*;
 
 pub mod treepari;
 pub use treepari::*;
+
+pub mod tribelie;
+pub use tribelie::*;

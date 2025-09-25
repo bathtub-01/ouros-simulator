@@ -4,8 +4,8 @@ use AluOp::*;
 use Atom::*; 
  
 // Functions in this file: 6
-// Apps in this file: 22
-// Combinators in this file: 35
+// Apps in this file: 21
+// Combinators in this file: 34
 #[rustfmt::skip]
 pub static TREEPARI: LazyLock<Program> = LazyLock::new(|| {
     vec![
@@ -15,12 +15,12 @@ pub static TREEPARI: LazyLock<Program> = LazyLock::new(|| {
             PTR(2, false),
         ], 
         vec![ // 1 
-            PTR(18, false),
+            PTR(17, false),
             INT(10),
         ], 
         vec![ // 2 
             PTR(4, false),
-            PTR(15, false),
+            PTR(14, false),
             PTR(1, false),
         ], 
          // FUN1TreePari.peek
@@ -72,58 +72,53 @@ pub static TREEPARI: LazyLock<Program> = LazyLock::new(|| {
         ], 
          // FUN3TreePari.xor
         vec![ // 12 
-            COM(4,16,[0,3,1,2,3,0]), //XX(XXX)
-            SEQ(false),
-            PTR(14, false),
+            COM(5,40,[3,4,0,1,2,4]), //X(XXX)(XX)
+            COM(2,0,[1,0,0,0,0,0]), //X
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(13, false),
         ], 
         vec![ // 13 
             COM(3,2,[2,0,1,0,0,0]), //XXX
             COM(2,0,[0,0,0,0,0,0]), //X
             COM(2,0,[1,0,0,0,0,0]), //X
         ], 
-        vec![ // 14 
-            COM(5,40,[3,4,0,1,2,4]), //X(XXX)(XX)
-            COM(2,0,[1,0,0,0,0,0]), //X
-            COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(13, false),
-        ], 
          // FUN4TreePari.withTwoLeaf
-        vec![ // 15 
+        vec![ // 14 
             COM(3,2,[2,0,1,0,0,0]), //XXX
             COM(2,0,[0,0,0,0,0,0]), //X
-            PTR(17, false),
+            PTR(16, false),
         ], 
-        vec![ // 16 
+        vec![ // 15 
             COM(3,0,[0,0,0,0,0,0]), //X
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 17 
+        vec![ // 16 
             COM(4,12,[2,3,0,1,1,0]), //X(XXX)X
             COM(2,0,[1,0,0,0,0,0]), //X
-            PTR(16, false),
+            PTR(15, false),
         ], 
          // FUN5TreePari.mkTree
-        vec![ // 18 
+        vec![ // 17 
             COM(3,2,[0,2,1,0,0,0]), //XXX
-            PTR(21, false),
+            PTR(20, false),
             COM(2,0,[0,0,0,0,0,0]), //X
         ], 
-        vec![ // 19 
+        vec![ // 18 
             COM(3,2,[0,2,1,0,0,0]), //XXX
             PRM(SUB,false),
             INT(1),
         ], 
-        vec![ // 20 
+        vec![ // 19 
             COM(3,15,[0,1,2,1,2,0]), //X(XX)(XX)
             COM(4,2,[3,0,1,0,0,0]), //XXX
-            PTR(18, false),
+            PTR(17, false),
         ], 
-        vec![ // 21 
+        vec![ // 20 
             COM(5,43,[0,4,1,2,3,4]), //XXX(X(XX))
             PRM(EQ,false),
             INT(0),
-            PTR(20, false),
             PTR(19, false),
+            PTR(18, false),
         ], 
     ]
 });

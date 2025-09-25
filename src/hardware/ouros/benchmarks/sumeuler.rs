@@ -1,15 +1,15 @@
 use crate::hardware::ouros::program::{AluOp, Atom, Program};
 use std::sync::LazyLock;
 use AluOp::*;
-use Atom::*;
-
+use Atom::*; 
+ 
 // Functions in this file: 15
 // Apps in this file: 46
 // Combinators in this file: 59
 #[rustfmt::skip]
 pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| {
     vec![
-         // FUN0TotientRange.main
+         // FUN0SumEuler.main
         vec![ // 0 
             PTR(2, false),
             PTR(1, false),
@@ -35,7 +35,7 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| {
             COM(5,16,[4,2,0,1,3,0]), //XX(XXX)
             COM(4,6,[0,2,1,3,0,0]), //XX(XX)
         ], 
-         // FUN3TotientRange.totients
+         // FUN3SumEuler.totients
         vec![ // 5 
             COM(3,5,[0,1,2,2,0,0]), //X(XX)X
             PTR(7, false),
@@ -68,7 +68,7 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| {
             COM(2,0,[0,0,0,0,0,0]), //X
             PTR(9, false),
         ], 
-         // FUN5TotientRange.euler
+         // FUN5SumEuler.euler
         vec![ // 11 
             COM(5,57,[0,1,2,4,3,4]), //X(X(XX)(XX))
             PTR(13, false),
@@ -119,14 +119,14 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| {
             COM(2,0,[0,0,0,0,0,0]), //X
             PTR(18, false),
         ], 
-         // FUN8TotientRange.relprime
+         // FUN8SumEuler.relprime
         vec![ // 20 
             COM(5,12,[0,1,3,4,2,0]), //X(XXX)X
             PRM(EQ,false),
             PTR(21, false),
             INT(1),
         ], 
-         // FUN9TotientRange.hcf
+         // FUN9SumEuler.hcf
         vec![ // 21 
             COM(3,5,[0,1,2,2,0,0]), //X(XX)X
             PTR(23, false),

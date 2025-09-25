@@ -132,8 +132,8 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
          // FUN4Adjoxo.hasLine
         vec![ // 22 
             COM(3,6,[0,2,1,2,0,0]), //XX(XX)
-            SEQ(false),
             PTR(54, false),
+            PTR(50, false),
         ], 
         vec![ // 23 
             COM(4,2,[3,0,1,0,0,0]), //XXX
@@ -302,11 +302,11 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| {
             PTR(52, false),
         ], 
         vec![ // 54 
-            COM(5,40,[0,1,2,4,3,4]), //X(XXX)(XX)
+            COM(5,58,[0,1,4,2,3,4]), //X(XX(XXX))
             PTR(55, false),
+            SEQ(false),
             PTR(56, false),
             PTR(53, false),
-            PTR(50, false),
         ], 
          // FUN5Data.Bool.||
         vec![ // 55 

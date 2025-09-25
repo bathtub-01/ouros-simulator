@@ -1183,10 +1183,9 @@ impl DrfHeap {
 
         match self.getIAs2(&ias1) {
             IAs2::NextStrictArgNewStk => {
+                let current_idx = self.holder_in.value().stack_idx as usize;
                 self.select_next_arg_read(&updated_dmder);
-                let frame_record = self.frame_stack[self.holder_in.value().stack_idx as usize]
-                    .top()
-                    .unwrap();
+                let frame_record = self.frame_stack[current_idx].top().unwrap();
                 if let Some((stk_id, _)) = self
                     .thread_stack
                     .iter()
@@ -1199,7 +1198,12 @@ impl DrfHeap {
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                     self.frame_stack[stk_id].push(self.gen_frame_record());
-                    // println!("{} pushed frame", stk_id);
+                    // !NEW! update current frame record, too (not good, hurts SUMEULER)
+                    // self.frame_stack[current_idx].modify({
+                    //     let mut record = self.frame_stack[current_idx].top().unwrap().clone();
+                    //     record[stk_id] = *self.addr_holder.value(); // next top of current stk
+                    //     record
+                    // });
                 };
             }
             IAs2::NextStrictArgLocal => {
