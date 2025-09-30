@@ -257,7 +257,7 @@ macro_rules! benchmarks {
 fn run_benchmarks() -> std::io::Result<()> {
     let (benchmarks, names) = benchmarks!(
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, TREESUM, WHILEX,
+        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TRIBELIE, TREEPARI, TREESUM, WHILEX,
     );
     let mut counter = 0;
     let results = benchmarks.map(|p| {
@@ -276,6 +276,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    inspect_prog(&TRIBELIE)
+    inspect_prog(&WHILEX)
     // run_benchmarks()
 }
