@@ -30,6 +30,12 @@ impl<T: Default + Clone> SinglePortMem<T> {
         }
     }
 
+    /// Set default contents in the ram.
+    pub fn image(&mut self, img: &Vec<T>) {
+        assert!(self.ram.len() >= img.len());
+        self.ram.splice(0..img.len(), img.clone());
+    }
+
     pub fn dout(&self) -> &T {
         &self.holder
     }

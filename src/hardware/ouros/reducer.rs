@@ -1,20 +1,17 @@
-// Reducer for structured combinators:
+// Reducer for combinators:
 //          +-----------------+===> spine
 // addr <-->| >               |
-// input ==>|     Reducer     |===> app1
-//          |                 |===> app2
-//          +-----------------+===> app3
-// The reducer is pipelined, and can handle one input in each
-// clcok cycle. Inputs and Outputs has ready-valid signals,
-// the reducer will be stalled if outputs fail to emit.
+// input ==>|     Reducer     |
+//          |                 |
+//          +-----------------+===> app
 
+use super::program::*;
+use crate::hardware::common::{Register, SinglePortMem};
 use crate::hardware::ouros::combinator::{parse_pat, Hole, ParseRes, ALL_PATTERNS, DECODE_TABLE};
 use crate::hardware::ouros::config::*;
 use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
-
-use super::ouros_core::is_nop;
 
 fn dash_atom(atom: &Atom) -> Atom {
     match atom {
@@ -23,14 +20,20 @@ fn dash_atom(atom: &Atom) -> Atom {
     }
 }
 
+#[derive(Default, Clone)]
+enum Stm {
+    #[default]
+    IDLE,
+    SPINE,
+    APP,
+}
+
 #[derive(Default)]
 pub struct ReducerInput {
     pub in_valid: bool,
     pub in_app: ActiveApp,
     pub spine_ready: bool,
-    pub app1_ready: bool,
-    pub app2_ready: bool,
-    pub app3_ready: bool,
+    pub app_ready: bool,
     pub free_addr: usize, // receive free address from GC
 }
 
@@ -45,35 +48,47 @@ pub struct ReducerStat {
 
 pub struct Reducer {
     pub input: ReducerInput,
-    decode_table: &'static [ParseRes; 64],
-    spine_holder: (bool, ActiveApp),
-    app1_holder: (bool, FrozenApp),
-    app2_holder: (bool, FrozenApp),
-    app3_holder: (bool, FrozenApp),
+    comb_table: SinglePortMem<App>,
+    regIn: Register<ActiveApp>,
+    regStm: Register<Stm>,
+    regIdx: Register<usize>,
+    regCtr: Register<usize>,
     stat: ReducerStat,
     stat_detail_lv: u8,
 }
 
 impl Reducer {
-    pub fn new() -> Self {
+    pub fn new(size: usize) -> Self {
         Self {
             input: ReducerInput {
                 in_valid: false,
                 in_app: Default::default(),
                 spine_ready: false,
-                app1_ready: false,
-                app2_ready: false,
-                app3_ready: false,
+                app_ready: false,
                 free_addr: Default::default(),
             },
-            decode_table: &DECODE_TABLE,
-            spine_holder: Default::default(),
-            app1_holder: Default::default(),
-            app2_holder: Default::default(),
-            app3_holder: Default::default(),
+            comb_table: SinglePortMem::new(size),
             stat: Default::default(),
             stat_detail_lv: Default::default(),
+            regIn: Default::default(),
+            regStm: Default::default(),
+            regIdx: Default::default(),
+            regCtr: Default::default(),
         }
+    }
+
+    pub fn program(mut self, prog: &Vec<Vec<Atom>>) -> Self {
+        fn convert(atms: &Vec<Atom>) -> App {
+            assert!(atms.len() <= APP_LENGTH);
+            let mut app: App = std::array::from_fn(|_| Atom::NOP);
+            for (i, atm) in atms.iter().enumerate() {
+                app[i] = atm.clone();
+            }
+            app
+        }
+        let img = prog.iter().map(convert).collect();
+        self.comb_table.image(&img);
+        self
     }
 
     pub fn detail(mut self, lv: u8) -> Self {
@@ -81,101 +96,66 @@ impl Reducer {
         self
     }
 
-    /// (spine, app1, app2, app3)
-    pub fn out_bundle(
-        &self,
-    ) -> (
-        (bool, ActiveApp),
-        (bool, FrozenApp),
-        (bool, FrozenApp),
-        (bool, FrozenApp),
-    ) {
-        if REDUCER_PIPE {
-            (
-                self.spine_holder.clone(),
-                self.app1_holder.clone(),
-                self.app2_holder.clone(),
-                self.app3_holder.clone(),
-            )
-        } else {
-            self.gen_result()
-        }
+    pub fn spine_valid(&self) -> bool {
+        unimplemented!()
     }
-    /*
-        pub fn spine(&self) -> &(bool, ActiveApp) {
-            if REDUCER_PIPE {
-                &self.spine_holder
-            } else {
-                unimplemented!()
-            }
-        }
 
-        pub fn app1(&self) -> &(bool, FrozenApp) {
-            if REDUCER_PIPE {
-                &self.app1_holder
-            } else {
-                unimplemented!()
-            }
-        }
+    pub fn spine_bits(&self) -> ActiveApp {
+        unimplemented!()
+    }
 
-        pub fn app2(&self) -> &(bool, FrozenApp) {
-            if REDUCER_PIPE {
-                &self.app2_holder
-            } else {
-                unimplemented!()
-            }
-        }
+    pub fn app_valid(&self) -> bool {
+        unimplemented!()
+    }
 
-        pub fn app3(&self) -> &(bool, FrozenApp) {
-            if REDUCER_PIPE {
-                &self.app3_holder
-            } else {
-                unimplemented!()
-            }
-        }
-    */
+    pub fn app_bits(&self) -> FrozenApp {
+        unimplemented!()
+    }
+
     pub fn in_ready(&self) -> bool {
-        if REDUCER_PIPE {
-            // all holder registers should be either (1) free or (2) firing in this cycle
-            let spine = self.spine_holder.0;
-            let app1 = self.app1_holder.0;
-            let app2 = self.app2_holder.0;
-            let app3 = self.app3_holder.0;
+        // if REDUCER_PIPE {
+        //     // all holder registers should be either (1) free or (2) firing in this cycle
+        //     let spine = self.spine_holder.0;
+        //     let app1 = self.app1_holder.0;
+        //     let app2 = self.app2_holder.0;
+        //     let app3 = self.app3_holder.0;
 
-            (!spine || fire(spine, self.input.spine_ready))
-                && (!app1 || fire(app1, self.input.app1_ready))
-                && (!app2 || fire(app2, self.input.app2_ready))
-                && (!app3 || fire(app3, self.input.app3_ready))
-        } else {
-            self.input.spine_ready
-                && self.input.app1_ready
-                && self.input.app2_ready
-                && self.input.app3_ready
-        }
+        //     (!spine || fire(spine, self.input.spine_ready))
+        //         && (!app1 || fire(app1, self.input.app1_ready))
+        //         && (!app2 || fire(app2, self.input.app2_ready))
+        //         && (!app3 || fire(app3, self.input.app3_ready))
+        // } else {
+        //     self.input.spine_ready
+        //         && self.input.app1_ready
+        //         && self.input.app2_ready
+        //         && self.input.app3_ready
+        // }
+        unimplemented!()
     }
 
     /// The number of heap cells will be consumed in this cycle
     pub fn addr_consumed(&self) -> usize {
-        if fire(self.input.in_valid, self.in_ready()) {
-            match self.input.in_app.load[0] {
-                Atom::COM(_, code, _) => {
-                    let res = &self.decode_table[code as usize];
-                    [
-                        res.app1.is_empty(),
-                        res.app2.is_empty(),
-                        res.app3.is_empty(),
-                    ]
-                    .iter()
-                    .filter(|&&x| !x)
-                    .count()
-                }
-                Atom::Y => 1,
-                Atom::SEQ(true) => 0,
-                _ => panic!("reducer: app head is not a valid combinator!"),
-            }
-        } else {
-            0
-        }
+        // if fire(self.input.in_valid, self.in_ready()) {
+        //     match self.input.in_app.load[0] {
+        //         Atom::COM(_, code, _) => {
+        //             let res = &self.decode_table[code as usize];
+        //             [
+        //                 res.app1.is_empty(),
+        //                 res.app2.is_empty(),
+        //                 res.app3.is_empty(),
+        //             ]
+        //             .iter()
+        //             .filter(|&&x| !x)
+        //             .count()
+        //         }
+        //         Atom::Y => 1,
+        //         Atom::SEQ(true) => 0,
+        //         _ => panic!("reducer: app head is not a valid combinator!"),
+        //     }
+        // } else {
+        //     0
+        // }
+        todo!()
     }
 
     pub fn get_stat(&self) -> &ReducerStat {
@@ -184,6 +164,35 @@ impl Reducer {
 
     pub fn in_fire(&self) -> bool {
         fire(self.input.in_valid, self.in_ready())
+    }
+
+    fn moreApp(&self) -> bool {
+        let idx = *self.regIdx.value();
+        idx == APP_LENGTH
+            && self
+                .regIn
+                .value()
+                .load
+                .iter()
+                .skip(idx as usize)
+                .any(is_new)
+    }
+
+    /// instantiate an app from template
+    fn inst(&self, app: &App) -> App {
+        let mut res: App = app.clone();
+        for a in &mut res {
+            match a {
+                Atom::PTR(p, _, new) => {
+                    if *new {
+                        *a = Atom::PTR(self.input.free_addr + *p, true, false);
+                    }
+                }
+                Atom::ARG(arg) => *a = self.regIn.value().load[*arg + 1].clone(),
+                _ => {}
+            }
+        }
+        res
     }
 
     fn gen_result(

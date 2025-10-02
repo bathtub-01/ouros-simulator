@@ -6,12 +6,9 @@
 //           +-----------------+
 
 use super::config::*;
-use super::ouros_core::{is_int, is_lit_atom, is_prm, is_seq_evaluated};
-use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
+use super::program::*;
 use crate::hardware::common::memory::DualPortMemStat;
-use crate::hardware::common::stack::StackOp;
 use crate::hardware::common::{DualPortMem, Register, Stack};
-use crate::hardware::ouros::ouros_core::is_ptr;
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 use std::fmt;
@@ -92,13 +89,6 @@ fn mask_seq(app: &App) -> App {
             }
         }
         _ => app.clone(),
-    }
-}
-
-fn is_unique_ptr(a: &Atom) -> bool {
-    match a {
-        Atom::PTR(_, true) => true,
-        _ => false,
     }
 }
 
@@ -408,7 +398,7 @@ impl DrfHeap {
     }
 
     /// When creating a `DrfHeap`, put a compiled program into the heap memory.
-    pub fn program(mut self, prog: &Program) -> Self {
+    pub fn program(mut self, prog: &Vec<Vec<Atom>>) -> Self {
         fn convert(atms: &Vec<Atom>) -> HeapCell {
             assert!(atms.len() <= APP_LENGTH);
             let mut app: App = std::array::from_fn(|_| Atom::NOP);

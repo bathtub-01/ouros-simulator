@@ -10,7 +10,7 @@ use crate::hw_module::{HwInput, HwModule};
 use super::alu::{Alu, AluStat};
 use super::config::*;
 use super::deref_heap_new::{DrfHeap, DrfHeapStat};
-use super::program::{is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
+use super::program::*;
 use super::reducer::{Reducer, ReducerStat};
 
 enum DESTs {
@@ -167,62 +167,6 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: 
     let select = arbiter.select();
     for (i, b) in buffers.into_iter().enumerate() {
         b.input.out_ready = arbiter.in_ready(i, select);
-    }
-}
-
-pub fn is_seq(atom: &Atom) -> bool {
-    match atom {
-        Atom::SEQ(_) => true,
-        _ => false,
-    }
-}
-
-pub fn is_seq_evaluated(atom: &Atom) -> bool {
-    match atom {
-        Atom::SEQ(evaluated) => *evaluated,
-        _ => false,
-    }
-}
-
-pub fn is_nop(atom: &Atom) -> bool {
-    match atom {
-        Atom::NOP => true,
-        _ => false,
-    }
-}
-
-pub fn is_ptr(atom: &Atom) -> bool {
-    match atom {
-        Atom::PTR(_, _) => true,
-        _ => false,
-    }
-}
-
-pub fn is_lit_atom(atom: &Atom) -> bool {
-    match atom {
-        Atom::NOP | Atom::PTR(_, _) => false,
-        _ => true,
-    }
-}
-
-pub fn is_comb(atom: &Atom) -> bool {
-    match atom {
-        Atom::COM(_, _, _) | Atom::Y => true,
-        _ => false,
-    }
-}
-
-pub fn is_int(atom: &Atom) -> bool {
-    match atom {
-        Atom::INT(_) => true,
-        _ => false,
-    }
-}
-
-pub fn is_prm(atom: &Atom) -> bool {
-    match atom {
-        Atom::PRM(_, _) => true,
-        _ => false,
     }
 }
 

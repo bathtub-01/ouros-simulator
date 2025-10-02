@@ -12,17 +12,20 @@ pub enum AluOp {
     MUL,
 }
 
+type Unique = bool;
+type NewCell = bool;
+type RevCond = bool;
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Atom {
     NOP,
-    /// (addr, unique flag)
-    PTR(usize, bool),
-    COM(Arity, u8, [Idx; HOLES]), // represent Pat with an u8
+    PTR(usize, Unique, NewCell),
+    COM(Arity, usize),
     INT(i32),
-    /// (operator, conditon revert bit)
-    PRM(AluOp, bool),
+    PRM(AluOp, RevCond),
     Y,
     SEQ(bool),
+    ARG(usize),
     ERR(u8),
 }
 
@@ -36,21 +39,13 @@ impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Atom::NOP => write!(f, "NOP"),
-            Atom::PTR(p, unique) => write!(f, "PTR({},{})", p, unique),
-            Atom::COM(arity, pat, holes) => {
-                // Format the array of Idx values as a comma-separated list
-                let holes_str = holes
-                    .iter()
-                    .take(holes_of(*pat))
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                write!(f, "COM({}, {}, [{}])", arity, pat, holes_str)
-            }
+            Atom::PTR(p, unique, _) => write!(f, "PTR({},{})", p, unique),
+            Atom::COM(arity, ptr) => write!(f, "COM({}, {})", arity, ptr),
             Atom::INT(n) => write!(f, "INT({})", n),
             Atom::PRM(p, inv) => write!(f, "PRM({:?}, {})", p, inv),
             Atom::Y => write!(f, "Y"),
             Atom::SEQ(evaluated) => write!(f, "SEQ({})", evaluated),
+            Atom::ARG(arg) => write!(f, "ARG({})", arg),
             Atom::ERR(e) => write!(f, "ERR({})", e),
         }
     }
@@ -67,12 +62,16 @@ pub struct ActiveApp {
 #[derive(Default, Clone, Debug)]
 pub struct FrozenApp {
     pub heap_addr: usize,
-    pub load: [Atom; HOLES - 1],
+    pub load: App,
 }
 
 /// For compiler generated programs. Using `Vec<Vec<Atom>>` instead of
 /// `Vec<App>` will make the compiler side easier..
-pub type Program = Vec<Vec<Atom>>;
+// pub type Program = Vec<Vec<Atom>>;
+pub struct Program {
+    heap_img: Vec<Vec<Atom>>,
+    comb_img: Vec<Vec<Atom>>,
+}
 
 fn arity_of(atom: &Atom) -> u8 {
     use Atom::*;
@@ -109,4 +108,74 @@ pub fn is_whnf(app: &App) -> bool {
     // +, a, b --- false
     // +, a    --- true
     arity_of(&app[0]) >= app_length(app) as u8
+}
+
+pub fn is_seq(atom: &Atom) -> bool {
+    match atom {
+        Atom::SEQ(_) => true,
+        _ => false,
+    }
+}
+
+pub fn is_seq_evaluated(atom: &Atom) -> bool {
+    match atom {
+        Atom::SEQ(evaluated) => *evaluated,
+        _ => false,
+    }
+}
+
+pub fn is_nop(atom: &Atom) -> bool {
+    match atom {
+        Atom::NOP => true,
+        _ => false,
+    }
+}
+
+pub fn is_ptr(atom: &Atom) -> bool {
+    match atom {
+        Atom::PTR(_, _) => true,
+        _ => false,
+    }
+}
+
+fn is_unique_ptr(a: &Atom) -> bool {
+    match a {
+        Atom::PTR(_, true) => true,
+        _ => false,
+    }
+}
+
+pub fn is_new(atom: &Atom) -> bool {
+    match atom {
+        Atom::PTR(_, _, new) => new,
+        _ => false,
+    }
+}
+
+pub fn is_lit_atom(atom: &Atom) -> bool {
+    match atom {
+        Atom::NOP | Atom::PTR(_, _) => false,
+        _ => true,
+    }
+}
+
+pub fn is_comb(atom: &Atom) -> bool {
+    match atom {
+        Atom::COM(_, _, _) | Atom::Y => true,
+        _ => false,
+    }
+}
+
+pub fn is_int(atom: &Atom) -> bool {
+    match atom {
+        Atom::INT(_) => true,
+        _ => false,
+    }
+}
+
+pub fn is_prm(atom: &Atom) -> bool {
+    match atom {
+        Atom::PRM(_, _) => true,
+        _ => false,
+    }
 }
