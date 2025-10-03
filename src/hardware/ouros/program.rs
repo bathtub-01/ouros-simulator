@@ -138,6 +138,13 @@ pub fn is_ptr(atom: &Atom) -> bool {
     }
 }
 
+pub fn get_ptr(atom: &Atom) -> usize {
+    match atom {
+        Atom::PTR(pt, _, _) => *pt,
+        _ => unimplemented!(),
+    }
+}
+
 fn is_unique_ptr(a: &Atom) -> bool {
     match a {
         Atom::PTR(_, true) => true,

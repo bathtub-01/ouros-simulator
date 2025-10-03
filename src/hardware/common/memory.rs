@@ -10,13 +10,14 @@ pub struct MemInput<T: Clone + Default> {
 
 impl<T: Clone + Default> HwInput for MemInput<T> {
     fn default_input(&mut self) {
+        self.enable = false;
         self.is_write = false;
     }
 }
 
 /// Synchronous single port read-write memory
 pub struct SinglePortMem<T: Clone + Default> {
-    input: MemInput<T>,
+    pub input: MemInput<T>,
     ram: Vec<T>,
     holder: T,
 }
@@ -39,14 +40,29 @@ impl<T: Default + Clone> SinglePortMem<T> {
     pub fn dout(&self) -> &T {
         &self.holder
     }
+
+    pub fn write(&mut self, addr: usize, din: T) {
+        self.input.enable = true;
+        self.input.is_write = true;
+        self.input.addr = addr;
+        self.input.din = din;
+    }
+
+    pub fn read(&mut self, addr: usize) {
+        self.input.enable = true;
+        self.input.is_write = false;
+        self.input.addr = addr;
+    }
 }
 
 impl<T: Default + Clone> HwModule for SinglePortMem<T> {
     fn update_local(&mut self) {
-        if self.input.is_write {
-            self.ram[self.input.addr] = self.input.din.clone();
-        } else {
-            self.holder = self.ram[self.input.addr].clone();
+        if self.input.enable {
+            if self.input.is_write {
+                self.ram[self.input.addr] = self.input.din.clone();
+            } else {
+                self.holder = self.ram[self.input.addr].clone();
+            }
         }
     }
 

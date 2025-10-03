@@ -50,6 +50,7 @@ pub struct Reducer {
     pub input: ReducerInput,
     comb_table: SinglePortMem<App>,
     regIn: Register<ActiveApp>,
+    regSpine: Register<App>,
     regStm: Register<Stm>,
     regIdx: Register<usize>,
     regCtr: Register<usize>,
@@ -71,6 +72,7 @@ impl Reducer {
             stat: Default::default(),
             stat_detail_lv: Default::default(),
             regIn: Default::default(),
+            regSpine: Default::default(),
             regStm: Default::default(),
             regIdx: Default::default(),
             regCtr: Default::default(),
@@ -166,16 +168,16 @@ impl Reducer {
         fire(self.input.in_valid, self.in_ready())
     }
 
-    fn moreApp(&self) -> bool {
-        let idx = *self.regIdx.value();
-        idx == APP_LENGTH
-            && self
-                .regIn
-                .value()
-                .load
-                .iter()
-                .skip(idx as usize)
-                .any(is_new)
+    fn more_app(&self, app: &App) -> bool {
+        let idx = *self.regIdx.value() + 1;
+        idx == APP_LENGTH && app.iter().skip(idx as usize).any(is_new)
+    }
+
+    fn find_app(&self, app: &App) -> usize {
+        let idx = *self.regIdx.value() + 1;
+        // x x x o * o o o
+        // 0 1 2 3 4 5 6 7
+        idx + app.iter().skip(idx).position(is_new).unwrap()
     }
 
     /// instantiate an app from template
@@ -325,30 +327,60 @@ impl Reducer {
 
         (res_spine, res_app1, res_app2, res_app3)
     }
+
+    fn step_next(&mut self) {
+        if self.in_fire() {
+            self.regStm.connect(&Stm::SPINE);
+            self.regIn.connect(&self.input.in_app);
+            self.regIdx.connect(&0);
+            self.regCtr.connect(&0);
+            match self.input.in_app.load[0] {
+                Atom::COM(_, addr) => self.comb_table.read(addr),
+                _ => todo!(),
+            };
+        } else {
+            self.regStm.connect(&Stm::IDLE);
+        }
+    }
 }
 
 impl HwModule for Reducer {
     fn update_local(&mut self) {
-        // FIXME: looks a bit wrong..
-        if fire(self.spine_holder.0, self.input.spine_ready) {
-            self.spine_holder.0 = false;
-        }
-        if fire(self.app1_holder.0, self.input.app1_ready) {
-            self.app1_holder.0 = false;
-        }
-        if fire(self.app2_holder.0, self.input.app2_ready) {
-            self.app2_holder.0 = false;
-        }
-        if fire(self.app3_holder.0, self.input.app3_ready) {
-            self.app3_holder.0 = false;
-        }
-
-        if REDUCER_PIPE && fire(self.input.in_valid, self.in_ready()) {
-            let res = self.gen_result();
-            self.spine_holder = res.0;
-            self.app1_holder = res.1;
-            self.app2_holder = res.2;
-            self.app3_holder = res.3;
+        self.comb_table.input.default_input();
+        match *self.regStm.value() {
+            Stm::IDLE => {
+                self.step_next();
+            }
+            Stm::SPINE => {
+                // this state won't be blocked.
+                let template = self.comb_table.dout();
+                let founded = self.find_app(template);
+                if self.more_app(template) {
+                    self.regSpine.connect(template);
+                    self.regStm.connect(&Stm::APP);
+                    self.regIdx.connect(&founded);
+                    self.regCtr.connect(&1);
+                    self.comb_table.read(get_ptr(&template[founded]));
+                } else {
+                    self.step_next();
+                }
+            }
+            Stm::APP => {
+                let template = self.regSpine.value();
+                if fire(self.input.app_ready, self.app_valid()) {
+                    if self.more_app(template) {
+                        let founded = self.find_app(template);
+                        self.regIdx.connect(&founded);
+                        self.regCtr.connect(&(*self.regCtr.value() + 1));
+                    } else {
+                        self.step_next();
+                    }
+                } else {
+                    // fail to fire, keep reading
+                    self.comb_table
+                        .read(get_ptr(&template[*self.regIdx.value()]));
+                }
+            }
         }
     }
 
