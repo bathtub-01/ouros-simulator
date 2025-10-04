@@ -76,7 +76,7 @@ pub struct Program {
 fn arity_of(atom: &Atom) -> u8 {
     use Atom::*;
     match atom {
-        COM(a, _, _) => *a,
+        COM(a, _) => *a,
         PRM(_, _) => 2,
         INT(_) => 1,
         Y => 1,
@@ -133,7 +133,7 @@ pub fn is_nop(atom: &Atom) -> bool {
 
 pub fn is_ptr(atom: &Atom) -> bool {
     match atom {
-        Atom::PTR(_, _) => true,
+        Atom::PTR(_, _, _) => true,
         _ => false,
     }
 }
@@ -145,30 +145,30 @@ pub fn get_ptr(atom: &Atom) -> usize {
     }
 }
 
-fn is_unique_ptr(a: &Atom) -> bool {
+pub fn is_unique_ptr(a: &Atom) -> bool {
     match a {
-        Atom::PTR(_, true) => true,
+        Atom::PTR(_, true, _) => true,
         _ => false,
     }
 }
 
 pub fn is_new(atom: &Atom) -> bool {
     match atom {
-        Atom::PTR(_, _, new) => new,
+        Atom::PTR(_, _, new) => *new,
         _ => false,
     }
 }
 
 pub fn is_lit_atom(atom: &Atom) -> bool {
     match atom {
-        Atom::NOP | Atom::PTR(_, _) => false,
+        Atom::NOP | Atom::PTR(_, _, _) => false,
         _ => true,
     }
 }
 
 pub fn is_comb(atom: &Atom) -> bool {
     match atom {
-        Atom::COM(_, _, _) | Atom::Y => true,
+        Atom::COM(_, _) | Atom::Y => true,
         _ => false,
     }
 }

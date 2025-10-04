@@ -20,7 +20,7 @@ fn dash_atom(atom: &Atom) -> Atom {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq, Debug)]
 enum Stm {
     #[default]
     IDLE,
@@ -49,11 +49,12 @@ pub struct ReducerStat {
 pub struct Reducer {
     pub input: ReducerInput,
     comb_table: SinglePortMem<App>,
-    regIn: Register<ActiveApp>,
-    regSpine: Register<App>,
-    regStm: Register<Stm>,
-    regIdx: Register<usize>,
-    regCtr: Register<usize>,
+    reg_in: Register<ActiveApp>,
+    reg_addr: Register<usize>,
+    reg_spine: Register<App>,
+    reg_stm: Register<Stm>,
+    reg_idx: Register<usize>,
+    reg_ctr: Register<usize>,
     stat: ReducerStat,
     stat_detail_lv: u8,
 }
@@ -71,11 +72,12 @@ impl Reducer {
             comb_table: SinglePortMem::new(size),
             stat: Default::default(),
             stat_detail_lv: Default::default(),
-            regIn: Default::default(),
-            regSpine: Default::default(),
-            regStm: Default::default(),
-            regIdx: Default::default(),
-            regCtr: Default::default(),
+            reg_in: Default::default(),
+            reg_addr: Default::default(),
+            reg_spine: Default::default(),
+            reg_stm: Default::default(),
+            reg_idx: Default::default(),
+            reg_ctr: Default::default(),
         }
     }
 
@@ -99,65 +101,54 @@ impl Reducer {
     }
 
     pub fn spine_valid(&self) -> bool {
-        unimplemented!()
+        *self.reg_stm.value() == Stm::SPINE
     }
 
     pub fn spine_bits(&self) -> ActiveApp {
-        unimplemented!()
+        ActiveApp {
+            stack_idx: self.reg_in.value().stack_idx,
+            load: self.inst(&self.comb_table.dout()),
+        }
+        // FIXME: handle over-applied spine
     }
 
     pub fn app_valid(&self) -> bool {
-        unimplemented!()
+        *self.reg_stm.value() == Stm::APP
     }
 
     pub fn app_bits(&self) -> FrozenApp {
-        unimplemented!()
+        FrozenApp {
+            heap_addr: *self.reg_addr.value() + *self.reg_ctr.value(),
+            load: self.inst(&self.comb_table.dout()),
+        }
     }
 
     pub fn in_ready(&self) -> bool {
-        // if REDUCER_PIPE {
-        //     // all holder registers should be either (1) free or (2) firing in this cycle
-        //     let spine = self.spine_holder.0;
-        //     let app1 = self.app1_holder.0;
-        //     let app2 = self.app2_holder.0;
-        //     let app3 = self.app3_holder.0;
-
-        //     (!spine || fire(spine, self.input.spine_ready))
-        //         && (!app1 || fire(app1, self.input.app1_ready))
-        //         && (!app2 || fire(app2, self.input.app2_ready))
-        //         && (!app3 || fire(app3, self.input.app3_ready))
-        // } else {
-        //     self.input.spine_ready
-        //         && self.input.app1_ready
-        //         && self.input.app2_ready
-        //         && self.input.app3_ready
-        // }
-        unimplemented!()
+        match *self.reg_stm.value() {
+            Stm::IDLE => true,
+            Stm::SPINE => !self.more_app(self.comb_table.dout()),
+            Stm::APP => {
+                fire(self.input.app_ready, self.app_valid())
+                    && !self.more_app(self.reg_spine.value())
+            }
+        }
     }
 
-    /// The number of heap cells will be consumed in this cycle
+    /// The number of heap cells that will be consumed in this cycle
     pub fn addr_consumed(&self) -> usize {
-        // if fire(self.input.in_valid, self.in_ready()) {
-        //     match self.input.in_app.load[0] {
-        //         Atom::COM(_, code, _) => {
-        //             let res = &self.decode_table[code as usize];
-        //             [
-        //                 res.app1.is_empty(),
-        //                 res.app2.is_empty(),
-        //                 res.app3.is_empty(),
-        //             ]
-        //             .iter()
-        //             .filter(|&&x| !x)
-        //             .count()
-        //         }
-        //         Atom::Y => 1,
-        //         Atom::SEQ(true) => 0,
-        //         _ => panic!("reducer: app head is not a valid combinator!"),
-        //     }
-        // } else {
-        //     0
-        // }
-        todo!()
+        if self.in_fire() {
+            self.input
+                .in_app
+                .load
+                .iter()
+                .filter(|a| match a {
+                    Atom::PTR(_, _, new) => *new,
+                    _ => false,
+                })
+                .count()
+        } else {
+            0
+        }
     }
 
     pub fn get_stat(&self) -> &ReducerStat {
@@ -169,12 +160,12 @@ impl Reducer {
     }
 
     fn more_app(&self, app: &App) -> bool {
-        let idx = *self.regIdx.value() + 1;
+        let idx = *self.reg_idx.value() + 1;
         idx == APP_LENGTH && app.iter().skip(idx as usize).any(is_new)
     }
 
     fn find_app(&self, app: &App) -> usize {
-        let idx = *self.regIdx.value() + 1;
+        let idx = *self.reg_idx.value() + 1;
         // x x x o * o o o
         // 0 1 2 3 4 5 6 7
         idx + app.iter().skip(idx).position(is_new).unwrap()
@@ -187,10 +178,11 @@ impl Reducer {
             match a {
                 Atom::PTR(p, _, new) => {
                     if *new {
+                        assert_eq!(*self.reg_stm.value(), Stm::SPINE);
                         *a = Atom::PTR(self.input.free_addr + *p, true, false);
                     }
                 }
-                Atom::ARG(arg) => *a = self.regIn.value().load[*arg + 1].clone(),
+                Atom::ARG(arg) => *a = self.reg_in.value().load[*arg + 1].clone(),
                 _ => {}
             }
         }
@@ -330,16 +322,17 @@ impl Reducer {
 
     fn step_next(&mut self) {
         if self.in_fire() {
-            self.regStm.connect(&Stm::SPINE);
-            self.regIn.connect(&self.input.in_app);
-            self.regIdx.connect(&0);
-            self.regCtr.connect(&0);
+            self.reg_stm.connect(&Stm::SPINE);
+            self.reg_in.connect(&self.input.in_app);
+            self.reg_idx.connect(&0);
+            self.reg_ctr.connect(&0);
+            self.reg_addr.connect(&self.input.free_addr);
             match self.input.in_app.load[0] {
                 Atom::COM(_, addr) => self.comb_table.read(addr),
                 _ => todo!(),
             };
         } else {
-            self.regStm.connect(&Stm::IDLE);
+            self.reg_stm.connect(&Stm::IDLE);
         }
     }
 }
@@ -347,7 +340,7 @@ impl Reducer {
 impl HwModule for Reducer {
     fn update_local(&mut self) {
         self.comb_table.input.default_input();
-        match *self.regStm.value() {
+        match *self.reg_stm.value() {
             Stm::IDLE => {
                 self.step_next();
             }
@@ -356,29 +349,29 @@ impl HwModule for Reducer {
                 let template = self.comb_table.dout();
                 let founded = self.find_app(template);
                 if self.more_app(template) {
-                    self.regSpine.connect(template);
-                    self.regStm.connect(&Stm::APP);
-                    self.regIdx.connect(&founded);
-                    self.regCtr.connect(&1);
+                    self.reg_spine.connect(template);
+                    self.reg_stm.connect(&Stm::APP);
+                    self.reg_idx.connect(&founded);
+                    self.reg_ctr.connect(&1);
                     self.comb_table.read(get_ptr(&template[founded]));
                 } else {
                     self.step_next();
                 }
             }
             Stm::APP => {
-                let template = self.regSpine.value();
+                let template = self.reg_spine.value();
                 if fire(self.input.app_ready, self.app_valid()) {
                     if self.more_app(template) {
                         let founded = self.find_app(template);
-                        self.regIdx.connect(&founded);
-                        self.regCtr.connect(&(*self.regCtr.value() + 1));
+                        self.reg_idx.connect(&founded);
+                        self.reg_ctr.connect(&(*self.reg_ctr.value() + 1));
                     } else {
                         self.step_next();
                     }
                 } else {
                     // fail to fire, keep reading
                     self.comb_table
-                        .read(get_ptr(&template[*self.regIdx.value()]));
+                        .read(get_ptr(&template[*self.reg_idx.value()]));
                 }
             }
         }

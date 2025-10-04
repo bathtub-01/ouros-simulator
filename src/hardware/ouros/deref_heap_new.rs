@@ -69,8 +69,8 @@ fn extend_to_app<const N: usize>(atms: &[Atom; N]) -> App {
 fn dash_app(app: &App) -> App {
     let mut res = app.clone();
     for atom in res.iter_mut() {
-        if let Atom::PTR(p, _) = atom {
-            *atom = Atom::PTR(*p, false);
+        if let Atom::PTR(p, _, false) = atom {
+            *atom = Atom::PTR(*p, false, false);
         }
     }
     res
@@ -182,17 +182,17 @@ enum WORKs {
 /// select the first pointer to deref, returns (arg position, pointer value)
 fn select_1st_arg(app: &App) -> (usize, usize) {
     match app[0] {
-        Atom::PTR(p, _) => (0, p),
+        Atom::PTR(p, _, false) => (0, p),
         Atom::PRM(_, _) | Atom::SEQ(false) => match app[1] {
-            Atom::PTR(p, _) => (1, p),
+            Atom::PTR(p, _, false) => (1, p),
             Atom::NOP => unreachable!(),
             _ => match app[2] {
-                Atom::PTR(p, _) => (2, p),
+                Atom::PTR(p, _, false) => (2, p),
                 _ => unreachable!(),
             },
         },
         Atom::SEQ(true) => match app[2] {
-            Atom::PTR(p, _) => (2, p),
+            Atom::PTR(p, _, false) => (2, p),
             // NOTE: currently rejecting things like `seq a 1` (direct it to reducer will be easier)
             _ => {
                 println!("app: {:?}", app);
@@ -206,7 +206,7 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
 /// select the next strict arg, returns (arg position, pointer value)
 fn select_next_arg(app: &App, current: usize) -> (usize, usize) {
     match app[2] {
-        Atom::PTR(p, _) => (2, p),
+        Atom::PTR(p, _, false) => (2, p),
         _ => unreachable!(),
     }
 }
@@ -232,7 +232,7 @@ fn vec_to_app(v: Vec<Atom>) -> App {
 fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Option<App>) {
     assert!(is_ptr(&app[arg_id]));
     let unique: bool = match app[arg_id] {
-        Atom::PTR(_, true) => true,
+        Atom::PTR(_, true, _) => true,
         _ => false,
     };
     let target_dashed = if unique { target } else { &dash_app(target) };
@@ -267,7 +267,7 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
         (vec_to_app(res_v), None)
     } else {
         let mut wb_app = res_v[APP_LENGTH..res_v.len()].to_vec();
-        wb_app.insert(0, Atom::PTR(free_addr, unique));
+        wb_app.insert(0, Atom::PTR(free_addr, unique, false));
         (
             vec_to_app(res_v[0..APP_LENGTH].to_vec()),
             Some(vec_to_app(wb_app)),
@@ -279,9 +279,9 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
 fn deref_spec() {
     use Atom::*;
     let app: App = [
-        PTR(0, true),
+        PTR(0, true, false),
         INT(1),
-        PTR(2, true),
+        PTR(2, true, false),
         INT(3),
         NOP,
         NOP,
@@ -289,46 +289,55 @@ fn deref_spec() {
         NOP,
     ];
     let target1: App = [
-        PTR(11, true),
-        PTR(22, true),
-        PTR(33, true),
-        PTR(44, true),
-        PTR(55, true),
+        PTR(11, true, false),
+        PTR(22, true, false),
+        PTR(33, true, false),
+        PTR(44, true, false),
+        PTR(55, true, false),
         NOP,
         NOP,
         NOP,
     ];
     let target2: App = [
-        PTR(11, true),
-        PTR(22, true),
-        PTR(33, true),
-        PTR(44, true),
-        PTR(55, true),
-        PTR(66, true),
-        PTR(77, true),
+        PTR(11, true, false),
+        PTR(22, true, false),
+        PTR(33, true, false),
+        PTR(44, true, false),
+        PTR(55, true, false),
+        PTR(66, true, false),
+        PTR(77, true, false),
         NOP,
     ];
     let res1: App = [
-        PTR(0, true),
+        PTR(0, true, false),
         INT(1),
-        PTR(11, true),
-        PTR(22, true),
-        PTR(33, true),
-        PTR(44, true),
-        PTR(55, true),
+        PTR(11, true, false),
+        PTR(22, true, false),
+        PTR(33, true, false),
+        PTR(44, true, false),
+        PTR(55, true, false),
         INT(3),
     ];
     let res2_1: App = [
-        PTR(11, true),
-        PTR(22, true),
-        PTR(33, true),
-        PTR(44, true),
-        PTR(55, true),
-        PTR(66, true),
-        PTR(77, true),
+        PTR(11, true, false),
+        PTR(22, true, false),
+        PTR(33, true, false),
+        PTR(44, true, false),
+        PTR(55, true, false),
+        PTR(66, true, false),
+        PTR(77, true, false),
         INT(1),
     ];
-    let res2_2: App = [PTR(42, true), PTR(2, true), INT(3), NOP, NOP, NOP, NOP, NOP];
+    let res2_2: App = [
+        PTR(42, true, false),
+        PTR(2, true, false),
+        INT(3),
+        NOP,
+        NOP,
+        NOP,
+        NOP,
+        NOP,
+    ];
     assert_eq!(deref(&app, 2, &target1, 42), (res1, None));
     assert_eq!(deref(&app, 0, &target2, 42), (res2_1, Some(res2_2)));
 }
@@ -684,7 +693,7 @@ impl DrfHeap {
         let local_stack: bool = *s1 == IAs1::ExistWHNF || *s1 == IAs1::ExistIAWorkingAtNewFrame;
         let more_strict_args: bool = {
             match ia[0] {
-                Atom::PTR(_, _) => false,
+                Atom::PTR(_, _, _) => false,
                 Atom::PRM(_, _) | Atom::SEQ(_) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
                 // more on this to support strict args in the future
                 _ => unreachable!(),
@@ -976,20 +985,20 @@ impl DrfHeap {
     /// if the resolved pointer is unique, update can be avoided
     fn can_avoid_update(&self) -> bool {
         match &self.heap_mem.dout_a().app[0] {
-            Atom::PTR(_, true) => true,
+            Atom::PTR(_, true, _) => true,
             Atom::PRM(_, _) => match &self.heap_mem.dout_a().app[1] {
-                Atom::PTR(_, unique) => *unique,
+                Atom::PTR(_, unique, _) => *unique,
                 _ => match &self.heap_mem.dout_a().app[2] {
-                    Atom::PTR(_, true) => true,
+                    Atom::PTR(_, true, _) => true,
                     _ => false,
                 },
             },
             Atom::SEQ(false) => match &self.heap_mem.dout_a().app[1] {
-                Atom::PTR(_, unique) => *unique,
+                Atom::PTR(_, unique, _) => *unique,
                 _ => false,
             },
             Atom::SEQ(true) => match &self.heap_mem.dout_a().app[2] {
-                Atom::PTR(_, unique) => *unique,
+                Atom::PTR(_, unique, _) => *unique,
                 _ => false,
             },
             _ => false,
