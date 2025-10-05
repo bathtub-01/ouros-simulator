@@ -34,19 +34,6 @@ pub static BOOL_AND: LazyLock<Program> = LazyLock::new(|| {
             vec![ARG(0), ARG(1) ,COM(2, 1)]
         ],        
     }
-    // vec![
-    //     // main
-    //     vec![ // 0
-    //         PTR(1, false),
-    //         COM(2,0,[0,0,0,0,0,0]), // X
-    //         COM(2,0,[1,0,0,0,0,0]), // X
-    //     ],
-    //     // tfAnd
-    //     vec![ // 1
-    //         COM(3,2,[1,2,0,0,0,0]), // XXX
-    //         COM(2,0,[1,0,0,0,0,0]), // X
-    //     ],
-    // ]
 });
 
 /**
@@ -55,40 +42,71 @@ main = let a = tfAnd T
            b = ftAnd (a T) (a F)
        in tfOr b b
  */
-// #[rustfmt::skip]
-// pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
-//     vec![
-//         // main
-//         vec![ // 0
-//             PTR(4, false),
-//             PTR(2, false),
-//             PTR(2, false)
-//         ],
-//         // tfAnd
-//         vec![ // 1
-//             COM(3,2,[1,2,0,0,0,0]), // XXX
-//             COM(2,0,[1,0,0,0,0,0]), // X
-//         ],
-//         // b
-//         vec![ // 2
-//             COM(4,15,[0,1,2,1,3,0]), // X(XX)(XX)
-//             PTR(1, false),
-//             PTR(3, false), // a
-//             COM(2,0,[0,0,0,0,0,0]), // T
-//             COM(2,0,[1,0,0,0,0,0]), // F
-//         ],
-//         // a
-//         vec![ // 3
-//             PTR(1, false),
-//             COM(2,0,[0,0,0,0,0,0]), // X
-//         ],
-//         // tfOr
-//         vec![ // 4
-//             COM(2,1,[1,0,0,0,0,0]), // XX
-//             COM(2,0,[0,0,0,0,0,0]), // T
-//         ],
-//     ]
-// });
+#[rustfmt::skip]
+pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
+    Program {
+        heap_img: vec![
+            vec![ // main
+                COM(2, 2),
+                PTR(1, false, false),
+                PTR(1, false, false)
+            ],
+            vec![ // b
+                COM(1, 4),
+                PTR(2, false, false)
+            ],
+            vec![ // a
+                COM(2, 3),
+                COM(2, 0)
+            ]
+        ],
+        comb_img: vec![
+            // True 0
+            vec![ARG(0)],
+            // False 1
+            vec![ARG(1)],
+            // tfOr 2
+            vec![ARG(0), COM(2, 0), ARG(1)],
+            // tfAnd 3
+            vec![ARG(0), ARG(1) ,COM(2, 1)],
+            // b-body 4
+            vec![COM(2, 3), PTR(0, true, true), PTR(1, true, true)],
+            vec![ARG(0), COM(2, 0)],
+            vec![ARG(0), COM(2, 1)]
+        ]
+    }
+    // vec![
+    //     // main
+    //     vec![ // 0
+    //         PTR(4, false),
+    //         PTR(2, false),
+    //         PTR(2, false)
+    //     ],
+    //     // tfAnd
+    //     vec![ // 1
+    //         COM(3,2,[1,2,0,0,0,0]), // XXX
+    //         COM(2,0,[1,0,0,0,0,0]), // X
+    //     ],
+    //     // b
+    //     vec![ // 2
+    //         COM(4,15,[0,1,2,1,3,0]), // X(XX)(XX)
+    //         PTR(1, false),
+    //         PTR(3, false), // a
+    //         COM(2,0,[0,0,0,0,0,0]), // T
+    //         COM(2,0,[1,0,0,0,0,0]), // F
+    //     ],
+    //     // a
+    //     vec![ // 3
+    //         PTR(1, false),
+    //         COM(2,0,[0,0,0,0,0,0]), // X
+    //     ],
+    //     // tfOr
+    //     vec![ // 4
+    //         COM(2,1,[1,0,0,0,0,0]), // XX
+    //         COM(2,0,[0,0,0,0,0,0]), // T
+    //     ],
+    // ]
+});
 
 /**
 main = let a = 4 + 5

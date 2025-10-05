@@ -246,6 +246,13 @@ impl HwModule for OurosCore {
                     }
                 }
             });
+            if self.buffers_dheap_b.out_valid() {
+                println!(
+                    "buffers valid: {:?}, heap ready: {}",
+                    self.buffers_dheap_b.dout(),
+                    self.dheap.port_b_ready()
+                );
+            }
             self.reducer.input.link(|input| {
                 input.in_valid = self.arbiter_reducer.out_valid();
                 match self.arbiter_reducer.out_bits(self.arbiter_reducer.select()) {
@@ -311,6 +318,7 @@ impl HwModule for OurosCore {
 
             self.buffers_dheap_b.input.in_valid = self.reducer.app_valid();
             self.buffers_dheap_b.input.din = self.reducer.app_bits().clone();
+            self.buffers_dheap_b.input.out_ready = self.dheap.port_b_ready();
 
             let out_spine = &self.reducer.spine_bits();
             if self.reducer.spine_valid() {
@@ -385,7 +393,7 @@ fn ouros_core_spec() {
     // [(program, result)]
     let progs = [
         (&BOOL_AND, COM(2, 1)),
-        // (&BOOL_NEST, COM(2, 0, [1, 0, 0, 0, 0, 0])),
+        (&BOOL_NEST, COM(2, 1)),
         // (&ALU_OP, INT(162)),
         // (&MAP_Y, INT(1275)),
         // (&DEADLOCK, INT(29380)),

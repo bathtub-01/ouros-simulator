@@ -182,6 +182,13 @@ pub fn is_comb(atom: &Atom) -> bool {
     }
 }
 
+pub fn get_comb_addr(atom: &Atom) -> usize {
+    match atom {
+        Atom::COM(_, addr) => *addr,
+        _ => unimplemented!(),
+    }
+}
+
 pub fn is_int(atom: &Atom) -> bool {
     match atom {
         Atom::INT(_) => true,

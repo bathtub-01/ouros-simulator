@@ -118,7 +118,14 @@ impl Reducer {
 
     pub fn app_bits(&self) -> FrozenApp {
         FrozenApp {
-            heap_addr: *self.reg_addr.value() + *self.reg_ctr.value(),
+            heap_addr: *self.reg_addr.value() + *self.reg_ctr.value() - {
+                if self.app_valid() {
+                    // only to satify Rust..
+                    1
+                } else {
+                    0
+                }
+            },
             load: self.inst(&self.comb_table.dout()),
         }
     }
@@ -161,7 +168,7 @@ impl Reducer {
 
     fn more_app(&self, app: &App) -> bool {
         let idx = *self.reg_idx.value() + 1;
-        idx == APP_LENGTH && app.iter().skip(idx as usize).any(is_new)
+        app.iter().skip(idx as usize).any(is_new)
     }
 
     fn find_app(&self, app: &App) -> usize {
@@ -178,7 +185,7 @@ impl Reducer {
             match a {
                 Atom::PTR(p, _, new) => {
                     if *new {
-                        assert_eq!(*self.reg_stm.value(), Stm::SPINE);
+                        // assert_eq!(*self.reg_stm.value(), Stm::SPINE);
                         *a = Atom::PTR(self.input.free_addr + *p, true, false);
                     }
                 }
@@ -349,14 +356,20 @@ impl HwModule for Reducer {
             Stm::SPINE => {
                 // this state won't be blocked.
                 let template = self.comb_table.dout();
-                let founded = self.find_app(template);
                 if self.more_app(template) {
+                    println!("entering APP!");
+                    let founded = self.find_app(template);
                     self.reg_spine.connect(template);
                     self.reg_stm.connect(&Stm::APP);
                     self.reg_idx.connect(&founded);
                     self.reg_ctr.connect(&1);
-                    self.comb_table.read(get_ptr(&template[founded]));
+                    self.comb_table.read(
+                        get_comb_addr(&self.reg_in.value().load[0])
+                            + get_ptr(&template[founded])
+                            + 1,
+                    );
                 } else {
+                    // println!("back to IDLE, idx: {}", self.reg_idx.value());
                     self.step_next();
                 }
             }
@@ -367,7 +380,13 @@ impl HwModule for Reducer {
                         let founded = self.find_app(template);
                         self.reg_idx.connect(&founded);
                         self.reg_ctr.connect(&(*self.reg_ctr.value() + 1));
+                        self.comb_table.read(
+                            get_comb_addr(&self.reg_in.value().load[0])
+                                + get_ptr(&template[founded])
+                                + 1,
+                        );
                     } else {
+                        println!("APP: back to IDLE");
                         self.step_next();
                     }
                 } else {

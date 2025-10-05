@@ -274,6 +274,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    inspect_prog(&BOOL_AND)
+    inspect_prog(&BOOL_NEST)
     // run_benchmarks()
 }
