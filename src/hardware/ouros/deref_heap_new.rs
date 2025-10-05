@@ -870,7 +870,6 @@ impl DrfHeap {
     /// select next arg from `app` and read it
     fn select_next_arg_read(&mut self, app: &App) {
         let (arg_id, p) = select_next_arg(app, *self.arg_id.value());
-        // println!("arg_id: {}, p: {}", arg_id, p);
         self.read_target(p);
         self.arg_id.connect(&arg_id);
     }

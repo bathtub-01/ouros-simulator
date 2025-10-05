@@ -246,13 +246,13 @@ impl HwModule for OurosCore {
                     }
                 }
             });
-            if self.buffers_dheap_b.out_valid() {
-                println!(
-                    "buffers valid: {:?}, heap ready: {}",
-                    self.buffers_dheap_b.dout(),
-                    self.dheap.port_b_ready()
-                );
-            }
+            // if self.buffers_dheap_b.out_valid() {
+            //     println!(
+            //         "buffers valid: {:?}, heap ready: {}",
+            //         self.buffers_dheap_b.dout(),
+            //         self.dheap.port_b_ready()
+            //     );
+            // }
             self.reducer.input.link(|input| {
                 input.in_valid = self.arbiter_reducer.out_valid();
                 match self.arbiter_reducer.out_bits(self.arbiter_reducer.select()) {

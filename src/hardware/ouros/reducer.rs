@@ -143,10 +143,9 @@ impl Reducer {
 
     /// The number of heap cells that will be consumed in this cycle
     pub fn addr_consumed(&self) -> usize {
-        if self.in_fire() {
-            self.input
-                .in_app
-                .load
+        if *self.reg_stm.value() == Stm::SPINE {
+            self.comb_table
+                .dout()
                 .iter()
                 .filter(|a| match a {
                     Atom::PTR(_, _, new) => *new,
@@ -354,10 +353,9 @@ impl HwModule for Reducer {
                 self.step_next();
             }
             Stm::SPINE => {
-                // this state won't be blocked.
+                // !NOTICE! We are assuming this state won't be blocked.
                 let template = self.comb_table.dout();
                 if self.more_app(template) {
-                    println!("entering APP!");
                     let founded = self.find_app(template);
                     self.reg_spine.connect(template);
                     self.reg_stm.connect(&Stm::APP);
@@ -369,7 +367,6 @@ impl HwModule for Reducer {
                             + 1,
                     );
                 } else {
-                    // println!("back to IDLE, idx: {}", self.reg_idx.value());
                     self.step_next();
                 }
             }
@@ -386,7 +383,6 @@ impl HwModule for Reducer {
                                 + 1,
                         );
                     } else {
-                        println!("APP: back to IDLE");
                         self.step_next();
                     }
                 } else {
