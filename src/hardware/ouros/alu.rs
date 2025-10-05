@@ -114,9 +114,11 @@ impl Alu {
 
         fn comb_bool(b: bool, inv: &bool) -> Atom {
             if b ^ inv {
-                COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
+                // COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
+                NOP
             } else {
-                COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
+                // COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
+                NOP
             }
         }
 
@@ -212,8 +214,8 @@ fn alu_spec() {
             PRM(AluOp::LE, false),
             INT(7),
             INT(7),
-            PTR(11, false),
-            PTR(22, false),
+            PTR(11, false, false),
+            PTR(22, false, false),
             NOP,
             NOP,
             NOP,

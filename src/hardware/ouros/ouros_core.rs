@@ -55,10 +55,7 @@ pub struct OurosCore {
     buffers_dheap_a_3: FIFO<ActiveApp, BUFFER_SIZE, false>,
     arbiter_dheap_a: Arbiter<ActiveApp, 4>,
 
-    buffers_dheap_b_0: FIFO<FrozenApp, BUFFER_SIZE, true>,
-    buffers_dheap_b_1: FIFO<FrozenApp, BUFFER_SIZE, true>,
-    buffers_dheap_b_2: FIFO<FrozenApp, BUFFER_SIZE, true>,
-    arbiter_dheap_b: Arbiter<FrozenApp, 3>,
+    buffers_dheap_b: FIFO<FrozenApp, BUFFER_SIZE, true>,
 
     buffers_reducer_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_reducer_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
@@ -77,8 +74,10 @@ impl OurosCore {
         let buffer_usage: bool = detail_lv >= DLV_BUFFER_USAGE;
         Self {
             input: Default::default(),
-            dheap: DrfHeap::new(1024 * 256).program(prog).detail(detail_lv),
-            reducer: Reducer::new().detail(detail_lv),
+            dheap: DrfHeap::new(1024 * 256)
+                .program(&prog.heap_img)
+                .detail(detail_lv),
+            reducer: Reducer::new(1024).program(&prog.comb_img).detail(detail_lv),
             alu: Alu::new().detail(detail_lv),
 
             buffers_dheap_a_0: FIFO::new().record_stat(buffer_usage),
@@ -87,10 +86,7 @@ impl OurosCore {
             buffers_dheap_a_3: FIFO::new().record_stat(buffer_usage),
             arbiter_dheap_a: Arbiter::new(),
 
-            buffers_dheap_b_0: FIFO::new().record_stat(buffer_usage),
-            buffers_dheap_b_1: FIFO::new().record_stat(buffer_usage),
-            buffers_dheap_b_2: FIFO::new().record_stat(buffer_usage),
-            arbiter_dheap_b: Arbiter::new(),
+            buffers_dheap_b: FIFO::new().record_stat(buffer_usage),
 
             buffers_reducer_0: FIFO::new().record_stat(buffer_usage),
             buffers_reducer_1: FIFO::new().record_stat(buffer_usage),
@@ -115,7 +111,7 @@ impl OurosCore {
         &DrfHeapStat,
         &ReducerStat,
         &AluStat,
-        [&FIFOStat; 14],
+        [&FIFOStat; 12],
         &DualPortMemStat,
     ) {
         (
@@ -130,9 +126,7 @@ impl OurosCore {
                 self.buffers_dheap_a_1.get_stat(),
                 self.buffers_dheap_a_2.get_stat(),
                 self.buffers_dheap_a_3.get_stat(),
-                self.buffers_dheap_b_0.get_stat(),
-                self.buffers_dheap_b_1.get_stat(),
-                self.buffers_dheap_b_2.get_stat(),
+                self.buffers_dheap_b.get_stat(),
                 self.buffers_reducer_0.get_stat(),
                 self.buffers_reducer_1.get_stat(),
                 self.buffers_reducer_2.get_stat(),
@@ -204,7 +198,6 @@ impl HwModule for OurosCore {
         for _ in 0..3 {
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
-            self.arbiter_dheap_b.input.out_ready = self.dheap.port_b_ready();
             self.arbiter_reducer.input.out_ready = self.reducer.in_ready();
             self.arbiter_alu.input.out_ready = self.alu.input_ready();
 
@@ -217,14 +210,6 @@ impl HwModule for OurosCore {
                     &mut self.buffers_dheap_a_3,
                 ],
                 &mut self.arbiter_dheap_a,
-            );
-            buffers_arbiter(
-                [
-                    &mut self.buffers_dheap_b_0,
-                    &mut self.buffers_dheap_b_1,
-                    &mut self.buffers_dheap_b_2,
-                ],
-                &mut self.arbiter_dheap_b,
             );
             buffers_arbiter(
                 [
@@ -253,8 +238,8 @@ impl HwModule for OurosCore {
                         input.port_a_bits = v.clone();
                     }
                 }
-                input.port_b_valid = self.arbiter_dheap_b.out_valid();
-                match self.arbiter_dheap_b.out_bits(self.arbiter_dheap_b.select()) {
+                input.port_b_valid = self.buffers_dheap_b.out_valid();
+                match self.buffers_dheap_b.dout() {
                     None => {}
                     Some(v) => {
                         input.port_b_bits = v.clone();
@@ -320,36 +305,29 @@ impl HwModule for OurosCore {
                 }
             }
 
-            self.reducer.input.app1_ready = self.buffers_dheap_b_0.in_ready();
-            self.reducer.input.app2_ready = self.buffers_dheap_b_1.in_ready();
-            self.reducer.input.app3_ready = self.buffers_dheap_b_2.in_ready();
+            self.reducer.input.app_ready = self.buffers_dheap_b.in_ready();
 
-            let reducer_output = self.reducer.out_bundle();
+            // let reducer_output = self.reducer.out_bundle();
 
-            self.buffers_dheap_b_0.input.in_valid = reducer_output.1 .0;
-            self.buffers_dheap_b_0.input.din = reducer_output.1 .1;
+            self.buffers_dheap_b.input.in_valid = self.reducer.app_valid();
+            self.buffers_dheap_b.input.din = self.reducer.app_bits().clone();
 
-            self.buffers_dheap_b_1.input.in_valid = reducer_output.2 .0;
-            self.buffers_dheap_b_1.input.din = reducer_output.2 .1;
-
-            self.buffers_dheap_b_2.input.in_valid = reducer_output.3 .0;
-            self.buffers_dheap_b_2.input.din = reducer_output.3 .1;
-
-            if reducer_output.0 .0 {
-                match get_dests(&reducer_output.0 .1.load) {
+            let out_spine = &self.reducer.spine_bits();
+            if self.reducer.spine_valid() {
+                match get_dests(&out_spine.load) {
                     DESTs::ToDHeap => {
                         self.buffers_dheap_a_1.input.in_valid = true;
-                        self.buffers_dheap_a_1.input.din = reducer_output.0 .1;
+                        self.buffers_dheap_a_1.input.din = out_spine.clone();
                         self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
                     }
                     DESTs::ToALU => {
                         self.buffers_alu_0.input.in_valid = true;
-                        self.buffers_alu_0.input.din = reducer_output.0 .1;
+                        self.buffers_alu_0.input.din = out_spine.clone();
                         self.reducer.input.spine_ready = self.buffers_alu_0.in_ready();
                     }
                     DESTs::ToReducer => {
                         self.buffers_reducer_0.input.in_valid = true;
-                        self.buffers_reducer_0.input.din = reducer_output.0 .1;
+                        self.buffers_reducer_0.input.din = out_spine.clone();
                         self.reducer.input.spine_ready = self.buffers_reducer_0.in_ready();
                     }
                 }
@@ -383,10 +361,7 @@ impl HwModule for OurosCore {
         self.buffers_dheap_a_3.tick();
         self.arbiter_dheap_a.tick();
 
-        self.buffers_dheap_b_0.tick();
-        self.buffers_dheap_b_1.tick();
-        self.buffers_dheap_b_2.tick();
-        self.arbiter_dheap_b.tick();
+        self.buffers_dheap_b.tick();
 
         self.buffers_reducer_0.tick();
         self.buffers_reducer_1.tick();

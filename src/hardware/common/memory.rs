@@ -74,19 +74,12 @@ fn single_port_mem_spec() {
     let mut mem: SinglePortMem<u32> = SinglePortMem::new(1024);
 
     for i in 50..100 {
-        mem.input.link(|input| {
-            input.addr = i;
-            input.is_write = true;
-            input.din = i as u32 + 100;
-        });
+        mem.write(i, i as u32 + 100);
         mem.tick();
     }
 
     for i in 50..100 {
-        mem.input.link(|input| {
-            input.addr = i;
-            input.is_write = false;
-        });
+        mem.read(i);
         mem.tick();
         assert_eq!(mem.dout(), &(i as u32 + 100));
     }

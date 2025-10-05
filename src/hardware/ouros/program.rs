@@ -69,8 +69,8 @@ pub struct FrozenApp {
 /// `Vec<App>` will make the compiler side easier..
 // pub type Program = Vec<Vec<Atom>>;
 pub struct Program {
-    heap_img: Vec<Vec<Atom>>,
-    comb_img: Vec<Vec<Atom>>,
+    pub heap_img: Vec<Vec<Atom>>,
+    pub comb_img: Vec<Vec<Atom>>,
 }
 
 fn arity_of(atom: &Atom) -> u8 {
@@ -97,7 +97,16 @@ pub fn app_length(app: &App) -> usize {
 #[test]
 fn app_length_spec() {
     use Atom::*;
-    let a: App = [PTR(0, false), INT(1), INT(2), INT(3), NOP, NOP, NOP, NOP];
+    let a: App = [
+        PTR(0, false, false),
+        INT(1),
+        INT(2),
+        INT(3),
+        NOP,
+        NOP,
+        NOP,
+        NOP,
+    ];
     let b: App = [Y, Y, Y, Y, Y, Y, Y, Y];
     assert_eq!(app_length(&a), 4);
     assert_eq!(app_length(&b), APP_LENGTH);

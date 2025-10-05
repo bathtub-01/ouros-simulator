@@ -207,12 +207,12 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)?;
 
     // write buffer utilisation
-    writeln!(buffer_util, "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b_0,dheap_b_1,dheap_b_2,reducer_0,reducer_1,reducer_2,reducer_3")?;
+    writeln!(buffer_util, "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3")?;
     let buffer_util_data = stats.3.map(|s| chunk_util(&s.length_per_cycle, chunk_size));
     for i in 0..buffer_util_data[0].len() {
         writeln!(
             buffer_util,
-            "{},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2}",
+            "{},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2}",
             i * chunk_size + chunk_size / 2,
             buffer_util_data[0][i],
             buffer_util_data[1][i],
@@ -226,8 +226,6 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
             buffer_util_data[9][i],
             buffer_util_data[10][i],
             buffer_util_data[11][i],
-            buffer_util_data[12][i],
-            buffer_util_data[13][i],
         )?;
     }
 
