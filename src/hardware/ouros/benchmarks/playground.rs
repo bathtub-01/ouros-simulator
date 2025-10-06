@@ -47,7 +47,7 @@ pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
     Program {
         heap_img: vec![
             vec![ // main
-                COM(2, 2),
+                COM(1, 2),
                 PTR(1, false, false),
                 PTR(1, false, false)
             ],
@@ -66,7 +66,7 @@ pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
             // False 1
             vec![ARG(1)],
             // tfOr 2
-            vec![ARG(0), COM(2, 0), ARG(1)],
+            vec![ARG(0), COM(2, 0)],
             // tfAnd 3
             vec![ARG(0), ARG(1) ,COM(2, 1)],
             // b-body 4

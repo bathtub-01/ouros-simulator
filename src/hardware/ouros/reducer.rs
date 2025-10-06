@@ -107,9 +107,22 @@ impl Reducer {
     pub fn spine_bits(&self) -> ActiveApp {
         ActiveApp {
             stack_idx: self.reg_in.value().stack_idx,
-            load: self.inst(&self.comb_table.dout()),
+            load: {
+                let old_spn = &self.reg_in.value().load;
+                let before = arity_of(&old_spn[0]) as usize + 1;
+                let mut res = self.inst(&self.comb_table.dout());
+                let after = app_length(&res);
+                assert!(
+                    old_spn[before..].iter().filter(|a| !is_nop(a)).count() + after <= APP_LENGTH
+                );
+                for i in 0..(APP_LENGTH - before) {
+                    if after + i < APP_LENGTH {
+                        res[after + i] = old_spn[before + i].clone();
+                    }
+                }
+                res
+            },
         }
-        // FIXME: handle over-applied spine
     }
 
     pub fn app_valid(&self) -> bool {

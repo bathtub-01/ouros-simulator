@@ -73,7 +73,7 @@ pub struct Program {
     pub comb_img: Vec<Vec<Atom>>,
 }
 
-fn arity_of(atom: &Atom) -> u8 {
+pub fn arity_of(atom: &Atom) -> u8 {
     use Atom::*;
     match atom {
         COM(a, _) => *a,
