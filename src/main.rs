@@ -276,6 +276,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    inspect_prog(&WHILEX)
+    inspect_prog(&EQLIST)
     // run_benchmarks()
 }

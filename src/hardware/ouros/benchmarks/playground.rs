@@ -363,6 +363,95 @@ pub static USE_SEQ: LazyLock<Program> = LazyLock::new(|| {
 });
 
 #[rustfmt::skip]
+pub static EQLIST: LazyLock<Program> = LazyLock::new(|| {
+    vec![
+         // FUN0EqList.main
+        vec![ // 0 
+            PTR(4, false),
+            PTR(3, false),
+        ], 
+        vec![ // 1 
+            PTR(12, false),
+            INT(101),
+            INT(200),
+        ], 
+        vec![ // 2 
+            PTR(12, false),
+            INT(1),
+            INT(100),
+        ], 
+        vec![ // 3 
+            PTR(5, false),
+            PRM(LT,false),
+            PTR(2, false),
+            PTR(1, false),
+        ], 
+         // FUN1EqList.boolToInt
+        vec![ // 4 
+            COM(3,2,[2,0,1,0,0,0]), //XXX
+            INT(0),
+            INT(42),
+        ], 
+         // FUN2EqList.eqList
+        vec![ // 5 
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            Y,
+            PTR(10, false),
+        ], 
+        vec![ // 6 
+            COM(6,40,[0,1,2,4,3,5]), //X(XXX)(XX)
+            PTR(11, false),
+        ], 
+        vec![ // 7 
+            COM(6,48,[3,0,1,4,2,5]), //XX(XX(XX))
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+        vec![ // 8 
+            COM(3,0,[0,0,0,0,0,0]), //X
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+        vec![ // 9 
+            COM(5,40,[3,4,0,1,2,4]), //X(XXX)(XX)
+            COM(2,0,[1,0,0,0,0,0]), //X
+            PTR(8, false),
+        ], 
+        vec![ // 10 
+            COM(5,19,[0,1,2,3,4,0]), //X(X(XX)X)
+            PTR(9, false),
+            PTR(7, false),
+            PTR(6, false),
+        ], 
+         // FUN3Data.Bool.&&
+        vec![ // 11 
+            COM(2,1,[1,0,0,0,0,0]), //XX
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+         // FUN4NanoPrelude.enumFromTo
+        vec![ // 12 
+            COM(3,5,[0,1,2,2,0,0]), //X(XX)X
+            PTR(15, false),
+            PTR(14, false),
+        ], 
+        vec![ // 13 
+            COM(4,7,[0,1,3,2,0,0]), //X(XXX)
+            PTR(12, false),
+            PRM(ADD,false),
+            INT(1),
+        ], 
+        vec![ // 14 
+            COM(4,16,[0,2,1,2,3,0]), //XX(XXX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(13, false),
+        ], 
+        vec![ // 15 
+            COM(5,37,[0,3,4,1,2,4]), //XXXX(XX)
+            PRM(LE,false),
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+    ]
+});
+
+#[rustfmt::skip]
 pub static BANG: LazyLock<Program> = LazyLock::new(|| {
     vec![
          // FUN0Playground.main
