@@ -31,7 +31,7 @@ pub static BOOL_AND: LazyLock<Program> = LazyLock::new(|| {
             // False
             vec![ARG(1)],
             // tfAnd
-            vec![ARG(0), ARG(1) ,COM(2, 1)]
+            vec![ARG(0), ARG(1), COM(2, 1)]
         ],        
     }
 });
@@ -120,6 +120,70 @@ pub static ALU_OP: LazyLock<Program> = LazyLock::new(|| {
             vec![ARG(1)],
             // False 1
             vec![ARG(0)],
+        ]
+    }
+});
+
+#[rustfmt::skip]
+pub static EQLIST: LazyLock<Program> = LazyLock::new(|| {
+    Program {
+        heap_img: vec![
+            vec![
+                COM(3, 4),
+                PRM(LT, false),
+                PTR(1, false, false),
+                PTR(2, false, false)
+            ],
+            vec![
+                COM(2, 15), // enumFromTo
+                INT(1),
+                INT(100)
+            ],
+            vec![
+                COM(2, 15), // enumFromTo
+                INT(101),
+                INT(200)
+            ]
+        ],
+        comb_img: vec![
+            // True 0
+            vec![ARG(1)],
+            // False 1
+            vec![ARG(0)],
+            // [] 2 (arity 2)
+            vec![ARG(0)],
+            // : 3 (arity 4)
+            vec![ARG(3), ARG(0), ARG(1)],
+            // eqList 4
+            vec![
+                ARG(1),
+                PTR(0, true, true),
+                PTR(1, true, true),
+            ],
+            vec![COM(1, 7), ARG(2)],
+            vec![COM(4, 8), ARG(0), ARG(2)],
+            // 7
+            vec![ARG(0), COM(2, 0), COM(2, 10)],
+            // 8
+            vec![ARG(1), COM(2, 1), PTR(0, true, true)],
+            vec![COM(5, 11), ARG(0), ARG(2), ARG(3)],
+            // 10
+            vec![COM(2, 1)],
+            // 11
+            vec![COM(2, 14), PTR(0, true, true), PTR(1, true, true)],
+            vec![ARG(0), ARG(1), ARG(3)],
+            vec![COM(3, 4), ARG(0), ARG(2), ARG(4)],
+            // and 14
+            vec![ARG(0), COM(2, 1), ARG(1)],
+            // enumFromTo 15
+            vec![PRM(LE, false), ARG(0), ARG(1), COM(2, 2), PTR(0, true, true)],
+            vec![COM(2, 17), ARG(0), ARG(1)],
+            // 17
+            vec![COM(4, 3), ARG(0), PTR(0, true, true)],
+            vec![COM(2, 19), ARG(0), ARG(1)],
+            // 19
+            vec![COM(2, 15), PTR(0, true, true), ARG(1)],
+            vec![PRM(ADD, false), ARG(0), INT(1)]
         ]
     }
 });

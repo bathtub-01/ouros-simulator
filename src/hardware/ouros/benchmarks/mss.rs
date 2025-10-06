@@ -6,7 +6,9 @@ use Atom::*;
 #[rustfmt::skip]
 pub static MSS: LazyLock<Program> = LazyLock::new(|| {
     Program {
-        heap_img: vec![],
+        heap_img: vec![
+            
+        ],
         comb_img: vec![
             // True 0
             vec![ARG(1)],
