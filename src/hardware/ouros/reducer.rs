@@ -400,8 +400,11 @@ impl HwModule for Reducer {
                     }
                 } else {
                     // fail to fire, keep reading
-                    self.comb_table
-                        .read(get_ptr(&template[*self.reg_idx.value()]));
+                    self.comb_table.read(
+                        get_comb_addr(&self.reg_in.value().load[0])
+                            + get_ptr(&template[*self.reg_idx.value()])
+                            + 1,
+                    );
                 }
             }
         }

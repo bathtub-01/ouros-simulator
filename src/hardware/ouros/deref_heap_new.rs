@@ -353,7 +353,7 @@ impl fmt::Display for Stm {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 struct HeapCell {
     exist: bool,
     app: App,
