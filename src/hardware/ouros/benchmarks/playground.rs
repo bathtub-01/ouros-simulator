@@ -75,37 +75,6 @@ pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
             vec![ARG(0), COM(2, 1)]
         ]
     }
-    // vec![
-    //     // main
-    //     vec![ // 0
-    //         PTR(4, false),
-    //         PTR(2, false),
-    //         PTR(2, false)
-    //     ],
-    //     // tfAnd
-    //     vec![ // 1
-    //         COM(3,2,[1,2,0,0,0,0]), // XXX
-    //         COM(2,0,[1,0,0,0,0,0]), // X
-    //     ],
-    //     // b
-    //     vec![ // 2
-    //         COM(4,15,[0,1,2,1,3,0]), // X(XX)(XX)
-    //         PTR(1, false),
-    //         PTR(3, false), // a
-    //         COM(2,0,[0,0,0,0,0,0]), // T
-    //         COM(2,0,[1,0,0,0,0,0]), // F
-    //     ],
-    //     // a
-    //     vec![ // 3
-    //         PTR(1, false),
-    //         COM(2,0,[0,0,0,0,0,0]), // X
-    //     ],
-    //     // tfOr
-    //     vec![ // 4
-    //         COM(2,1,[1,0,0,0,0,0]), // XX
-    //         COM(2,0,[0,0,0,0,0,0]), // T
-    //     ],
-    // ]
 });
 
 /**
@@ -114,43 +83,46 @@ main = let a = 4 + 5
        in
           if 42 == 42 then a * b else a - b
 */
-// #[rustfmt::skip]
-// pub static ALU_OP: LazyLock<Program> = LazyLock::new(|| {
-//     vec![
-//         // main
-//         vec![ // 0
-//             PRM(EQ, false),
-//             INT(42),
-//             INT(42),
-//             PTR(2, false),
-//             PTR(1, false)
-//         ],
-//         // a * b
-//         vec![ // 1
-//             PRM(MUL, false),
-//             PTR(3, false),
-//             PTR(4, false)
-//         ],
-//         // a - b
-//         vec![ // 2
-//             PRM(SUB, false),
-//             PTR(3, false),
-//             PTR(4, false)
-//         ],
-//         // a
-//         vec![ // 3
-//             PRM(ADD, false),
-//             INT(4),
-//             INT(5)
-//         ],
-//         // b
-//         vec![ // 4
-//             PRM(MUL, false),
-//             PTR(3, false),
-//             INT(2)
-//         ],
-//     ]
-// });
+#[rustfmt::skip]
+pub static ALU_OP: LazyLock<Program> = LazyLock::new(|| {
+    Program {
+        heap_img: vec![
+            vec![ // main
+                PRM(EQ, false),
+                INT(42),
+                INT(42),
+                PTR(1, false, false),
+                PTR(2, false, false),
+            ],
+            vec![ // a - b
+                PRM(SUB, false),
+                PTR(3, false, false),
+                PTR(4, false, false),
+            ],
+            vec![ // a * b
+                PRM(MUL, false),
+                PTR(3, false, false),
+                PTR(4, false, false),
+            ],
+            vec![ // a
+                PRM(ADD, false),
+                INT(4),
+                INT(5)
+            ],
+            vec![ // b
+                PRM(MUL, false),
+                PTR(3, false, false),
+                INT(2)
+            ],            
+        ],
+        comb_img: vec![
+            // True 0
+            vec![ARG(1)],
+            // False 1
+            vec![ARG(0)],
+        ]
+    }
+});
 
 // #[rustfmt::skip]
 // pub static MAP_Y: LazyLock<Program> = LazyLock::new(|| {

@@ -394,7 +394,7 @@ fn ouros_core_spec() {
     let progs = [
         (&BOOL_AND, COM(2, 1)),
         (&BOOL_NEST, COM(2, 1)),
-        // (&ALU_OP, INT(162)),
+        (&ALU_OP, INT(162)),
         // (&MAP_Y, INT(1275)),
         // (&DEADLOCK, INT(29380)),
         // (&USE_SEQ, INT(10)),
