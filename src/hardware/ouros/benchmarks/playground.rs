@@ -179,9 +179,12 @@ pub static EQLIST: LazyLock<Program> = LazyLock::new(|| {
             vec![PRM(LE, false), ARG(0), ARG(1), COM(2, 2), PTR(0, true, true)],
             vec![COM(2, 17), ARG(0), ARG(1)],
             // 17
-            vec![COM(4, 3), ARG(0), PTR(0, true, true)],
-            vec![COM(2, 19), ARG(0), ARG(1)],
+            vec![COM(2, 19), ARG(0), PTR(0, true, true)],
+            vec![COM(2, 21), ARG(0), ARG(1)],
             // 19
+            vec![TRY, PTR(0, true, true), ARG(1)],
+            vec![COM(4, 3), ARG(0), ARG(1)],
+            // 21
             vec![COM(2, 15), PTR(0, true, true), ARG(1)],
             vec![PRM(ADD, false), ARG(0), INT(1)]
         ]

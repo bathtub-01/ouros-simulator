@@ -26,6 +26,7 @@ pub enum Atom {
     Y,
     SEQ(bool),
     ARG(usize),
+    TRY,
     ERR(u8),
 }
 
@@ -47,6 +48,7 @@ impl fmt::Display for Atom {
             Atom::SEQ(evaluated) => write!(f, "SEQ({})", evaluated),
             Atom::ARG(arg) => write!(f, "ARG({})", arg),
             Atom::ERR(e) => write!(f, "ERR({})", e),
+            Atom::TRY => write!(f, "TRY"),
         }
     }
 }
@@ -81,6 +83,7 @@ pub fn arity_of(atom: &Atom) -> u8 {
         INT(_) => 1,
         Y => 1,
         SEQ(_) => 2,
+        TRY => 2,
         _ => 0,
     }
 }
@@ -199,6 +202,13 @@ pub fn is_int(atom: &Atom) -> bool {
 pub fn is_prm(atom: &Atom) -> bool {
     match atom {
         Atom::PRM(_, _) => true,
+        _ => false,
+    }
+}
+
+pub fn is_try(atom: &Atom) -> bool {
+    match atom {
+        Atom::TRY => true,
         _ => false,
     }
 }

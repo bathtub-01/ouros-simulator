@@ -191,6 +191,10 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
                 _ => unreachable!(),
             },
         },
+        Atom::TRY => match app[1] {
+            Atom::PTR(p, _, false) => (1, p),
+            _ => panic!("TRY literal should not enter the heap"),
+        },
         Atom::SEQ(true) => match app[2] {
             Atom::PTR(p, _, false) => (2, p),
             // NOTE: currently rejecting things like `seq a 1` (direct it to reducer will be easier)
@@ -253,6 +257,11 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
         }
         Atom::SEQ(true) => {
             assert_eq!(arg_id, 2);
+            res_v.extend_from_slice(&target_dashed[0..target_len]);
+            res_v.extend_from_slice(&app[3..app_len]);
+        }
+        Atom::TRY => {
+            assert_eq!(arg_id, 1);
             res_v.extend_from_slice(&target_dashed[0..target_len]);
             res_v.extend_from_slice(&app[3..app_len]);
         }
@@ -695,6 +704,7 @@ impl DrfHeap {
             match ia[0] {
                 Atom::PTR(_, _, _) => false,
                 Atom::PRM(_, _) | Atom::SEQ(_) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
+                Atom::TRY => *self.arg_id.value() == 1 && *s1 != IAs1::ExistWHNF,
                 // more on this to support strict args in the future
                 _ => unreachable!(),
             }
@@ -707,12 +717,13 @@ impl DrfHeap {
         } else {
             if (is_ptr(&ia[0])
                 || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
-                || is_seq_evaluated(&ia[0]))
+                || is_seq_evaluated(&ia[0])
+                || (is_try(&ia[0]) && *self.arg_id.value() == 1))
                 && target_in_whnf
             {
                 IAs2::NoMoreArgsCanEmit
             } else {
-                IAs2::NoMoreArgsNoEmit
+                IAs2::NoMoreArgsNoEmit // TRY second should go here; what if the 2nd is in compute? We can use meta data to improve PRM/SEQ/TRY?
             }
         }
     }
