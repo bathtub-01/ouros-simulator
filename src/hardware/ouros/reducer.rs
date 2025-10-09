@@ -44,6 +44,7 @@ pub struct ReducerStat {
     pub busy_cycles: u32,
     pub busy_per_cycle: Vec<bool>,
     pub holder_contents: Vec<Option<ActiveApp>>,
+    pub blocked_cycles: u32,
 }
 
 pub struct Reducer {
@@ -416,6 +417,9 @@ impl HwModule for Reducer {
             {
                 self.stat.busy_cycles += 1;
                 self.stat.busy_per_cycle.push(true);
+                if self.input.in_valid {
+                    self.stat.blocked_cycles += 1;
+                }
             } else {
                 self.stat.busy_per_cycle.push(false);
             }

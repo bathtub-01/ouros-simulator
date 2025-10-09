@@ -133,9 +133,10 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     )?;
     writeln!(
         log,
-        "       Reducer busy cycles: {} ({:.2}%)",
+        "       Reducer busy cycles: {} ({:.2}%), blocked cycles: {}",
         stats.1.busy_cycles,
-        (stats.1.busy_cycles as f32) / (runtime_cycles as f32) * 100.0
+        (stats.1.busy_cycles as f32) / (runtime_cycles as f32) * 100.0,
+        stats.1.blocked_cycles
     )?;
     writeln!(
         log,
