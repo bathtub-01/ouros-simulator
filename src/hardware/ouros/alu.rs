@@ -17,7 +17,7 @@ use crate::{
     hw_module::{HwInput, HwModule},
 };
 
-use super::program::{ActiveApp, Atom};
+use super::program::*;
 
 #[derive(Default)]
 pub struct AluInput {
@@ -27,6 +27,27 @@ pub struct AluInput {
 }
 
 impl HwInput for AluInput {}
+
+pub fn compute(op: &AluOp, rev: bool, l: i32, r: i32) -> Atom {
+    fn comb_bool(b: bool, inv: bool) -> Atom {
+        if b ^ inv {
+            // COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
+            COM(2, 0) // True, always be placed at 0
+        } else {
+            // COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
+            COM(2, 1) // False
+        }
+    }
+
+    match op {
+        EQ => comb_bool(l == r, rev),
+        LE => comb_bool(l <= r, rev),
+        LT => comb_bool(l < r, rev),
+        ADD => INT(l + r),
+        SUB => INT(l - r),
+        MUL => INT(l * r),
+    }
+}
 
 #[derive(Default)]
 pub struct AluStat {
@@ -99,50 +120,12 @@ impl Alu {
     }
 
     fn gen_result(&self) -> ActiveApp {
-        fn take_int(atom: &Atom) -> i32 {
-            match *atom {
-                INT(i) => i,
-                _ => {
-                    panic!("alu: wrong operand type! {:?}", atom);
-                }
-            }
-        }
-
         let oprand1: i32 = take_int(&self.input.input_bits.load[1]);
         let oprand2: i32 = take_int(&self.input.input_bits.load[2]);
         let res: Atom;
 
-        fn comb_bool(b: bool, inv: &bool) -> Atom {
-            if b ^ inv {
-                // COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
-                COM(2, 0) // True, always be placed at 0
-            } else {
-                // COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
-                COM(2, 1) // False
-            }
-        }
-
         match &self.input.input_bits.load[0] {
-            PRM(op, inv) => match op {
-                EQ => {
-                    res = comb_bool(oprand1 == oprand2, inv);
-                }
-                LE => {
-                    res = comb_bool(oprand1 <= oprand2, inv);
-                }
-                LT => {
-                    res = comb_bool(oprand1 < oprand2, inv);
-                }
-                ADD => {
-                    res = INT(oprand1 + oprand2);
-                }
-                SUB => {
-                    res = INT(oprand1 - oprand2);
-                }
-                MUL => {
-                    res = INT(oprand1 * oprand2);
-                }
-            },
+            PRM(op, inv) => res = compute(op, *inv, oprand1, oprand2),
             _ => {
                 panic!("alu: app head is not an primitive op!");
             }

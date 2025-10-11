@@ -5,6 +5,7 @@
 //          |                 |
 //          +-----------------+===> app
 
+use super::alu::compute;
 use super::program::*;
 use crate::hardware::common::{Register, SinglePortMem};
 use crate::hardware::ouros::combinator::{parse_pat, Hole, ParseRes, ALL_PATTERNS, DECODE_TABLE};
@@ -161,10 +162,7 @@ impl Reducer {
             self.comb_table
                 .dout()
                 .iter()
-                .filter(|a| match a {
-                    Atom::PTR(_, _, new) => *new,
-                    _ => false,
-                })
+                .filter(|a| self.is_nested(a))
                 .count()
         } else {
             0
@@ -179,27 +177,68 @@ impl Reducer {
         fire(self.input.in_valid, self.in_ready())
     }
 
+    fn get_instant(&self, c: &SpeCell) -> i32 {
+        let in_app = &self.reg_in.value().load;
+        match c {
+            SpeCell::ARG(arg) => take_int(&in_app[arg + 1]),
+            SpeCell::LIT(i) => *i,
+        }
+    }
+
+    fn is_instant(&self, c: &SpeCell) -> bool {
+        let in_app = &self.reg_in.value().load;
+        match c {
+            SpeCell::ARG(arg) => is_int(&in_app[arg + 1]),
+            SpeCell::LIT(_) => true,
+        }
+    }
+
+    fn is_nested(&self, a: &Atom) -> bool {
+        match a {
+            Atom::PTR(_, _, new) => *new,
+            Atom::SPE(_, _, l, r, _) => !(self.is_instant(&l) && self.is_instant(&r)),
+            _ => false,
+        }
+    }
+
     fn more_app(&self, app: &App) -> bool {
         let idx = *self.reg_idx.value() + 1;
-        app.iter().skip(idx as usize).any(is_new)
+        app.iter().skip(idx as usize).any(|a| self.is_nested(a))
     }
 
     fn find_app(&self, app: &App) -> usize {
         let idx = *self.reg_idx.value() + 1;
         // x x x o * o o o
         // 0 1 2 3 4 5 6 7
-        idx + app.iter().skip(idx).position(is_new).unwrap()
+        idx + app
+            .iter()
+            .skip(idx)
+            .position(|a| self.is_nested(a))
+            .unwrap()
     }
 
     /// instantiate an app from template
     fn inst(&self, app: &App) -> App {
         let mut res: App = app.clone();
+        let mut hole = 0;
         for a in &mut res {
             match a {
                 Atom::PTR(p, _, new) => {
                     if *new {
                         // assert_eq!(*self.reg_stm.value(), Stm::SPINE);
-                        *a = Atom::PTR(self.input.free_addr + *p, true, false);
+                        *a = Atom::PTR(self.input.free_addr + *p - hole, true, false);
+                    }
+                }
+                Atom::SPE(op, rev, l, r, p) => {
+                    if self.is_instant(l) && self.is_instant(r) {
+                        // speculation success
+                        let op1 = self.get_instant(l);
+                        let op2 = self.get_instant(r);
+                        hole += 1;
+                        *a = compute(op, *rev, op1, op2);
+                    } else {
+                        // speculation fails
+                        *a = Atom::PTR(self.input.free_addr + *p - hole, true, false);
                     }
                 }
                 Atom::ARG(arg) => *a = self.reg_in.value().load[*arg + 1].clone(),

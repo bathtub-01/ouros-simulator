@@ -17,6 +17,12 @@ type NewCell = bool;
 type RevCond = bool;
 
 #[derive(Clone, PartialEq, Debug)]
+pub enum SpeCell {
+    ARG(usize),
+    LIT(i32),
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub enum Atom {
     NOP,
     PTR(usize, Unique, NewCell),
@@ -27,6 +33,7 @@ pub enum Atom {
     SEQ(bool),
     ARG(usize),
     TRY,
+    SPE(AluOp, RevCond, SpeCell, SpeCell, usize),
     ERR(u8),
 }
 
@@ -49,6 +56,7 @@ impl fmt::Display for Atom {
             Atom::ARG(arg) => write!(f, "ARG({})", arg),
             Atom::ERR(e) => write!(f, "ERR({})", e),
             Atom::TRY => write!(f, "TRY"),
+            Atom::SPE(alu_op, _, spe_cell, spe_cell1, _) => write!(f, "SPE"),
         }
     }
 }
@@ -153,6 +161,7 @@ pub fn is_ptr(atom: &Atom) -> bool {
 pub fn get_ptr(atom: &Atom) -> usize {
     match atom {
         Atom::PTR(pt, _, _) => *pt,
+        Atom::SPE(_, _, _, _, pt) => *pt,
         _ => unimplemented!(),
     }
 }
@@ -196,6 +205,15 @@ pub fn is_int(atom: &Atom) -> bool {
     match atom {
         Atom::INT(_) => true,
         _ => false,
+    }
+}
+
+pub fn take_int(atom: &Atom) -> i32 {
+    match *atom {
+        Atom::INT(i) => i,
+        _ => {
+            panic!("atom not an INT: {:?}", atom);
+        }
     }
 }
 

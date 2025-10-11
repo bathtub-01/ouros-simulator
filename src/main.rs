@@ -275,6 +275,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    inspect_prog(&EQLIST)
+    inspect_prog(&FIB)
     // run_benchmarks()
 }

@@ -1,4 +1,4 @@
-use crate::hardware::ouros::program::{AluOp, Atom, Program};
+use crate::hardware::ouros::program::{AluOp, Atom, Program, SpeCell};
 use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*;
@@ -44,7 +44,8 @@ pub static FIB: LazyLock<Program> = LazyLock::new(|| {
             // 7
             vec![
                 COM(1, 2),
-                PTR(0, true, true),
+                SPE(SUB, false, SpeCell::ARG(0), SpeCell::LIT(1), 0),
+                // PTR(0, true, true),
             ],            
             vec![
                 PRM(SUB, false),
@@ -54,7 +55,8 @@ pub static FIB: LazyLock<Program> = LazyLock::new(|| {
             // 9
             vec![
                 COM(1, 2),
-                PTR(0, true, true),
+                SPE(SUB, false, SpeCell::ARG(0), SpeCell::LIT(2), 0),
+                // PTR(0, true, true),
             ],            
             vec![
                 PRM(SUB, false),

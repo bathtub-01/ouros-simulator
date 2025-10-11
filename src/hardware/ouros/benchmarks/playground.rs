@@ -1,4 +1,4 @@
-use crate::hardware::ouros::program::{AluOp, Atom, Program};
+use crate::hardware::ouros::program::{AluOp, Atom, Program, SpeCell};
 use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*;
@@ -129,8 +129,7 @@ pub static EQLIST: LazyLock<Program> = LazyLock::new(|| {
     Program {
         heap_img: vec![
             vec![
-                COM(3, 4),
-                PRM(LT, false),
+                COM(2, 4),
                 PTR(1, false, false),
                 PTR(2, false, false)
             ],
@@ -156,23 +155,27 @@ pub static EQLIST: LazyLock<Program> = LazyLock::new(|| {
             vec![ARG(3), ARG(0), ARG(1)],
             // eqList 4
             vec![
-                ARG(1),
+                ARG(0),
                 PTR(0, true, true),
                 PTR(1, true, true),
             ],
-            vec![COM(1, 7), ARG(2)],
-            vec![COM(4, 8), ARG(0), ARG(2)],
+            vec![COM(1, 7), ARG(1)],
+            vec![COM(3, 8), ARG(1)],
             // 7
             vec![ARG(0), COM(2, 0), COM(2, 10)],
             // 8
-            vec![ARG(1), COM(2, 1), PTR(0, true, true)],
-            vec![COM(5, 11), ARG(0), ARG(2), ARG(3)],
+            vec![ARG(0), COM(2, 1), PTR(0, true, true)],
+            vec![COM(4, 11), ARG(1), ARG(2)],
             // 10
             vec![COM(2, 1)],
             // 11
-            vec![COM(2, 14), PTR(0, true, true), PTR(1, true, true)],
-            vec![ARG(0), ARG(1), ARG(3)],
-            vec![COM(3, 4), ARG(0), ARG(2), ARG(4)],
+            vec![COM(2, 14),
+                 SPE(LE, false, SpeCell::ARG(0), SpeCell::ARG(2), 0),
+                 // PTR(0, true, true),
+                 PTR(1, true, true)
+            ],
+            vec![PRM(LE, false), ARG(0), ARG(2)],
+            vec![COM(2, 4), ARG(1), ARG(3)],
             // and 14
             vec![ARG(0), COM(2, 1), ARG(1)],
             // enumFromTo 15
@@ -185,7 +188,11 @@ pub static EQLIST: LazyLock<Program> = LazyLock::new(|| {
             vec![TRY, PTR(0, true, true), ARG(1)],
             vec![COM(4, 3), ARG(0), ARG(1)],
             // 21
-            vec![COM(2, 15), PTR(0, true, true), ARG(1)],
+            vec![COM(2, 15),
+                 SPE(ADD, false, SpeCell::ARG(0), SpeCell::LIT(1), 0),
+                 // PTR(0, true, true),
+                 ARG(1)
+            ],
             vec![PRM(ADD, false), ARG(0), INT(1)]
         ]
     }
