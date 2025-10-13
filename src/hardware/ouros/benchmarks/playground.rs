@@ -3,127 +3,6 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*;
 
-/**
-A minimal Haskell program:
-
--- T => COM(2,0,[0,0,0,0,0,0])
--- F =>  COM(2,0,[1,0,0,0,0,0])
-data TF = T | F
-
-tfAnd T b = b
-tfAnd F _ = F
-
-main = tfAnd T F
- */
-#[rustfmt::skip]
-pub static BOOL_AND: LazyLock<Program> = LazyLock::new(|| {
-    Program{
-        heap_img: vec![
-            vec![
-                COM(2, 2),
-                COM(2, 0),
-                COM(2, 1),
-            ]
-        ],
-        comb_img: vec![
-            // True
-            vec![ARG(0)],
-            // False
-            vec![ARG(1)],
-            // tfAnd
-            vec![ARG(0), ARG(1), COM(2, 1)]
-        ],        
-    }
-});
-
-/**
--- the computation in `a` should be shared
-main = let a = tfAnd T
-           b = ftAnd (a T) (a F)
-       in tfOr b b
- */
-#[rustfmt::skip]
-pub static BOOL_NEST: LazyLock<Program> = LazyLock::new(|| {
-    Program {
-        heap_img: vec![
-            vec![ // main
-                COM(1, 2),
-                PTR(1, false, false),
-                PTR(1, false, false)
-            ],
-            vec![ // b
-                COM(1, 4),
-                PTR(2, false, false)
-            ],
-            vec![ // a
-                COM(2, 3),
-                COM(2, 0)
-            ]
-        ],
-        comb_img: vec![
-            // True 0
-            vec![ARG(0)],
-            // False 1
-            vec![ARG(1)],
-            // tfOr 2
-            vec![ARG(0), COM(2, 0)],
-            // tfAnd 3
-            vec![ARG(0), ARG(1) ,COM(2, 1)],
-            // b-body 4
-            vec![COM(2, 3), PTR(0, true, true), PTR(1, true, true)],
-            vec![ARG(0), COM(2, 0)],
-            vec![ARG(0), COM(2, 1)]
-        ]
-    }
-});
-
-/**
-main = let a = 4 + 5
-           b = a * 2
-       in
-          if 42 == 42 then a * b else a - b
-*/
-#[rustfmt::skip]
-pub static ALU_OP: LazyLock<Program> = LazyLock::new(|| {
-    Program {
-        heap_img: vec![
-            vec![ // main
-                PRM(EQ, false),
-                INT(42),
-                INT(42),
-                PTR(1, false, false),
-                PTR(2, false, false),
-            ],
-            vec![ // a - b
-                PRM(SUB, false),
-                PTR(3, false, false),
-                PTR(4, false, false),
-            ],
-            vec![ // a * b
-                PRM(MUL, false),
-                PTR(3, false, false),
-                PTR(4, false, false),
-            ],
-            vec![ // a
-                PRM(ADD, false),
-                INT(4),
-                INT(5)
-            ],
-            vec![ // b
-                PRM(MUL, false),
-                PTR(3, false, false),
-                INT(2)
-            ],            
-        ],
-        comb_img: vec![
-            // True 0
-            vec![ARG(1)],
-            // False 1
-            vec![ARG(0)],
-        ]
-    }
-});
-
 #[rustfmt::skip]
 pub static EQLIST: LazyLock<Program> = LazyLock::new(|| {
     Program {
@@ -154,46 +33,49 @@ pub static EQLIST: LazyLock<Program> = LazyLock::new(|| {
             // : 3 (arity 4)
             vec![ARG(3), ARG(0), ARG(1)],
             // eqList 4
-            vec![
-                ARG(0),
-                PTR(0, true, true),
-                PTR(1, true, true),
-            ],
-            vec![COM(1, 7), ARG(1)],
-            vec![COM(3, 8), ARG(1)],
-            // 7
-            vec![ARG(0), COM(2, 0), COM(2, 10)],
-            // 8
-            vec![ARG(0), COM(2, 1), PTR(0, true, true)],
-            vec![COM(4, 11), ARG(1), ARG(2)],
+            vec![ARG(0), TAB(5, 1), ARG(1)],
+            // 5 C2
+            vec![ARG(1), TAB(7, 0)],
+            // 6 C3
+            vec![ARG(3), TAB(9, 2), ARG(0), ARG(1)],
+            // 7 C4
+            vec![CON(1, 0, 1)],
+            // 8 C5
+            vec![CON(1, 0, 0)],
+            // 9 C6
+            vec![CON(1, 0, 0)],
             // 10
-            vec![COM(2, 1)],
-            // 11
-            vec![COM(2, 14),
-                 SPE(LE, false, SpeCell::ARG(0), SpeCell::ARG(2), 0),
+            vec![COM(2, 23),
+                 SPE(LE, false, SpeCell::ARG(3), SpeCell::ARG(0), 0),
                  // PTR(0, true, true),
                  PTR(1, true, true)
             ],
-            vec![PRM(LE, false), ARG(0), ARG(2)],
-            vec![COM(2, 4), ARG(1), ARG(3)],
+            vec![PRM(LE, false), ARG(3), ARG(0)],
+            vec![COM(2, 4), ARG(4), ARG(1)],
+            vec![],
             // and 14
             vec![ARG(0), COM(2, 1), ARG(1)],
             // enumFromTo 15
-            vec![PRM(LE, false), ARG(0), ARG(1), COM(2, 2), PTR(0, true, true)],
-            vec![COM(2, 17), ARG(0), ARG(1)],
+            vec![PRM(LE, false), ARG(0), ARG(1), TAB(16, 2), ARG(0), ARG(1)],
+            // 16
+            vec![CON(1, 0, 0)],
             // 17
-            vec![COM(2, 19), ARG(0), PTR(0, true, true)],
-            vec![COM(2, 21), ARG(0), ARG(1)],
+            vec![COM(2, 19), ARG(1), PTR(0, true, true)],
+            vec![COM(2, 21), ARG(1), ARG(2)],
             // 19
             vec![TRY, PTR(0, true, true), ARG(1)],
-            vec![COM(4, 3), ARG(0), ARG(1)],
+            vec![CON(3, 2, 1), ARG(0), ARG(1)],
             // 21
             vec![COM(2, 15),
                  SPE(ADD, false, SpeCell::ARG(0), SpeCell::LIT(1), 0),
                  // PTR(0, true, true),
                  ARG(1)
             ],
-            vec![PRM(ADD, false), ARG(0), INT(1)]
+            vec![PRM(ADD, false), ARG(0), INT(1)],
+            // and 23
+            vec![ARG(0), TAB(24, 1), ARG(1)],
+            vec![CON(1, 0, 0)],
+            vec![ARG(1)]
         ]
     }
 });

@@ -54,6 +54,7 @@ pub struct Reducer {
     reg_in: Register<ActiveApp>,
     reg_addr: Register<usize>,
     reg_spine: Register<App>,
+    reg_arity: Register<u8>,
     reg_stm: Register<Stm>,
     reg_idx: Register<usize>,
     reg_ctr: Register<usize>,
@@ -80,6 +81,7 @@ impl Reducer {
             reg_stm: Default::default(),
             reg_idx: Default::default(),
             reg_ctr: Default::default(),
+            reg_arity: Default::default(),
         }
     }
 
@@ -111,7 +113,7 @@ impl Reducer {
             stack_idx: self.reg_in.value().stack_idx,
             load: {
                 let old_spn = &self.reg_in.value().load;
-                let before = arity_of(&old_spn[0]) as usize + 1;
+                let before = *self.reg_arity.value() as usize + 1;
                 let mut res = self.inst(&self.comb_table.dout());
                 let after = app_length(&res);
                 assert!(
@@ -384,12 +386,25 @@ impl Reducer {
     fn step_next(&mut self) {
         if self.in_fire() {
             self.reg_stm.connect(&Stm::SPINE);
-            self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
             self.reg_ctr.connect(&0);
             self.reg_addr.connect(&self.input.free_addr);
             match self.input.in_app.load[0] {
-                Atom::COM(_, addr) => self.comb_table.read(addr),
+                Atom::COM(arity, addr) => {
+                    self.reg_in.connect(&self.input.in_app);
+                    self.reg_arity.connect(&arity);
+                    self.comb_table.read(addr)
+                }
+                Atom::CON(arity, fields, idx) => {
+                    if let Atom::TAB(base, free_vars) = self.input.in_app.load[fields + 1] {
+                        self.reg_in.connect(&self.input.in_app);
+                        self.reg_in.input.load[0] = Atom::COM(0, base + idx);
+                        self.reg_arity.connect(&(fields as u8 + free_vars + 1));
+                        self.comb_table.read(base + idx);
+                    } else {
+                        panic!()
+                    }
+                }
                 _ => todo!(),
             };
         } else {
@@ -478,6 +493,7 @@ impl HwModule for Reducer {
         self.reg_in.tick();
         self.reg_addr.tick();
         self.reg_spine.tick();
+        self.reg_arity.tick();
         self.reg_stm.tick();
         self.reg_idx.tick();
         self.reg_ctr.tick();

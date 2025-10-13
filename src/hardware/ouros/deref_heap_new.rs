@@ -203,7 +203,10 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
                 unreachable!()
             }
         },
-        _ => unreachable!(),
+        _ => {
+            println!("app: {:?}", app);
+            unreachable!()
+        }
     }
 }
 

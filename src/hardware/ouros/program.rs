@@ -15,6 +15,9 @@ pub enum AluOp {
 type Unique = bool;
 type NewCell = bool;
 type RevCond = bool;
+type Index = usize;
+type Fields = usize;
+type FreeVars = u8;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum SpeCell {
@@ -27,6 +30,8 @@ pub enum Atom {
     NOP,
     PTR(usize, Unique, NewCell),
     COM(Arity, usize),
+    CON(Arity, Fields, Index),
+    TAB(usize, FreeVars),
     INT(i32),
     PRM(AluOp, RevCond),
     Y,
@@ -57,6 +62,8 @@ impl fmt::Display for Atom {
             Atom::ERR(e) => write!(f, "ERR({})", e),
             Atom::TRY => write!(f, "TRY"),
             Atom::SPE(alu_op, _, spe_cell, spe_cell1, _) => write!(f, "SPE"),
+            Atom::CON(a, fields, i) => write!(f, "CON({}, {}, {})", a, fields, i),
+            Atom::TAB(base, fv) => write!(f, "TAB({}, {})", base, fv),
         }
     }
 }
@@ -87,6 +94,7 @@ pub fn arity_of(atom: &Atom) -> u8 {
     use Atom::*;
     match atom {
         COM(a, _) => *a,
+        CON(a, _, _) => *a,
         PRM(_, _) => 2,
         INT(_) => 1,
         Y => 1,
@@ -227,6 +235,13 @@ pub fn is_prm(atom: &Atom) -> bool {
 pub fn is_try(atom: &Atom) -> bool {
     match atom {
         Atom::TRY => true,
+        _ => false,
+    }
+}
+
+pub fn is_con(atom: &Atom) -> bool {
+    match atom {
+        Atom::CON(_, _, _) => true,
         _ => false,
     }
 }

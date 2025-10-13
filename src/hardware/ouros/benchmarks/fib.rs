@@ -16,16 +16,17 @@ pub static FIB: LazyLock<Program> = LazyLock::new(|| {
             vec![ARG(0)],
             // fib 2
             vec![
-                PRM(LE, false),
+                PRM(LE, true),
                 ARG(0),
                 INT(1),
-                PTR(0, true, true),
-                INT(1),
+                TAB(3, 1),
+                ARG(0)
+                // PTR(0, true, true),
+                // INT(1),
             ],
             // 3
             vec![
-                COM(1, 4),
-                ARG(0)
+                INT(1)
             ],
             // 4
             vec![
@@ -35,11 +36,11 @@ pub static FIB: LazyLock<Program> = LazyLock::new(|| {
             ],
             vec![
                 COM(1, 7),
-                ARG(0)
+                ARG(1)
             ],
             vec![
                 COM(1, 9),
-                ARG(0)
+                ARG(1)
             ],
             // 7
             vec![
