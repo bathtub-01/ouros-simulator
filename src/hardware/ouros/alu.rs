@@ -32,11 +32,11 @@ pub fn compute(op: &AluOp, rev: bool, l: i32, r: i32) -> Atom {
     fn comb_bool(b: bool, inv: bool) -> Atom {
         if b ^ inv {
             // COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
-            //COM(2, 0) // True, always be placed at 0
+            //COM(2, 1) // True, always be placed at 0
             CON(1, 0, 1)
         } else {
             // COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
-            //COM(2, 1) // False
+            //COM(2, 0) // False
             CON(1, 0, 0)
         }
     }
