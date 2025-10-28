@@ -7,7 +7,7 @@
 
 use super::config::*;
 use super::ouros_core::{is_int, is_lit_atom, is_prm, is_seq_evaluated};
-use super::program::{app_length, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
+use super::program::{app_length, is_try, is_whnf, ActiveApp, App, Atom, FrozenApp, Program};
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::stack::StackOp;
 use crate::hardware::common::{DualPortMem, Register, Stack};
@@ -133,6 +133,8 @@ pub struct DrfHeapStat {
     pub stm_cycles: [u32; 4],
     pub heap_update: u32,
     pub update_avoided: u32,
+    pub spark_attemps: u32,
+    pub sparks: u32,
 }
 
 /// branch conditions for `consume_next()`
@@ -201,6 +203,10 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
                 _ => unreachable!(),
             },
         },
+        Atom::TRY => match app[1] {
+            Atom::PTR(p, _) => (1, p),
+            _ => panic!("TRY literal should not enter the heap"),
+        },
         Atom::SEQ(true) => match app[2] {
             Atom::PTR(p, _) => (2, p),
             // NOTE: currently rejecting things like `seq a 1` (direct it to reducer will be easier)
@@ -263,6 +269,11 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
         }
         Atom::SEQ(true) => {
             assert_eq!(arg_id, 2);
+            res_v.extend_from_slice(&target_dashed[0..target_len]);
+            res_v.extend_from_slice(&app[3..app_len]);
+        }
+        Atom::TRY => {
+            assert_eq!(arg_id, 1);
             res_v.extend_from_slice(&target_dashed[0..target_len]);
             res_v.extend_from_slice(&app[3..app_len]);
         }
@@ -680,6 +691,17 @@ impl DrfHeap {
         }
     }
 
+    fn more_strict_args(&self, s1: &IAs1) -> bool {
+        let ia = &self.holder_in.value().load;
+        match ia[0] {
+            Atom::PTR(_, _) => false,
+            Atom::PRM(_, _) | Atom::SEQ(_) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
+            Atom::TRY => *self.arg_id.value() == 1 && *s1 != IAs1::ExistWHNF,
+            // more on this to support strict args in the future
+            _ => unreachable!(),
+        }
+    }
+
     fn getIAs2(&self, s1: &IAs1) -> IAs2 {
         let ia = &self.holder_in.value().load;
         let target_in_whnf = self.heap_mem.dout_a().exist && is_whnf(&self.heap_mem.dout_a().app);
@@ -692,14 +714,7 @@ impl DrfHeap {
             .enumerate()
             .any(|(idx, s)| find_free_stack(s, frame_record[idx]));
         let local_stack: bool = *s1 == IAs1::ExistWHNF || *s1 == IAs1::ExistIAWorkingAtNewFrame;
-        let more_strict_args: bool = {
-            match ia[0] {
-                Atom::PTR(_, _) => false,
-                Atom::PRM(_, _) | Atom::SEQ(_) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
-                // more on this to support strict args in the future
-                _ => unreachable!(),
-            }
-        };
+        let more_strict_args: bool = self.more_strict_args(s1);
 
         if more_strict_args && local_stack {
             IAs2::NextStrictArgLocal
@@ -708,7 +723,8 @@ impl DrfHeap {
         } else {
             if (is_ptr(&ia[0])
                 || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
-                || is_seq_evaluated(&ia[0]))
+                || is_seq_evaluated(&ia[0])
+                || (is_try(&ia[0]) && *self.arg_id.value() == 1))
                 && target_in_whnf
             {
                 IAs2::NoMoreArgsCanEmit
@@ -1180,7 +1196,9 @@ impl DrfHeap {
                 self.push_target(false);
             }
         }
-
+        if self.more_strict_args(&ias1) {
+            self.stat.spark_attemps += 1;
+        }
         match self.getIAs2(&ias1) {
             IAs2::NextStrictArgNewStk => {
                 let current_idx = self.holder_in.value().stack_idx as usize;
@@ -1205,9 +1223,11 @@ impl DrfHeap {
                     //     record
                     // });
                 };
+                self.stat.sparks += 1;
             }
             IAs2::NextStrictArgLocal => {
                 self.select_next_arg_read(&updated_dmder);
+                self.stat.sparks += 1;
             }
             IAs2::NoMoreArgsNoEmit => {
                 self.cancel_new_frame(&ias1);

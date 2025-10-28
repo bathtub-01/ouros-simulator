@@ -23,6 +23,7 @@ pub enum Atom {
     PRM(AluOp, bool),
     Y,
     SEQ(bool),
+    TRY,
     ERR(u8),
 }
 
@@ -51,6 +52,7 @@ impl fmt::Display for Atom {
             Atom::PRM(p, inv) => write!(f, "PRM({:?}, {})", p, inv),
             Atom::Y => write!(f, "Y"),
             Atom::SEQ(evaluated) => write!(f, "SEQ({})", evaluated),
+            Atom::TRY => write!(f, "TRY"),
             Atom::ERR(e) => write!(f, "ERR({})", e),
         }
     }
@@ -82,7 +84,15 @@ fn arity_of(atom: &Atom) -> u8 {
         INT(_) => 1,
         Y => 1,
         SEQ(_) => 2,
+        TRY => 2,
         _ => 0,
+    }
+}
+
+pub fn is_try(atom: &Atom) -> bool {
+    match atom {
+        Atom::TRY => true,
+        _ => false,
     }
 }
 

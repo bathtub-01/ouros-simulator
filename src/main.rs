@@ -158,7 +158,12 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         ouros.dheap.addr_bumper.value(),
         stats.0.heap_update,
         stats.0.update_avoided
-    );
+    )?;
+    writeln!(
+        log,
+        " Local spark attemps: {}, Local sparks: {}",
+        stats.0.spark_attemps, stats.0.sparks
+    )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 
     for (i, s) in stats
@@ -276,6 +281,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    inspect_prog(&EQLIST)
+    inspect_prog(&QUEENS2)
     // run_benchmarks()
 }

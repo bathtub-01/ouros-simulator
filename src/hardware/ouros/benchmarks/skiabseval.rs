@@ -120,8 +120,8 @@ pub static SKIABSEVAL: LazyLock<Program> = LazyLock::new(|| {
             PTR(18, false),
         ], 
         vec![ // 21 
-            COM(4,40,[0,0,3,2,1,3]), //X(XXX)(XX)
-            SEQ(false),
+            COM(4,33,[0,0,1,3,3,2]), //X(X(XX)X)X
+            TRY,
         ], 
         vec![ // 22 
             COM(5,38,[0,1,4,4,2,3]), //X(XX)X(XX)
@@ -211,8 +211,8 @@ pub static SKIABSEVAL: LazyLock<Program> = LazyLock::new(|| {
             PTR(37, false),
         ], 
         vec![ // 40 
-            COM(4,40,[0,0,3,2,1,3]), //X(XXX)(XX)
-            SEQ(false),
+            COM(4,33,[0,0,1,3,3,2]), //X(X(XX)X)X
+            TRY,
         ], 
         vec![ // 41 
             COM(5,38,[0,1,4,4,2,3]), //X(XX)X(XX)
@@ -315,8 +315,8 @@ pub static SKIABSEVAL: LazyLock<Program> = LazyLock::new(|| {
             PTR(59, false),
         ], 
         vec![ // 62 
-            COM(4,40,[0,0,3,2,1,3]), //X(XXX)(XX)
-            SEQ(false),
+            COM(4,33,[0,0,1,3,3,2]), //X(X(XX)X)X
+            TRY,
         ], 
         vec![ // 63 
             COM(5,38,[0,1,4,4,2,3]), //X(XX)X(XX)
