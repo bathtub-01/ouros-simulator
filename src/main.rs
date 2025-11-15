@@ -25,7 +25,7 @@ fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 100000 {
+        if ouros.done() || cycle == 1000000 {
             break;
         }
         ouros.tick();
@@ -275,6 +275,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    inspect_prog(&EQLIST)
+    inspect_prog(&BRAUN)
     // run_benchmarks()
 }

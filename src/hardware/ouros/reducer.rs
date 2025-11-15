@@ -8,7 +8,6 @@
 use super::alu::compute;
 use super::program::*;
 use crate::hardware::common::{Register, SinglePortMem};
-use crate::hardware::ouros::combinator::{parse_pat, Hole, ParseRes, ALL_PATTERNS, DECODE_TABLE};
 use crate::hardware::ouros::config::*;
 use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
 use crate::hardware::utils::fire;
@@ -27,6 +26,7 @@ enum Stm {
     IDLE,
     SPINE,
     APP,
+    SPECIAL,
 }
 
 #[derive(Default)]
@@ -58,6 +58,7 @@ pub struct Reducer {
     reg_stm: Register<Stm>,
     reg_idx: Register<usize>,
     reg_ctr: Register<usize>,
+    reg_app_mask: Register<bool>,
     stat: ReducerStat,
     stat_detail_lv: u8,
 }
@@ -82,6 +83,7 @@ impl Reducer {
             reg_idx: Default::default(),
             reg_ctr: Default::default(),
             reg_arity: Default::default(),
+            reg_app_mask: Default::default(),
         }
     }
 
@@ -106,44 +108,65 @@ impl Reducer {
 
     pub fn spine_valid(&self) -> bool {
         *self.reg_stm.value() == Stm::SPINE
+            || (*self.reg_stm.value() == Stm::SPECIAL && *self.reg_app_mask.value())
     }
 
     pub fn spine_bits(&self) -> ActiveApp {
         ActiveApp {
             stack_idx: self.reg_in.value().stack_idx,
             load: {
-                let old_spn = &self.reg_in.value().load;
-                let before = *self.reg_arity.value() as usize + 1;
-                let mut res = self.inst(&self.comb_table.dout());
-                let after = app_length(&res);
-                assert!(
-                    old_spn[before..].iter().filter(|a| !is_nop(a)).count() + after <= APP_LENGTH
-                );
-                for i in 0..(APP_LENGTH - before) {
-                    if after + i < APP_LENGTH {
-                        res[after + i] = old_spn[before + i].clone();
+                if *self.reg_stm.value() == Stm::SPECIAL {
+                    // Y case
+                    let mut res: App = self.reg_in.value().load.clone();
+                    res[0] = self.reg_in.value().load[1].clone();
+                    res[1] = Atom::PTR(*self.reg_addr.value(), false, false);
+                    res
+                } else {
+                    let old_spn = &self.reg_in.value().load;
+                    let before = *self.reg_arity.value() as usize + 1;
+                    let mut res = self.inst(&self.comb_table.dout());
+                    let after = app_length(&res);
+                    assert!(
+                        old_spn[before..].iter().filter(|a| !is_nop(a)).count() + after
+                            <= APP_LENGTH
+                    );
+                    for i in 0..(APP_LENGTH - before) {
+                        if after + i < APP_LENGTH {
+                            res[after + i] = old_spn[before + i].clone();
+                        }
                     }
+                    res
                 }
-                res
             },
         }
     }
 
     pub fn app_valid(&self) -> bool {
-        *self.reg_stm.value() == Stm::APP
+        *self.reg_stm.value() == Stm::APP || *self.reg_stm.value() == Stm::SPECIAL
     }
 
     pub fn app_bits(&self) -> FrozenApp {
         FrozenApp {
-            heap_addr: *self.reg_addr.value() + *self.reg_ctr.value() - {
-                if self.app_valid() {
-                    // only to satify Rust..
-                    1
+            heap_addr: {
+                if *self.reg_stm.value() == Stm::SPECIAL {
+                    // Y case
+                    *self.reg_addr.value()
+                } else if let Atom::PTR(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
+                    self.reg_addr.value() + p
                 } else {
-                    0
+                    Default::default()
                 }
             },
-            load: self.inst(&self.comb_table.dout()),
+            load: {
+                if *self.reg_stm.value() == Stm::SPECIAL {
+                    let mut res: App = Default::default();
+                    res[0] = self.reg_in.value().load[1].clone();
+                    res[1] = Atom::PTR(*self.reg_addr.value(), false, false);
+                    res
+                } else {
+                    self.inst(&self.comb_table.dout())
+                }
+            },
         }
     }
 
@@ -155,6 +178,7 @@ impl Reducer {
                 fire(self.input.app_ready, self.app_valid())
                     && !self.more_app(self.reg_spine.value())
             }
+            Stm::SPECIAL => fire(self.input.app_ready, self.app_valid()), // Y case
         }
     }
 
@@ -166,6 +190,13 @@ impl Reducer {
                 .iter()
                 .filter(|a| self.is_nested(a))
                 .count()
+        } else if *self.reg_stm.value() == Stm::SPECIAL {
+            // if self.reg_in.value().load[0] == Atom::Y && *self.reg_app_mask.value() {
+            //     1
+            // } else {
+            //     0
+            // }
+            1
         } else {
             0
         }
@@ -228,7 +259,7 @@ impl Reducer {
                 Atom::PTR(p, _, new) => {
                     if *new {
                         // assert_eq!(*self.reg_stm.value(), Stm::SPINE);
-                        *a = Atom::PTR(self.input.free_addr + *p - hole, true, false);
+                        *a = Atom::PTR(self.reg_addr.value() + *p - hole, true, false);
                     }
                 }
                 Atom::SPE(op, rev, l, r, p) => {
@@ -240,7 +271,7 @@ impl Reducer {
                         *a = compute(op, *rev, op1, op2);
                     } else {
                         // speculation fails
-                        *a = Atom::PTR(self.input.free_addr + *p - hole, true, false);
+                        *a = Atom::PTR(self.reg_addr.value() + *p - hole, true, false);
                     }
                 }
                 Atom::ARG(arg) => *a = self.reg_in.value().load[*arg + 1].clone(),
@@ -385,25 +416,30 @@ impl Reducer {
 
     fn step_next(&mut self) {
         if self.in_fire() {
-            self.reg_stm.connect(&Stm::SPINE);
+            self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
             self.reg_ctr.connect(&0);
-            self.reg_addr.connect(&self.input.free_addr);
+            self.reg_addr
+                .connect(&(self.input.free_addr + self.addr_consumed()));
             match self.input.in_app.load[0] {
                 Atom::COM(arity, addr) => {
-                    self.reg_in.connect(&self.input.in_app);
+                    self.reg_stm.connect(&Stm::SPINE);
                     self.reg_arity.connect(&arity);
                     self.comb_table.read(addr)
                 }
                 Atom::CON(arity, fields, idx) => {
+                    self.reg_stm.connect(&Stm::SPINE);
                     if let Atom::TAB(base, free_vars) = self.input.in_app.load[fields + 1] {
-                        self.reg_in.connect(&self.input.in_app);
                         self.reg_in.input.load[0] = Atom::COM(0, base + idx);
                         self.reg_arity.connect(&(fields as u8 + free_vars + 1));
                         self.comb_table.read(base + idx);
                     } else {
                         panic!()
                     }
+                }
+                Atom::Y => {
+                    self.reg_app_mask.connect(&true);
+                    self.reg_stm.connect(&Stm::SPECIAL);
                 }
                 _ => todo!(),
             };
@@ -462,6 +498,12 @@ impl HwModule for Reducer {
                     );
                 }
             }
+            Stm::SPECIAL => {
+                if fire(self.input.app_ready, self.app_valid()) {
+                    self.step_next();
+                }
+                self.reg_app_mask.connect(&false);
+            }
         }
     }
 
@@ -497,69 +539,6 @@ impl HwModule for Reducer {
         self.reg_stm.tick();
         self.reg_idx.tick();
         self.reg_ctr.tick();
+        self.reg_app_mask.tick();
     }
 }
-
-// #[test]
-// // for now just some test-by-printing...
-// fn reducer_spec() {
-//     use Atom::*;
-//     let mut reducer = Reducer::new();
-//     let print_res = |r: &Reducer| {
-//         // println!("spine: {:?}", r.spine());
-//         // println!("app1: {:?}", r.app1());
-//         // println!("app2: {:?}", r.app2());
-//         // println!("app3: {:?}", r.app3());
-//         println!("==========================");
-//     };
-
-//     reducer.tick();
-
-//     reducer.input.link(|input| {
-//         input.spine_ready = true;
-//         input.app1_ready = true;
-//         input.app2_ready = true;
-//         input.app3_ready = true;
-//         input.free_addr = 42;
-
-//         input.in_valid = true;
-//         input.in_app.stack_idx = 101;
-//         input.in_app.load = [
-//             COM(6, 48, [2, 0, 1, 3, 4, 5]), // XX(XX(XX))
-//             PTR(0, true),
-//             PTR(1, true),
-//             PTR(2, true),
-//             INT(3),
-//             INT(4),
-//             INT(5),
-//             Y,
-//         ];
-//     });
-
-//     reducer.tick();
-//     print_res(&reducer);
-
-//     reducer.input.link(|input| {
-//         input.free_addr = 44;
-//         input.in_valid = true;
-//         input.in_app.stack_idx = 202;
-//         input.in_app.load = [
-//             COM(3, 6, [0, 2, 1, 2, 0, 0]), // XX(XX)
-//             PTR(0, false),
-//             PTR(1, true),
-//             PTR(2, true),
-//             INT(3),
-//             INT(4),
-//             INT(5),
-//             Y,
-//         ];
-//     });
-//     reducer.tick();
-//     print_res(&reducer);
-
-//     reducer.input.link(|input| {
-//         input.in_valid = false;
-//     });
-//     reducer.tick();
-//     print_res(&reducer);
-// }

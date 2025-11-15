@@ -188,7 +188,7 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
             Atom::NOP => unreachable!(),
             _ => match app[2] {
                 Atom::PTR(p, _, false) => (2, p),
-                _ => unreachable!(),
+                _ => unreachable!("app: {:?}", app),
             },
         },
         Atom::TRY => match app[1] {
