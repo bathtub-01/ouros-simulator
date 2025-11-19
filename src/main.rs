@@ -281,6 +281,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    inspect_prog(&QUEENS2)
+    inspect_prog(&YSHARE)
     // run_benchmarks()
 }

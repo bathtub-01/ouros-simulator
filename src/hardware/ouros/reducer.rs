@@ -278,8 +278,27 @@ impl Reducer {
 
                 spine_app[0] = dash_atom(&in_app.load[1]);
                 spine_app[1] = Atom::PTR(self.input.free_addr, false);
+
+                /*
+                // lazier version of Y, seems to be a bit slower..
+                let mut spine_app: App = Default::default();
+                spine_app[0] = Atom::PTR(self.input.free_addr, false);
+                spine_app
+                    .iter_mut()
+                    .skip(1)
+                    .zip(self.input.in_app.load.iter().skip(2))
+                    .for_each(|(l, r)| {
+                        *l = r.clone();
+                });
+                 */
+
+                // standard version of Y
                 app1_app[0] = dash_atom(&in_app.load[1]);
                 app1_app[1] = Atom::PTR(self.input.free_addr, false);
+
+                // cycle-free version of Y
+                // app1_app[0] = Atom::Y;
+                // app1_app[1] = dash_atom(&in_app.load[1]);
 
                 res_spine.1.load = spine_app;
                 res_app1.1.load = app1_app;

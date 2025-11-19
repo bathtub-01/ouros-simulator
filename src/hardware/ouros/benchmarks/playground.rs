@@ -730,3 +730,144 @@ pub static TRY_SPARK: LazyLock<Program> = LazyLock::new(|| {
         ], 
     ]
 });
+
+#[rustfmt::skip]
+pub static YSHARE: LazyLock<Program> = LazyLock::new(|| {
+    vec![
+         // FUN0YShare.main
+        vec![ // 0 
+            PTR(12, false),
+            PTR(11, false),
+            PTR(10, false),
+        ], 
+        vec![ // 1 
+            PTR(20, false),
+            INT(8),
+        ], 
+        vec![ // 2 
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(1, false),
+        ], 
+        vec![ // 3 
+            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(20, false),
+            PTR(23, false),
+        ], 
+        vec![ // 4 
+            PTR(20, false),
+            INT(6),
+        ], 
+        vec![ // 5 
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+            PTR(4, false),
+        ], 
+        vec![ // 6 
+            COM(5,17,[0,1,2,4,3,0]), //XX(X(XX))
+            COM(5,39,[0,1,2,4,3,4]), //XX(XX)(XX)
+            COM(4,4,[3,0,1,2,0,0]), //XXXX
+            PTR(5, false),
+            COM(3,0,[1,0,0,0,0,0]), //X
+        ], 
+        vec![ // 7 
+            COM(5,31,[0,4,1,4,2,3]), //XX(X(XX))X
+            PTR(6, false),
+            PTR(3, false),
+            COM(3,0,[2,0,0,0,0,0]), //X
+            PTR(2, false),
+        ], 
+        vec![ // 8 
+            COM(3,6,[0,2,2,1,0,0]), //XX(XX)
+            PTR(7, false),
+            COM(3,0,[0,0,0,0,0,0]), //X
+        ], 
+        vec![ // 9 
+            Y,
+            PTR(8, false),
+            COM(3,0,[0,0,0,0,0,0]), //X
+        ], 
+        vec![ // 10 
+            PTR(16, false),
+            INT(20),
+            PTR(9, false),
+        ], 
+        vec![ // 11 
+            COM(3,2,[0,2,1,0,0,0]), //XXX
+            PRM(LE,true),
+            INT(0),
+        ], 
+         // FUN1NanoPrelude.all
+        vec![ // 12 
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            Y,
+            PTR(14, false),
+        ], 
+        vec![ // 13 
+            COM(5,13,[0,1,2,4,3,0]), //X(X(XX))X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            PTR(15, false),
+        ], 
+        vec![ // 14 
+            COM(5,16,[4,0,1,2,3,0]), //XX(XXX)
+            COM(2,0,[1,0,0,0,0,0]), //X
+            PTR(13, false),
+        ], 
+         // FUN2Data.Bool.&&
+        vec![ // 15 
+            COM(2,1,[1,0,0,0,0,0]), //XX
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+         // FUN3YShare.take
+        vec![ // 16 
+            COM(5,38,[0,1,4,2,3,4]), //X(XX)X(XX)
+            COM(4,12,[0,3,1,2,1,0]), //X(XXX)X
+            PTR(19, false),
+            COM(2,0,[0,0,0,0,0,0]), //X
+            PTR(18, false),
+        ], 
+        vec![ // 17 
+            COM(4,5,[0,1,3,2,0,0]), //X(XX)X
+            COM(3,3,[0,1,2,0,0,0]), //X(XX)
+            COM(4,2,[3,0,1,0,0,0]), //XXX
+        ], 
+        vec![ // 18 
+            COM(5,21,[0,1,2,4,3,0]), //X(X(XXX))
+            PTR(17, false),
+            PTR(16, false),
+            PRM(SUB,false),
+            INT(1),
+        ], 
+        vec![ // 19 
+            PRM(EQ,false),
+            INT(0),
+        ], 
+         // FUN4YShare.fib
+        vec![ // 20 
+            COM(5,28,[0,4,1,2,4,3]), //XXX(XX)X
+            PRM(LE,false),
+            INT(1),
+            PTR(22, false),
+            INT(1),
+        ], 
+        vec![ // 21 
+            COM(5,21,[0,1,2,4,3,0]), //X(X(XXX))
+            PRM(ADD,false),
+            PTR(20, false),
+            PRM(SUB,false),
+            INT(1),
+        ], 
+        vec![ // 22 
+            COM(5,49,[0,4,1,2,4,3]), //XX(X(XXX))
+            PTR(21, false),
+            PTR(20, false),
+            PRM(SUB,false),
+            INT(2),
+        ], 
+         // FUN5NanoPrelude.head
+        vec![ // 23 
+            COM(3,2,[2,0,1,0,0,0]), //XXX
+            ERR(3),
+            COM(2,0,[0,0,0,0,0,0]), //X
+        ], 
+    ]
+});
