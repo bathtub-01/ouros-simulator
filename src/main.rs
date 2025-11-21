@@ -25,7 +25,7 @@ fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 1000000 {
+        if ouros.done() || cycle == 1_000_000 {
             break;
         }
         ouros.tick();
@@ -255,8 +255,8 @@ macro_rules! benchmarks {
 /// run the benchmark suite with less stat details
 fn run_benchmarks() -> std::io::Result<()> {
     let (benchmarks, names) = benchmarks!(
-        EQLIST // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-               // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TRIBELIE, TREEPARI, TREESUM, WHILEX,
+        ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
+        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TRIBELIE, TREEPARI, TREESUM, WHILEX,
     );
     let mut counter = 0;
     let results = benchmarks.map(|p| {
@@ -275,6 +275,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    inspect_prog(&BRAUN)
+    inspect_prog(&TRIBELIE)
     // run_benchmarks()
 }

@@ -975,7 +975,7 @@ impl DrfHeap {
         }
     }
 
-    fn need_spit(&self) -> bool {
+    pub fn need_spit(&self) -> bool {
         match self.stm.value() {
             Stm::IDLE => false,
             Stm::WHNF => {
@@ -1148,6 +1148,7 @@ impl DrfHeap {
 
         match write_back {
             Some(app) => {
+                // println!("big deref! addr {}", self.free_addr_local());
                 self.thread_stack[self.holder_in.value().stack_idx as usize]
                     .push((false, self.free_addr_local()));
                 self.write_back_big_deref(&app, port_big_deref);
@@ -1172,6 +1173,7 @@ impl DrfHeap {
                 updated_dmder = deref_res;
                 match write_back {
                     Some(app) => {
+                        // println!("big deref! addr {}", self.free_addr_local());
                         // NOTE: this will only fall to IAs2::NoMoreArgsCanEmit,
                         // no frame issue here, because we are on an old stack
                         self.thread_stack[self.holder_in.value().stack_idx as usize]
@@ -1341,6 +1343,16 @@ impl HwModule for DrfHeap {
     }
 
     fn update_stat(&mut self) {
+        // if self.port_b_fire()
+        //     && self.heap_mem.input.port_b.enable
+        //     && self.heap_mem.input.port_b.is_write
+        // {
+        //     println!(
+        //         "port b write {}: {:?}",
+        //         self.heap_mem.input.port_b.addr, self.heap_mem.input.port_b.din
+        //     );
+        // }
+
         if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.holder_out.0 {
                 self.stat

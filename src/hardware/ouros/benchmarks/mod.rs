@@ -6,19 +6,18 @@ pub use adjoxo::*;
 
 pub mod braun;
 pub use braun::*;
-/*
+
 pub mod clausify;
 pub use clausify::*;
 
 pub mod countdown;
 pub use countdown::*;
-*/
 pub mod fib;
 pub use fib::*;
 
 pub mod mss;
 pub use mss::*;
-/*
+
 pub mod ordlist;
 pub use ordlist::*;
 
@@ -54,4 +53,3 @@ pub use treepari::*;
 
 pub mod tribelie;
 pub use tribelie::*;
-*/

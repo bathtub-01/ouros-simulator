@@ -36,6 +36,7 @@ pub struct ReducerInput {
     pub spine_ready: bool,
     pub app_ready: bool,
     pub free_addr: usize, // receive free address from GC
+    pub need_split: bool,
 }
 
 impl HwInput for ReducerInput {}
@@ -72,6 +73,7 @@ impl Reducer {
                 spine_ready: false,
                 app_ready: false,
                 free_addr: Default::default(),
+                need_split: false,
             },
             comb_table: SinglePortMem::new(size),
             stat: Default::default(),
@@ -190,12 +192,7 @@ impl Reducer {
                 .iter()
                 .filter(|a| self.is_nested(a))
                 .count()
-        } else if *self.reg_stm.value() == Stm::SPECIAL {
-            // if self.reg_in.value().load[0] == Atom::Y && *self.reg_app_mask.value() {
-            //     1
-            // } else {
-            //     0
-            // }
+        } else if *self.reg_stm.value() == Stm::SPECIAL && *self.reg_app_mask.value() {
             1
         } else {
             0
@@ -419,8 +416,9 @@ impl Reducer {
             self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
             self.reg_ctr.connect(&0);
+            let one = if self.input.need_split { 1 } else { 0 };
             self.reg_addr
-                .connect(&(self.input.free_addr + self.addr_consumed()));
+                .connect(&(self.input.free_addr + self.addr_consumed() + one));
             match self.input.in_app.load[0] {
                 Atom::COM(arity, addr) => {
                     self.reg_stm.connect(&Stm::SPINE);
@@ -499,15 +497,23 @@ impl HwModule for Reducer {
                 }
             }
             Stm::SPECIAL => {
+                self.reg_app_mask.connect(&false);
                 if fire(self.input.app_ready, self.app_valid()) {
                     self.step_next();
                 }
-                self.reg_app_mask.connect(&false);
             }
+        }
+        if self.spine_valid() && !self.input.spine_ready {
+            println!("spine leaked!: {:?}", self.spine_bits());
+            panic!();
         }
     }
 
     fn update_stat(&mut self) {
+        // if fire(self.app_valid(), self.input.app_ready) {
+        //     println!("app leave: {:?}", self.app_bits());
+        // }
+
         if self.stat_detail_lv >= DLV_BUSY_RATE {
             if *self.reg_stm.value() != Stm::IDLE && self.input.app_ready && self.input.spine_ready
             {
@@ -531,6 +537,20 @@ impl HwModule for Reducer {
     }
 
     fn tick_children(&mut self) {
+        // if let Atom::PTR(3250, _, _) = self.reg_in.value().load[1] {
+        //     println!(
+        //         "strange: {:?}, reg stm: {:?}, reg mask: {}, spine valid: {}, spine ready: {}, app valid: {}, app ready: {}, in ready: {}",
+        //         self.reg_in.value().load,
+        //         self.reg_stm.value(),
+        //         self.reg_app_mask.value(),
+        //         self.spine_valid(),
+        //         self.input.spine_ready,
+        //         self.app_valid(),
+        //         self.input.app_ready,
+        //         self.in_ready()
+        //     );
+        // }
+
         self.comb_table.tick();
         self.reg_in.tick();
         self.reg_addr.tick();

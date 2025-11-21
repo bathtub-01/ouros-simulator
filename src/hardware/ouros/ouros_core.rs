@@ -193,6 +193,7 @@ impl HwModule for OurosCore {
         self.dheap.input.start = self.input.start;
 
         self.reducer.input.free_addr = self.dheap.free_addr();
+        self.reducer.input.need_split = self.dheap.need_spit();
 
         // this 'kind of' fixes the ring problem
         for _ in 0..3 {
