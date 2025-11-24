@@ -3,176 +3,176 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*;
 
-#[rustfmt::skip]
-pub static EQLIST: LazyLock<Program> = LazyLock::new(|| { Program {
-    heap_img: vec![
-        // AExp0
-        vec![ // 0 
-            COM(1,2),
-            PTR(3, false, false),
-        ], 
-        vec![ // 1 
-            PTR(7, false, false),
-            INT(101),
-            INT(200),
-        ], 
-        vec![ // 2 
-            PTR(7, false, false),
-            INT(1),
-            INT(100),
-        ], 
-        vec![ // 3 
-            PTR(4, false, false),
-            PRM(LT,false),
-            PTR(2, false, false),
-            PTR(1, false, false),
-        ], 
-        // AExp1
-        vec![ // 4 
-            COM(2,3),
-            PTR(6, false, false),
-        ], 
-        vec![ // 5 
-            COM(6,9),
-            COM(6,11),
-        ], 
-        vec![ // 6 
-            COM(6,5),
-            COM(2,8),
-            PTR(5, false, false),
-        ], 
-        // AExp2
-        vec![ // 7 
-            COM(3,15),
-            PTR(8, false, false),
-        ], 
-        vec![ // 8 
-            COM(3,17),
-            COM(1,19),
-        ], 
-    ],
-    comb_img: vec![
-        // AExp0
-        vec![ // 0 
-            ARG(0),
-        ], 
-        // AExp1
-        vec![ // 1 
-            ARG(1),
-        ], 
-        // AExp2
-        vec![ // 2 
-            ARG(0),
-            INT(0),
-            INT(42),
-        ], 
-        // AExp3
-        vec![ // 3 
-            Y,
-            PTR(0, true, true),
-        ], 
-        vec![ // 4 
-            ARG(0),
-            ARG(1),
-        ], 
-        // AExp4
-        vec![ // 5 
-            ARG(4),
-            PTR(1, true, true),
-            PTR(0, true, true),
-        ], 
-        vec![ // 6 
-            ARG(1),
-            ARG(2),
-            ARG(3),
-            ARG(5),
-        ], 
-        vec![ // 7 
-            ARG(5),
-            COM(2,1),
-            ARG(0),
-        ], 
-        // AExp5
-        vec![ // 8 
-            COM(2,0),
-        ], 
-        // AExp6
-        vec![ // 9 
-            ARG(3),
-            COM(2,0),
-            PTR(0, true, true),
-        ], 
-        vec![ // 10 
-            ARG(0),
-            ARG(1),
-            ARG(2),
-            ARG(4),
-            ARG(5),
-        ], 
-        // AExp7
-        vec![ // 11 
-            COM(1,14),
-            PTR(1, true, true),
-            PTR(0, true, true),
-        ], 
-        vec![ // 12 
-            ARG(1),
-            ARG(3),
-            ARG(5),
-        ], 
-        vec![ // 13 
-            ARG(0),
-            ARG(2),
-            ARG(4),
-        ], 
-        // AExp8
-        vec![ // 14 
-            ARG(0),
-            COM(2,0),
-        ], 
-        // AExp9
-        vec![ // 15 
-            PRM(LE,false),
-            ARG(1),
-            ARG(2),
-            COM(2,0),
-            PTR(0, true, true),
-        ], 
-        vec![ // 16 
-            ARG(0),
-            ARG(1),
-            ARG(2),
-        ], 
-        // AExp10
-        vec![ // 17 
-            COM(4,21),
-            ARG(1),
-            PTR(0, true, true),
-        ], 
-        vec![ // 18 
-            ARG(0),
-            ARG(1),
-            ARG(2),
-        ], 
-        // AExp11
-        vec![ // 19 
-            PTR(7, false, false),
-            PTR(0, true, true),
-        ], 
-        vec![ // 20 
-            PRM(ADD,false),
-            ARG(0),
-            INT(1),
-        ], 
-        // AExp12
-        vec![ // 21 
-            ARG(3),
-            ARG(0),
-            ARG(1),
-        ], 
-    ],
+// #[rustfmt::skip]
+// pub static EQLIST: LazyLock<Program> = LazyLock::new(|| { Program {
+//     heap_img: vec![
+//         // AExp0
+//         vec![ // 0
+//             COM(1,2),
+//             PTR(3, false, false),
+//         ],
+//         vec![ // 1
+//             PTR(7, false, false),
+//             INT(101),
+//             INT(200),
+//         ],
+//         vec![ // 2
+//             PTR(7, false, false),
+//             INT(1),
+//             INT(100),
+//         ],
+//         vec![ // 3
+//             PTR(4, false, false),
+//             PRM(LT,false),
+//             PTR(2, false, false),
+//             PTR(1, false, false),
+//         ],
+//         // AExp1
+//         vec![ // 4
+//             COM(2,3),
+//             PTR(6, false, false),
+//         ],
+//         vec![ // 5
+//             COM(6,9),
+//             COM(6,11),
+//         ],
+//         vec![ // 6
+//             COM(6,5),
+//             COM(2,8),
+//             PTR(5, false, false),
+//         ],
+//         // AExp2
+//         vec![ // 7
+//             COM(3,15),
+//             PTR(8, false, false),
+//         ],
+//         vec![ // 8
+//             COM(3,17),
+//             COM(1,19),
+//         ],
+//     ],
+//     comb_img: vec![
+//         // AExp0
+//         vec![ // 0
+//             ARG(0),
+//         ],
+//         // AExp1
+//         vec![ // 1
+//             ARG(1),
+//         ],
+//         // AExp2
+//         vec![ // 2
+//             ARG(0),
+//             INT(0),
+//             INT(42),
+//         ],
+//         // AExp3
+//         vec![ // 3
+//             Y,
+//             PTR(0, true, true),
+//         ],
+//         vec![ // 4
+//             ARG(0),
+//             ARG(1),
+//         ],
+//         // AExp4
+//         vec![ // 5
+//             ARG(4),
+//             PTR(1, true, true),
+//             PTR(0, true, true),
+//         ],
+//         vec![ // 6
+//             ARG(1),
+//             ARG(2),
+//             ARG(3),
+//             ARG(5),
+//         ],
+//         vec![ // 7
+//             ARG(5),
+//             COM(2,1),
+//             ARG(0),
+//         ],
+//         // AExp5
+//         vec![ // 8
+//             COM(2,0),
+//         ],
+//         // AExp6
+//         vec![ // 9
+//             ARG(3),
+//             COM(2,0),
+//             PTR(0, true, true),
+//         ],
+//         vec![ // 10
+//             ARG(0),
+//             ARG(1),
+//             ARG(2),
+//             ARG(4),
+//             ARG(5),
+//         ],
+//         // AExp7
+//         vec![ // 11
+//             COM(1,14),
+//             PTR(1, true, true),
+//             PTR(0, true, true),
+//         ],
+//         vec![ // 12
+//             ARG(1),
+//             ARG(3),
+//             ARG(5),
+//         ],
+//         vec![ // 13
+//             ARG(0),
+//             ARG(2),
+//             ARG(4),
+//         ],
+//         // AExp8
+//         vec![ // 14
+//             ARG(0),
+//             COM(2,0),
+//         ],
+//         // AExp9
+//         vec![ // 15
+//             PRM(LE,false),
+//             ARG(1),
+//             ARG(2),
+//             COM(2,0),
+//             PTR(0, true, true),
+//         ],
+//         vec![ // 16
+//             ARG(0),
+//             ARG(1),
+//             ARG(2),
+//         ],
+//         // AExp10
+//         vec![ // 17
+//             COM(4,21),
+//             ARG(1),
+//             PTR(0, true, true),
+//         ],
+//         vec![ // 18
+//             ARG(0),
+//             ARG(1),
+//             ARG(2),
+//         ],
+//         // AExp11
+//         vec![ // 19
+//             PTR(7, false, false),
+//             PTR(0, true, true),
+//         ],
+//         vec![ // 20
+//             PRM(ADD,false),
+//             ARG(0),
+//             INT(1),
+//         ],
+//         // AExp12
+//         vec![ // 21
+//             ARG(3),
+//             ARG(0),
+//             ARG(1),
+//         ],
+//     ],
 
-}});
+// }});
 
 // #[rustfmt::skip]
 // pub static EQLIST: LazyLock<Program> = LazyLock::new(|| {

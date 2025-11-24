@@ -120,7 +120,7 @@ impl Reducer {
                 if *self.reg_stm.value() == Stm::SPECIAL {
                     // Y case
                     let mut res: App = self.reg_in.value().load.clone();
-                    res[0] = self.reg_in.value().load[1].clone();
+                    res[0] = dash_atom(&self.reg_in.value().load[1]);
                     res[1] = Atom::PTR(*self.reg_addr.value(), false, false);
                     res
                 } else {
@@ -162,7 +162,7 @@ impl Reducer {
             load: {
                 if *self.reg_stm.value() == Stm::SPECIAL {
                     let mut res: App = Default::default();
-                    res[0] = self.reg_in.value().load[1].clone();
+                    res[0] = dash_atom(&self.reg_in.value().load[1]);
                     res[1] = Atom::PTR(*self.reg_addr.value(), false, false);
                     res
                 } else {
@@ -271,7 +271,15 @@ impl Reducer {
                         *a = Atom::PTR(self.reg_addr.value() + *p - hole, true, false);
                     }
                 }
-                Atom::ARG(arg) => *a = self.reg_in.value().load[*arg + 1].clone(),
+                Atom::ARG(arg, unq) => {
+                    *a = {
+                        let mut r = self.reg_in.value().load[*arg + 1].clone();
+                        if let Atom::PTR(p, unq_, false) = r {
+                            r = Atom::PTR(p, *unq && unq_, false);
+                        }
+                        r
+                    }
+                }
                 _ => {}
             }
         }

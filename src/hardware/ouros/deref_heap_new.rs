@@ -997,7 +997,7 @@ impl DrfHeap {
 
     /// if the resolved pointer is unique, update can be avoided
     fn can_avoid_update(&self) -> bool {
-        return false;
+        // return false;
         match &self.heap_mem.dout_a().app[0] {
             Atom::PTR(_, true, _) => true,
             Atom::PRM(_, _) => match &self.heap_mem.dout_a().app[1] {
@@ -1025,7 +1025,7 @@ impl DrfHeap {
         if is_unique_ptr(&dmder[*self.arg_id.value()]) {
             target.clone()
         } else {
-            dash_app(&target)
+            dash_app(target)
         }
     }
 
