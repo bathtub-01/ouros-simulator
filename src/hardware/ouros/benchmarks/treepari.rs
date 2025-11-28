@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Combinators in this file: 17
+// Combinators in this file: 18
 #[rustfmt::skip]
 pub static TREEPARI: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
@@ -13,12 +13,12 @@ pub static TREEPARI: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(2, false, false),
         ], 
         vec![ // 1 
-            COM(1,28),
+            COM(1,30),
             INT(10),
         ], 
         vec![ // 2 
             COM(1,12),
-            COM(1,21),
+            COM(1,23),
             PTR(1, false, false),
         ], 
     ],
@@ -39,7 +39,7 @@ pub static TREEPARI: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp3
         vec![ // 3 
-            COM(2,14),
+            COM(2,17),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
@@ -53,7 +53,7 @@ pub static TREEPARI: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp4
         vec![ // 6 
-            COM(2,14),
+            COM(2,17),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
@@ -114,72 +114,83 @@ pub static TREEPARI: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp8
         vec![ // 17 
-            COM(2,0),
+            SEQ(false),
+            ARG(1, false),
+            PTR(0, true, true),
+        ], 
+        vec![ // 18 
+            COM(2,14),
+            ARG(0, true),
+            ARG(1, false),
         ], 
         // AExp9
-        vec![ // 18 
+        vec![ // 19 
             COM(2,0),
         ], 
         // AExp10
-        vec![ // 19 
-            ARG(0, true),
-            PTR(0, true, true),
-            COM(2,18),
-        ], 
         vec![ // 20 
-            ARG(1, true),
-            COM(2,1),
-            COM(2,17),
+            COM(2,0),
         ], 
         // AExp11
         vec![ // 21 
             ARG(0, true),
-            COM(2,0),
+            PTR(0, true, true),
+            COM(2,20),
+        ], 
+        vec![ // 22 
+            ARG(1, true),
+            COM(2,1),
             COM(2,19),
         ], 
         // AExp12
-        vec![ // 22 
-            COM(4,30),
+        vec![ // 23 
+            ARG(0, true),
+            COM(2,0),
+            COM(2,21),
+        ], 
+        // AExp13
+        vec![ // 24 
+            COM(4,32),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 23 
-            COM(1,28),
-            ARG(0, false),
-        ], 
-        vec![ // 24 
-            COM(1,28),
-            ARG(0, false),
-        ], 
-        // AExp13
         vec![ // 25 
+            COM(1,30),
+            ARG(0, false),
+        ], 
+        vec![ // 26 
+            COM(1,30),
+            ARG(0, false),
+        ], 
+        // AExp14
+        vec![ // 27 
             PRM(SUB,false),
             ARG(0, true),
             INT(1),
         ], 
-        // AExp14
-        vec![ // 26 
-            COM(1,22),
-            PTR(0, true, true),
-        ], 
-        vec![ // 27 
-            COM(1,25),
-            ARG(0, true),
-        ], 
         // AExp15
         vec![ // 28 
+            COM(1,24),
+            PTR(0, true, true),
+        ], 
+        vec![ // 29 
+            COM(1,27),
+            ARG(0, true),
+        ], 
+        // AExp16
+        vec![ // 30 
             PRM(EQ,false),
             ARG(0, false),
             INT(0),
             PTR(0, true, true),
             COM(2,0),
         ], 
-        vec![ // 29 
-            COM(1,26),
+        vec![ // 31 
+            COM(1,28),
             ARG(0, false),
         ], 
-        // AExp16
-        vec![ // 30 
+        // AExp17
+        vec![ // 32 
             ARG(3, true),
             ARG(0, true),
             ARG(1, true),

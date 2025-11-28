@@ -275,6 +275,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    // inspect_prog(&CLAUSIFY)
-    run_benchmarks()
+    inspect_prog(&TREESUM)
+    // run_benchmarks()
 }

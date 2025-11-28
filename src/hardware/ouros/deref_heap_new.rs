@@ -120,6 +120,7 @@ pub struct DrfHeapStat {
     pub holder_contents: Vec<Option<ActiveApp>>,
     pub heap_stm: Vec<Stm>,
     pub serving_id: Vec<u8>,
+    pub read_non_whnf: Vec<bool>, // to measure the snapshot pressure
     pub stm_cycles: [u32; 4],
     pub heap_update: u32,
     pub update_avoided: u32,
