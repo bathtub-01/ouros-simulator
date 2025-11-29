@@ -545,8 +545,10 @@ impl HwModule for Reducer {
     }
 
     fn tick_children(&mut self) {
-        // if let Atom::PTR(3250, _, _) = self.reg_in.value().load[1] {
-        //     println!(
+        // if let Atom::COM(2, 1) = self.spine_bits().load[0] {
+        //     if let Atom::NOP = self.spine_bits().load[1] {
+        //         if self.spine_valid() {
+        //             println!(
         //         "strange: {:?}, reg stm: {:?}, reg mask: {}, spine valid: {}, spine ready: {}, app valid: {}, app ready: {}, in ready: {}",
         //         self.reg_in.value().load,
         //         self.reg_stm.value(),
@@ -557,6 +559,8 @@ impl HwModule for Reducer {
         //         self.input.app_ready,
         //         self.in_ready()
         //     );
+        //         }
+        //     }
         // }
 
         self.comb_table.tick();

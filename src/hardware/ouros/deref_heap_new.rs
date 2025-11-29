@@ -235,8 +235,8 @@ fn vec_to_app(v: Vec<Atom>) -> App {
 /// Dereference `app`'s PTR at position `arg_id`, with `target`
 /// - when returning `(app, None)`, `app` is the deref result
 /// - when returning `(app1, Some(app2))`,
-///   `app1` is the new cell to be emitted,
-///   `app2` need to be written back
+///   `app1` is the deref result,
+///   `app2` goes to port b
 fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Option<App>) {
     assert!(is_ptr(&app[arg_id]));
     let unique: bool = match app[arg_id] {
@@ -282,8 +282,8 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
         let mut wb_app = res_v[APP_LENGTH..res_v.len()].to_vec();
         wb_app.insert(0, Atom::PTR(free_addr, unique, false));
         (
-            vec_to_app(res_v[0..APP_LENGTH].to_vec()),
-            Some(vec_to_app(wb_app)),
+            vec_to_app(wb_app),
+            Some(vec_to_app(res_v[0..APP_LENGTH].to_vec())),
         )
     }
 }
@@ -352,7 +352,7 @@ fn deref_spec() {
         NOP,
     ];
     assert_eq!(deref(&app, 2, &target1, 42), (res1, None));
-    assert_eq!(deref(&app, 0, &target2, 42), (res2_1, Some(res2_2)));
+    assert_eq!(deref(&app, 0, &target2, 42), (res2_2, Some(res2_1)));
 }
 
 impl fmt::Display for Stm {
@@ -465,7 +465,7 @@ impl DrfHeap {
         let local_release: bool = match *self.stm.value() {
             Stm::IDLE => true,
             Stm::WHNF => match self.getWHNFs() {
-                WHNFs::NoNewFrame => !self.need_spit(),
+                WHNFs::NoNewFrame => true,
                 _ => false,
             },
             Stm::IA => {
@@ -493,20 +493,17 @@ impl DrfHeap {
                 WORKs::DmderNotFound => false,
             },
         };
-        // if !local {
-        //     println!("sub waiting: {}", self.holder_in_sub.value().heap_addr);
-        // }
         let borrowed: bool = match *self.stm.value() {
             Stm::IDLE => false,
             Stm::WHNF => match self.getWHNFs() {
-                WHNFs::MoreDmders | WHNFs::NewFrame => self.need_spit(),
+                WHNFs::MoreDmders | WHNFs::NewFrame => false,
                 WHNFs::NoNewFrame => !self.can_avoid_update(),
             },
             Stm::IA => {
                 let ias1 = self.getIAs1();
                 match self.getIAs2(&ias1) {
                     IAs2::NoMoreArgsNoEmit => true,
-                    IAs2::NoMoreArgsCanEmit => ias1 == IAs1::ExistWHNF && self.need_spit(),
+                    // IAs2::NoMoreArgsCanEmit => ias1 == IAs1::ExistWHNF && self.need_spit(),
                     _ => false,
                 }
             }
@@ -600,6 +597,30 @@ impl DrfHeap {
                 }
                 _ => Default::default(),
             },
+        }
+    }
+
+    pub fn out_big_drf_valid(&self) -> bool {
+        self.need_spit()
+    }
+
+    pub fn out_big_drg_bits(&self) -> FrozenApp {
+        let mk_frozen = |a: Option<App>| match a {
+            Some(big) => FrozenApp {
+                heap_addr: self.free_addr_local(),
+                load: big,
+            },
+            None => Default::default(),
+        };
+        match *self.stm.value() {
+            Stm::WHNF => mk_frozen(self.gen_output_whnf().1),
+            Stm::IA if self.getIAs1() == IAs1::ExistWHNF => {
+                let dmder = &self.holder_in.value().load;
+                let target = &self.heap_mem.dout_a().app;
+                let (_, obig) = deref(dmder, *self.arg_id.value(), target, self.free_addr_local());
+                mk_frozen(obig)
+            }
+            _ => Default::default(),
         }
     }
 
@@ -1101,21 +1122,17 @@ impl DrfHeap {
     }
 
     fn step_whnf(&mut self) {
-        let (deref_res, write_back) = self.gen_output_whnf();
         let whnf_addr = *self.addr_holder.value();
-        self.put_output(self.holder_in.value().stack_idx, deref_res);
-        let port_big_deref: HeapPort;
+        // self.put_output(self.holder_in.value().stack_idx, deref_res);
 
         match self.getWHNFs() {
             WHNFs::MoreDmders => {
                 self.find_pop_read(find_more_dmder(whnf_addr), false);
-                port_big_deref = HeapPort::B;
                 self.stm.connect(&Stm::WHNF);
             }
             WHNFs::NewFrame => {
                 // don't need to write WHNF here, since RESUME will do
                 self.find_pop_read(find_new_frame(whnf_addr), true);
-                port_big_deref = HeapPort::B;
                 self.stm.connect(&Stm::RESUME);
                 self.stat.heap_update += 1;
             }
@@ -1130,6 +1147,7 @@ impl DrfHeap {
                     stack.pop();
                     self.frame_stack[stk_id].pop();
                 }
+
                 if self.can_avoid_update() {
                     /* update avoided */
                     self.stat.update_avoided += 1;
@@ -1138,24 +1156,19 @@ impl DrfHeap {
                     self.write_whnf(HeapPort::B);
                 }
                 // self.write_whnf(HeapPort::B);
-                port_big_deref = HeapPort::A;
-                if write_back == None {
-                    self.consume_next();
-                } else {
-                    self.stm.connect(&Stm::IDLE);
-                }
+                self.consume_next();
             }
         }
 
-        match write_back {
-            Some(app) => {
-                // println!("big deref! addr {}", self.free_addr_local());
-                self.thread_stack[self.holder_in.value().stack_idx as usize]
-                    .push((false, self.free_addr_local()));
-                self.write_back_big_deref(&app, port_big_deref);
-            }
-            None => {}
-        }
+        // match write_back {
+        //     Some(app) => {
+        //         // println!("big deref! addr {}", self.free_addr_local());
+        //         self.thread_stack[self.holder_in.value().stack_idx as usize]
+        //             .push((false, self.free_addr_local()));
+        //         self.write_back_big_deref(&app, port_big_deref);
+        //     }
+        //     None => {}
+        // }
     }
 
     fn step_ia(&mut self) {
@@ -1169,22 +1182,23 @@ impl DrfHeap {
                 self.push_target(false);
             }
             IAs1::ExistWHNF => {
-                let (deref_res, write_back) =
+                let (deref_res, _) =
                     deref(dmder, *self.arg_id.value(), &target, self.free_addr_local());
                 updated_dmder = deref_res;
-                match write_back {
-                    Some(app) => {
-                        // println!("big deref! addr {}", self.free_addr_local());
-                        // NOTE: this will only fall to IAs2::NoMoreArgsCanEmit,
-                        // no frame issue here, because we are on an old stack
-                        self.thread_stack[self.holder_in.value().stack_idx as usize]
-                            .push((false, self.free_addr_local()));
-                        self.write_back_big_deref(&app, HeapPort::B);
-                    }
-                    None => {
-                        self.holder_in.input.load = updated_dmder.clone();
-                    }
-                }
+                self.holder_in.input.load = updated_dmder.clone();
+                // match write_back {
+                //     Some(app) => {
+                //         // println!("big deref! addr {}", self.free_addr_local());
+                //         // NOTE: this will only fall to IAs2::NoMoreArgsCanEmit,
+                //         // no frame issue here, because we are on an old stack
+                //         self.thread_stack[self.holder_in.value().stack_idx as usize]
+                //             .push((false, self.free_addr_local()));
+                //         self.write_back_big_deref(&app, HeapPort::B);
+                //     }
+                //     None => {
+                //         self.holder_in.input.load = updated_dmder.clone();
+                //     }
+                // }
             }
             IAs1::ExistIAWorkingNormal => {
                 // change this to `self.push_target(false);` will disable stack riding
@@ -1401,6 +1415,22 @@ impl HwModule for DrfHeap {
     }
 
     fn tick_children(&mut self) {
+        // if *self.addr_holder.value() == 149 && *self.stm.value() != Stm::IDLE {
+        //     println!("149: holder-in:{:?}", self.holder_in.value());
+        // }
+        // if self.out_sub_fire() {
+        //     if self.out_sub_bits().stack_idx == 0 {
+        //         println!(
+        //             "sub emit: {:?}, sub-holder-in: {}, stk0[0]: {:?}, stk1[0]: {:?}, stk2[0]: {:?}, stk3[0]: {:?}",
+        //             self.out_sub_bits(),
+        //             self.holder_in_sub.value().heap_addr,
+        //             self.thread_stack[0].top(),
+        //             self.thread_stack[1].top(),
+        //             self.thread_stack[2].top(),
+        //             self.thread_stack[3].top(),
+        //         );
+        //     }
+        // }
         self.stm.tick();
         self.stm_sub.tick();
         for stk in &mut self.thread_stack {

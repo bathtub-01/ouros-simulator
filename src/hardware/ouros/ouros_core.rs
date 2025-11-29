@@ -55,7 +55,9 @@ pub struct OurosCore {
     buffers_dheap_a_3: FIFO<ActiveApp, BUFFER_SIZE, false>,
     arbiter_dheap_a: Arbiter<ActiveApp, 4>,
 
-    buffers_dheap_b: FIFO<FrozenApp, BUFFER_SIZE, true>,
+    buffers_dheap_b_0: FIFO<FrozenApp, BUFFER_SIZE, true>,
+    buffers_dheap_b_1: FIFO<FrozenApp, BUFFER_SIZE, true>,
+    arbiter_dheap_b: Arbiter<FrozenApp, 2>,
 
     buffers_reducer_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_reducer_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
@@ -86,7 +88,9 @@ impl OurosCore {
             buffers_dheap_a_3: FIFO::new().record_stat(buffer_usage),
             arbiter_dheap_a: Arbiter::new(),
 
-            buffers_dheap_b: FIFO::new().record_stat(buffer_usage),
+            buffers_dheap_b_0: FIFO::new().record_stat(buffer_usage),
+            buffers_dheap_b_1: FIFO::new().record_stat(buffer_usage),
+            arbiter_dheap_b: Arbiter::new(),
 
             buffers_reducer_0: FIFO::new().record_stat(buffer_usage),
             buffers_reducer_1: FIFO::new().record_stat(buffer_usage),
@@ -111,7 +115,7 @@ impl OurosCore {
         &DrfHeapStat,
         &ReducerStat,
         &AluStat,
-        [&FIFOStat; 12],
+        [&FIFOStat; 13],
         &DualPortMemStat,
     ) {
         (
@@ -126,7 +130,8 @@ impl OurosCore {
                 self.buffers_dheap_a_1.get_stat(),
                 self.buffers_dheap_a_2.get_stat(),
                 self.buffers_dheap_a_3.get_stat(),
-                self.buffers_dheap_b.get_stat(),
+                self.buffers_dheap_b_0.get_stat(),
+                self.buffers_dheap_b_1.get_stat(),
                 self.buffers_reducer_0.get_stat(),
                 self.buffers_reducer_1.get_stat(),
                 self.buffers_reducer_2.get_stat(),
@@ -197,8 +202,12 @@ impl HwModule for OurosCore {
 
         // this 'kind of' fixes the ring problem
         for _ in 0..3 {
+            // gc control signals
+            self.dheap.input.addr_consumed = self.reducer.addr_consumed();
+
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
+            self.arbiter_dheap_b.input.out_ready = self.dheap.port_b_ready();
             self.arbiter_reducer.input.out_ready = self.reducer.in_ready();
             self.arbiter_alu.input.out_ready = self.alu.input_ready();
 
@@ -211,6 +220,10 @@ impl HwModule for OurosCore {
                     &mut self.buffers_dheap_a_3,
                 ],
                 &mut self.arbiter_dheap_a,
+            );
+            buffers_arbiter(
+                [&mut self.buffers_dheap_b_0, &mut self.buffers_dheap_b_1],
+                &mut self.arbiter_dheap_b,
             );
             buffers_arbiter(
                 [
@@ -239,8 +252,8 @@ impl HwModule for OurosCore {
                         input.port_a_bits = v.clone();
                     }
                 }
-                input.port_b_valid = self.buffers_dheap_b.out_valid();
-                match self.buffers_dheap_b.dout() {
+                input.port_b_valid = self.arbiter_dheap_b.out_valid();
+                match self.arbiter_dheap_b.out_bits(self.arbiter_dheap_b.select()) {
                     None => {}
                     Some(v) => {
                         input.port_b_bits = v.clone();
@@ -313,13 +326,13 @@ impl HwModule for OurosCore {
                 }
             }
 
-            self.reducer.input.app_ready = self.buffers_dheap_b.in_ready();
+            self.reducer.input.app_ready = self.buffers_dheap_b_0.in_ready();
+            self.buffers_dheap_b_0.input.in_valid = self.reducer.app_valid();
+            self.buffers_dheap_b_0.input.din = self.reducer.app_bits().clone();
 
-            // let reducer_output = self.reducer.out_bundle();
-
-            self.buffers_dheap_b.input.in_valid = self.reducer.app_valid();
-            self.buffers_dheap_b.input.din = self.reducer.app_bits().clone();
-            self.buffers_dheap_b.input.out_ready = self.dheap.port_b_ready();
+            // todo: add big deref port handling here..
+            self.buffers_dheap_b_1.input.in_valid = self.dheap.out_big_drf_valid();
+            self.buffers_dheap_b_1.input.din = self.dheap.out_big_drg_bits();
 
             let out_spine = &self.reducer.spine_bits();
             if self.reducer.spine_valid() {
@@ -354,9 +367,6 @@ impl HwModule for OurosCore {
                 }
             }
         }
-
-        // gc control signals
-        self.dheap.input.addr_consumed = self.reducer.addr_consumed();
     }
 
     fn tick_children(&mut self) {
@@ -370,7 +380,9 @@ impl HwModule for OurosCore {
         self.buffers_dheap_a_3.tick();
         self.arbiter_dheap_a.tick();
 
-        self.buffers_dheap_b.tick();
+        self.buffers_dheap_b_0.tick();
+        self.buffers_dheap_b_1.tick();
+        self.arbiter_dheap_b.tick();
 
         self.buffers_reducer_0.tick();
         self.buffers_reducer_1.tick();
