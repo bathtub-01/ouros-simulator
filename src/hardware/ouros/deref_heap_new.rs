@@ -1159,16 +1159,6 @@ impl DrfHeap {
                 self.consume_next();
             }
         }
-
-        // match write_back {
-        //     Some(app) => {
-        //         // println!("big deref! addr {}", self.free_addr_local());
-        //         self.thread_stack[self.holder_in.value().stack_idx as usize]
-        //             .push((false, self.free_addr_local()));
-        //         self.write_back_big_deref(&app, port_big_deref);
-        //     }
-        //     None => {}
-        // }
     }
 
     fn step_ia(&mut self) {
@@ -1186,19 +1176,6 @@ impl DrfHeap {
                     deref(dmder, *self.arg_id.value(), &target, self.free_addr_local());
                 updated_dmder = deref_res;
                 self.holder_in.input.load = updated_dmder.clone();
-                // match write_back {
-                //     Some(app) => {
-                //         // println!("big deref! addr {}", self.free_addr_local());
-                //         // NOTE: this will only fall to IAs2::NoMoreArgsCanEmit,
-                //         // no frame issue here, because we are on an old stack
-                //         self.thread_stack[self.holder_in.value().stack_idx as usize]
-                //             .push((false, self.free_addr_local()));
-                //         self.write_back_big_deref(&app, HeapPort::B);
-                //     }
-                //     None => {
-                //         self.holder_in.input.load = updated_dmder.clone();
-                //     }
-                // }
             }
             IAs1::ExistIAWorkingNormal => {
                 // change this to `self.push_target(false);` will disable stack riding
@@ -1358,16 +1335,6 @@ impl HwModule for DrfHeap {
     }
 
     fn update_stat(&mut self) {
-        // if self.port_b_fire()
-        //     && self.heap_mem.input.port_b.enable
-        //     && self.heap_mem.input.port_b.is_write
-        // {
-        //     println!(
-        //         "port b write {}: {:?}",
-        //         self.heap_mem.input.port_b.addr, self.heap_mem.input.port_b.din
-        //     );
-        // }
-
         if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.holder_out.0 {
                 self.stat
@@ -1415,22 +1382,6 @@ impl HwModule for DrfHeap {
     }
 
     fn tick_children(&mut self) {
-        // if *self.addr_holder.value() == 149 && *self.stm.value() != Stm::IDLE {
-        //     println!("149: holder-in:{:?}", self.holder_in.value());
-        // }
-        // if self.out_sub_fire() {
-        //     if self.out_sub_bits().stack_idx == 0 {
-        //         println!(
-        //             "sub emit: {:?}, sub-holder-in: {}, stk0[0]: {:?}, stk1[0]: {:?}, stk2[0]: {:?}, stk3[0]: {:?}",
-        //             self.out_sub_bits(),
-        //             self.holder_in_sub.value().heap_addr,
-        //             self.thread_stack[0].top(),
-        //             self.thread_stack[1].top(),
-        //             self.thread_stack[2].top(),
-        //             self.thread_stack[3].top(),
-        //         );
-        //     }
-        // }
         self.stm.tick();
         self.stm_sub.tick();
         for stk in &mut self.thread_stack {
