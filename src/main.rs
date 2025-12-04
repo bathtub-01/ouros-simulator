@@ -275,6 +275,6 @@ fn run_benchmarks() -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    // inspect_prog(&TRIBELIE)
+    // inspect_prog(&ADJOXO)
     run_benchmarks()
 }
