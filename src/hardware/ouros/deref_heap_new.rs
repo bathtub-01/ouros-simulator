@@ -828,6 +828,7 @@ impl DrfHeap {
             HeapPort::A => self.heap_mem.write_a(addr, cell),
             HeapPort::B => self.heap_mem.write_b(addr, cell),
         }
+        self.working_heap.write_a(addr, false); // for future re-allocation
     }
 
     /// write the incoming WHNF
@@ -841,6 +842,7 @@ impl DrfHeap {
             HeapPort::A => self.heap_mem.write_a(addr, cell),
             HeapPort::B => self.heap_mem.write_b(addr, cell),
         }
+        self.working_heap.write_b(addr, false); // for future re-allocation
     }
 
     /// put output register
@@ -1155,7 +1157,6 @@ impl DrfHeap {
                     self.stat.heap_update += 1;
                     self.write_whnf(HeapPort::B);
                 }
-                // self.write_whnf(HeapPort::B);
                 self.consume_next();
             }
         }
