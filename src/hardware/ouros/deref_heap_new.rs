@@ -203,12 +203,6 @@ fn select_next_arg(app: &App, current: usize) -> (usize, usize) {
     }
 }
 
-fn deref_too_long(app: &App, target: &App) -> bool {
-    let app_len = app_length(app);
-    let target_len = app_length(target);
-    app_len + target_len - 1 > APP_LENGTH
-}
-
 fn vec_to_app(v: Vec<Atom>) -> App {
     assert!(v.len() <= APP_LENGTH);
     let mut res: App = std::array::from_fn(|_| Atom::NOP);
@@ -437,7 +431,6 @@ impl DrfHeap {
     }
 
     pub fn port_a_ready(&self) -> bool {
-        let out_clear = !self.holder_out.0 || self.input.out_main_ready;
         let local_release: bool = match *self.stm.value() {
             Stm::IDLE => true,
             Stm::WHNF => match self.getWHNFs() {
@@ -456,11 +449,10 @@ impl DrfHeap {
                 RESUMEs::TopInIA => true,
             },
         };
-        out_clear && local_release
+        local_release
     }
 
     pub fn port_b_ready(&self) -> bool {
-        let out_clear = true; // !self.holder_out_sub.0 || self.input.out_sub_ready;
         let borrowed: bool = match *self.stm.value() {
             Stm::IDLE => false,
             Stm::WHNF => match self.getWHNFs() {
@@ -477,7 +469,7 @@ impl DrfHeap {
             }
             Stm::RESUME => true,
         };
-        out_clear && !borrowed
+        !borrowed
     }
 
     pub fn out_main_valid(&self) -> bool {
@@ -785,14 +777,6 @@ impl DrfHeap {
         self.working_heap.write_b(addr, false); // for future re-allocation
     }
 
-    /// put output register
-    fn put_output(&mut self, stack_idx: u8, load: App) {
-        // only when unable to fire in current cycle
-        if !self.input.out_main_ready {
-            self.holder_out = (true, ActiveApp { stack_idx, load });
-        }
-    }
-
     /// when sub port is firing, find which stack is demanding the app
     fn find_dmder_stk(&self) -> u8 {
         if let Some(i) = self.waited_by() {
@@ -1067,7 +1051,6 @@ impl DrfHeap {
             }
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
-                self.put_output(self.holder_in.value().stack_idx, self.dash_when_shared());
                 self.push_target(false);
             }
         }
@@ -1113,7 +1096,6 @@ impl DrfHeap {
             }
             IAs2::NoMoreArgsCanEmit => {
                 self.cancel_new_frame(&ias1);
-                self.put_output(self.holder_in.value().stack_idx, updated_dmder);
                 self.step_to_next(&ias1);
             }
         }
