@@ -59,6 +59,14 @@ impl<T: Clone + Default, const N: usize, const P: bool> FIFO<T, N, P> {
         }
     }
 
+    pub fn in_fire(&self) -> bool {
+        fire(self.input.in_valid, self.in_ready())
+    }
+
+    pub fn out_fire(&self) -> bool {
+        fire(self.input.out_ready, self.out_valid())
+    }
+
     pub fn get_stat(&self) -> &FIFOStat {
         &self.stat
     }

@@ -37,6 +37,7 @@ pub struct ReducerInput {
     pub app_ready: bool,
     pub free_addr: usize, // receive free address from GC
     pub need_split: bool,
+    pub search: usize, // for `exist` searching
 }
 
 impl HwInput for ReducerInput {}
@@ -53,12 +54,11 @@ pub struct Reducer {
     pub input: ReducerInput,
     comb_table: SinglePortMem<App>,
     reg_in: Register<ActiveApp>,
-    reg_addr: Register<usize>,
-    reg_spine: Register<App>,
+    pub reg_addr: Register<usize>,
+    pub reg_spine: Register<App>,
     reg_arity: Register<u8>,
     reg_stm: Register<Stm>,
     reg_idx: Register<usize>,
-    reg_ctr: Register<usize>,
     reg_app_mask: Register<bool>,
     stat: ReducerStat,
     stat_detail_lv: u8,
@@ -67,14 +67,7 @@ pub struct Reducer {
 impl Reducer {
     pub fn new(size: usize) -> Self {
         Self {
-            input: ReducerInput {
-                in_valid: false,
-                in_app: Default::default(),
-                spine_ready: false,
-                app_ready: false,
-                free_addr: Default::default(),
-                need_split: false,
-            },
+            input: Default::default(),
             comb_table: SinglePortMem::new(size),
             stat: Default::default(),
             stat_detail_lv: Default::default(),
@@ -83,7 +76,6 @@ impl Reducer {
             reg_spine: Default::default(),
             reg_stm: Default::default(),
             reg_idx: Default::default(),
-            reg_ctr: Default::default(),
             reg_arity: Default::default(),
             reg_app_mask: Default::default(),
         }
@@ -155,6 +147,10 @@ impl Reducer {
                     *self.reg_addr.value()
                 } else if let Atom::PTR(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
                     self.reg_addr.value() + p
+                } else if let Atom::SPE(_, _, _, _, p) =
+                    self.reg_spine.value()[*self.reg_idx.value()]
+                {
+                    self.reg_addr.value() + p
                 } else {
                     Default::default()
                 }
@@ -196,6 +192,31 @@ impl Reducer {
             1
         } else {
             0
+        }
+    }
+
+    pub fn found(&self) -> bool {
+        match *self.reg_stm.value() {
+            Stm::APP => {
+                for atm in self.reg_spine.value().iter().skip(*self.reg_idx.value()) {
+                    match atm {
+                        Atom::PTR(p, _, true) => {
+                            if self.input.search == self.reg_addr.value() + p {
+                                return true;
+                            }
+                        }
+                        Atom::SPE(_, _, _, _, p) if self.is_nested(atm) => {
+                            if self.input.search == self.reg_addr.value() + p {
+                                return true;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                false
+            }
+            Stm::SPECIAL => self.input.search == *self.reg_addr.value(),
+            _ => false,
         }
     }
 
@@ -290,7 +311,6 @@ impl Reducer {
         if self.in_fire() {
             self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
-            self.reg_ctr.connect(&0);
             let one = if self.input.need_split { 1 } else { 0 };
             self.reg_addr
                 .connect(&(self.input.free_addr + self.addr_consumed() + one));
@@ -337,7 +357,6 @@ impl HwModule for Reducer {
                     self.reg_spine.connect(template);
                     self.reg_stm.connect(&Stm::APP);
                     self.reg_idx.connect(&founded);
-                    self.reg_ctr.connect(&1);
                     self.comb_table.read(
                         get_comb_addr(&self.reg_in.value().load[0])
                             + get_ptr(&template[founded])
@@ -353,7 +372,6 @@ impl HwModule for Reducer {
                     if self.more_app(template) {
                         let founded = self.find_app(template);
                         self.reg_idx.connect(&founded);
-                        self.reg_ctr.connect(&(*self.reg_ctr.value() + 1));
                         self.comb_table.read(
                             get_comb_addr(&self.reg_in.value().load[0])
                                 + get_ptr(&template[founded])
@@ -415,7 +433,6 @@ impl HwModule for Reducer {
         self.reg_arity.tick();
         self.reg_stm.tick();
         self.reg_idx.tick();
-        self.reg_ctr.tick();
         self.reg_app_mask.tick();
     }
 }

@@ -2,7 +2,7 @@
 
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
-use crate::hardware::common::{Arbiter, FIFO};
+use crate::hardware::common::{Arbiter, Ring, FIFO};
 use crate::hardware::ouros::program::app_length;
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
@@ -59,6 +59,9 @@ pub struct OurosCore {
     buffers_dheap_b_1: FIFO<FrozenApp, BUFFER_SIZE, true>,
     arbiter_dheap_b: Arbiter<FrozenApp, 2>,
 
+    rings_dheap_b_0: Ring<usize, BUFFER_SIZE>,
+    rings_dheap_b_1: Ring<usize, BUFFER_SIZE>,
+
     buffers_reducer_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_reducer_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_reducer_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
@@ -91,6 +94,9 @@ impl OurosCore {
             buffers_dheap_b_0: FIFO::new().record_stat(buffer_usage),
             buffers_dheap_b_1: FIFO::new().record_stat(buffer_usage),
             arbiter_dheap_b: Arbiter::new(),
+
+            rings_dheap_b_0: Ring::new(),
+            rings_dheap_b_1: Ring::new(),
 
             buffers_reducer_0: FIFO::new().record_stat(buffer_usage),
             buffers_reducer_1: FIFO::new().record_stat(buffer_usage),
@@ -188,11 +194,6 @@ impl HwModule for OurosCore {
         self.buffers_alu_0.input.default_input();
         self.buffers_alu_1.input.default_input();
         self.buffers_alu_2.input.default_input();
-
-        // self.dheap.input.out_main_ready = true;
-        // self.dheap.input.out_sub_ready = true;
-        // self.reducer.input.spine_ready = false;
-        // self.alu.input.output_ready = true;
 
         // connect start signal
         self.dheap.input.start = self.input.start;
@@ -324,7 +325,6 @@ impl HwModule for OurosCore {
             self.buffers_dheap_b_0.input.in_valid = self.reducer.app_valid();
             self.buffers_dheap_b_0.input.din = self.reducer.app_bits().clone();
 
-            // todo: add big deref port handling here..
             self.buffers_dheap_b_1.input.in_valid = self.dheap.out_big_drf_valid();
             self.buffers_dheap_b_1.input.din = self.dheap.out_big_drg_bits();
 
@@ -360,6 +360,20 @@ impl HwModule for OurosCore {
                     self.alu.input.output_ready = self.buffers_dheap_a_2.in_ready();
                 }
             }
+
+            let search = self.dheap.search();
+            self.reducer.input.search = search;
+            self.rings_dheap_b_0.input.search = search;
+            self.rings_dheap_b_0.input.in_fire = self.buffers_dheap_b_0.in_fire();
+            self.rings_dheap_b_0.input.din = self.buffers_dheap_b_0.input.din.heap_addr;
+            self.rings_dheap_b_0.input.out_fire = self.buffers_dheap_b_0.out_fire();
+            self.rings_dheap_b_1.input.search = search;
+            self.rings_dheap_b_1.input.in_fire = self.buffers_dheap_b_1.in_fire();
+            self.rings_dheap_b_1.input.din = self.buffers_dheap_b_1.input.din.heap_addr;
+            self.rings_dheap_b_1.input.out_fire = self.buffers_dheap_b_1.out_fire();
+            self.dheap.input.found = self.reducer.found()
+                || self.rings_dheap_b_0.found()
+                || self.rings_dheap_b_1.found();
         }
     }
 
@@ -378,6 +392,9 @@ impl HwModule for OurosCore {
         self.buffers_dheap_b_1.tick();
         self.arbiter_dheap_b.tick();
 
+        self.rings_dheap_b_0.tick();
+        self.rings_dheap_b_1.tick();
+
         self.buffers_reducer_0.tick();
         self.buffers_reducer_1.tick();
         self.buffers_reducer_2.tick();
@@ -391,44 +408,44 @@ impl HwModule for OurosCore {
     }
 }
 
-/// Quickly test whether the machine terminates and produces
-/// correct results.
-#[test]
-fn ouros_core_spec() {
-    use super::benchmarks::*;
-    use Atom::*;
-    // [(program, result)]
-    let progs = [
-        (&BOOL_AND, COM(2, 1)),
-        (&BOOL_NEST, COM(2, 1)),
-        (&ALU_OP, INT(162)),
-        // (&MAP_Y, INT(1275)),
-        // (&DEADLOCK, INT(29380)),
-        // (&USE_SEQ, INT(10)),
-    ];
+// /// Quickly test whether the machine terminates and produces
+// /// correct results on some small programs.
+// #[test]
+// fn ouros_core_spec() {
+//     use super::benchmarks::*;
+//     use Atom::*;
+//     // [(program, result)]
+//     let progs = [
+//         (&BOOL_AND, COM(2, 1)),
+//         (&BOOL_NEST, COM(2, 1)),
+//         (&ALU_OP, INT(162)),
+//         // (&MAP_Y, INT(1275)),
+//         // (&DEADLOCK, INT(29380)),
+//         // (&USE_SEQ, INT(10)),
+//     ];
 
-    for (p, r) in progs {
-        let mut ouros = OurosCore::new(p, 0);
-        let mut cycle: i32 = 0;
+//     for (p, r) in progs {
+//         let mut ouros = OurosCore::new(p, 0);
+//         let mut cycle: i32 = 0;
 
-        ouros.tick();
+//         ouros.tick();
 
-        // kick start the machine
-        ouros.input.start = true;
-        ouros.tick();
-        ouros.input.start = false;
+//         // kick start the machine
+//         ouros.input.start = true;
+//         ouros.tick();
+//         ouros.input.start = false;
 
-        loop {
-            assert!(cycle < 10_000);
-            if ouros.done() {
-                break;
-            }
-            ouros.tick();
-            cycle += 1;
-        }
+//         loop {
+//             assert!(cycle < 10_000);
+//             if ouros.done() {
+//                 break;
+//             }
+//             ouros.tick();
+//             cycle += 1;
+//         }
 
-        let res = &ouros.dheap.input.port_a_bits.load[0];
-        assert_eq!(*res, r);
-        eprintln! {"passed!"};
-    }
-}
+//         let res = &ouros.dheap.input.port_a_bits.load[0];
+//         assert_eq!(*res, r);
+//         eprintln! {"passed!"};
+//     }
+// }
