@@ -657,11 +657,9 @@ impl DrfHeap {
             IAs1::NoExist
         } else {
             if is_whnf(target) {
-                // println!("existWHNF");
                 IAs1::ExistWHNF
             } else {
                 if !*self.working_heap.dout_a() {
-                    // println!("existIAFresh");
                     IAs1::ExistIAFresh
                 } else {
                     if stack_cell_with(stk.top(), |(flag, _)| !*flag) {
