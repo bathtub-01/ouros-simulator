@@ -13,3 +13,5 @@ pub mod config;
 pub mod benchmarks;
 
 pub mod ouros_core;
+
+pub mod garbage_collector;

@@ -112,6 +112,7 @@ pub struct DualPortMemStat {
 
 /// Synchronous dual port read-write memory.
 /// Read-after-write for the same address.
+/// When a write happens, the old value at the address will be read out.
 pub struct DualPortMem<T: Clone + Default> {
     pub input: DualInput<T>,
     pub ram: Vec<T>,
@@ -208,11 +209,13 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
         );
 
         // A bit ugly, but maintains read-after-write
-        if self.input.port_a.is_write {
+        if self.input.port_a.is_write && self.input.port_a.enable {
+            self.holder_a = self.ram[self.input.port_a.addr].clone();
             self.ram[self.input.port_a.addr] = self.input.port_a.din.clone();
         }
 
-        if self.input.port_b.is_write {
+        if self.input.port_b.is_write && self.input.port_b.enable {
+            self.holder_b = self.ram[self.input.port_b.addr].clone();
             self.ram[self.input.port_b.addr] = self.input.port_b.din.clone();
         }
 

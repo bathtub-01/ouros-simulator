@@ -1,5 +1,7 @@
 use crate::hw_module::{HwInput, HwModule};
+use vstd::prelude::*;
 
+verus! {
 #[derive(Default, Debug, PartialEq)]
 pub enum StackOp {
     #[default]
@@ -21,11 +23,15 @@ impl<T: Clone + Default> HwInput for StackInput<T> {
     }
 }
 
+pub assume_specification<T> [<StackInput<T> as Default>::default] () -> StackInput<T>
+where
+    T: std::default::Default + std::clone::Clone + std::default::Default,;
+
 /// A simple stack that enables asynchronise read and synchronise write
 /// of its top element. Also allows reading top-1 element.
 pub struct Stack<T: Clone + Default, const N: usize> {
     pub input: StackInput<T>,
-    mem: Vec<T>,
+    pub mem: Vec<T>,
 }
 
 impl<T: Clone + Default, const N: usize> Stack<T, N> {
@@ -71,7 +77,13 @@ impl<T: Clone + Default, const N: usize> Stack<T, N> {
 }
 
 impl<T: Clone + Default, const N: usize> HwModule for Stack<T, N> {
-    fn update_local(&mut self) {
+    fn update_local(&mut self)
+    ensures
+    self.input.op is NOP ==> self.mem == old(self).mem,
+    self.input.op is PUSH ==> self.mem@.len() > old(self).mem@.len(),
+    self.input.op is POP && old(self).mem@.len() > 0 ==> self.mem@.len() < old(self).mem@.len(),
+    self.input.op is MOD && old(self).mem@.len() > 0 ==> self.mem@.len() == old(self).mem@.len(),
+    {
         match self.input.op {
             StackOp::NOP => {}
             StackOp::PUSH => {
@@ -88,6 +100,11 @@ impl<T: Clone + Default, const N: usize> HwModule for Stack<T, N> {
     }
 
     fn tick_children(&mut self) {}
+}
+
+    fn push(vec: &mut Vec<bool>, b: bool)
+    ensures old(vec).len() < vec.len()
+    {vec.push(b);}
 }
 
 #[test]
