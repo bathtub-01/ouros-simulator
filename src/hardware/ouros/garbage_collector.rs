@@ -67,7 +67,6 @@ impl GbgCollector {
             };
         }
         self.gc_mem.image(&img);
-        self.reg_free_head.input = from;
         self
     }
 

@@ -6,15 +6,7 @@ pub struct Register<V: Clone + Default> {
     pub input: V,
     value: V,
 }
-#[allow(non_snake_case)]
-pub unsafe fn _verus_external_fn_specification_44__60__32_Register_32__60__32_V_32__62__32_as_32_Default_32__62__32__58__58__32_default<
-    V,
->() -> Register<V>
-where
-    V: Default + Clone + Default,
-{
-    unsafe { <Register<V> as Default>::default() }
-}
+
 impl<V: Clone + Default> Register<V> {
     pub fn new() -> Self {
         Default::default()
@@ -22,7 +14,7 @@ impl<V: Clone + Default> Register<V> {
 
     pub fn init(v: V) -> Self {
         Self {
-            input: Default::default(),
+            input: v.clone(),
             value: v,
         }
     }
