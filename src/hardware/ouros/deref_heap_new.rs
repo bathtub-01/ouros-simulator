@@ -345,12 +345,6 @@ impl fmt::Display for Stm {
     }
 }
 
-#[derive(Default, Clone, Debug)]
-pub struct HeapCell {
-    exist: bool,
-    app: App,
-}
-
 pub struct DrfHeap {
     pub input: DrfHeapInput,
     stm: Register<Stm>,
