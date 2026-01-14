@@ -30,7 +30,9 @@ struct GCCell {
 }
 
 #[derive(Default)]
-pub struct GbgCollectorInput {}
+pub struct GbgCollectorInput {
+    addr_out_ready: bool,
+}
 
 impl HwInput for GbgCollectorInput {}
 
@@ -39,6 +41,7 @@ pub struct GbgCollector {
     pub gc_mem: DualPortMem<GCCell>,
     reg_free_head: Register<usize>,
     reg_work_head: Register<usize>,
+    reg_addr_drawed: Register<bool>, // whether freelist was drawed in previous cycle
 }
 
 impl GbgCollector {
@@ -48,6 +51,7 @@ impl GbgCollector {
             gc_mem: DualPortMem::new(heap_size),
             reg_free_head: Register::init(free_from),
             reg_work_head: Default::default(),
+            reg_addr_drawed: Default::default(),
         }
     }
 
@@ -63,22 +67,78 @@ impl GbgCollector {
             };
         }
         self.gc_mem.image(&img);
+        self.reg_free_head.input = from;
         self
+    }
+
+    /// draw an address from the freelist
+    pub fn addr_out_bits(&self) -> usize {
+        if *self.reg_addr_drawed.value() {
+            self.gc_mem.dout_a().ptr
+        } else {
+            *self.reg_free_head.value()
+        }
+    }
+
+    pub fn addr_out_valid(&self) -> bool {
+        true
+    }
+
+    pub fn addr_out_fire(&self) -> bool {
+        self.addr_out_valid() && self.input.addr_out_ready
     }
 }
 
 impl HwModule for GbgCollector {
     fn update_local(&mut self) {
-        todo!()
+        self.reg_addr_drawed.connect(&self.addr_out_fire());
+        if self.addr_out_fire() {
+            let next: usize;
+            if *self.reg_addr_drawed.value() {
+                next = self.gc_mem.dout_a().ptr;
+            } else {
+                next = *self.reg_free_head.value();
+            }
+            self.gc_mem.read_a(next);
+        }
+        if *self.reg_addr_drawed.value() {
+            self.reg_free_head.connect(&self.gc_mem.dout_a().ptr);
+        }
     }
 
     fn tick_children(&mut self) {
-        todo!()
+        self.gc_mem.tick();
+        self.reg_free_head.tick();
+        self.reg_work_head.tick();
+        self.reg_addr_drawed.tick();
     }
 }
 
 #[test]
-fn inspect_init_result() {
+fn gc_spec_init() {
     let gc = GbgCollector::new(100, 8).init_freelist();
     println!("{:#?}", gc.gc_mem.ram);
+}
+
+#[test]
+fn gc_spec_draw() {
+    let size = 1024;
+    let from = 8;
+    let mut gc = GbgCollector::new(size, from).init_freelist();
+    let mut it = from;
+    use rand::Rng;
+    let mut rng = rand::rng();
+
+    gc.tick();
+    while it < size {
+        let draw: bool = rng.random();
+        if draw {
+            gc.input.addr_out_ready = true;
+            assert_eq!(gc.addr_out_bits(), it);
+            it = it + 1;
+        } else {
+            gc.input.addr_out_ready = false;
+        }
+        gc.tick();
+    }
 }

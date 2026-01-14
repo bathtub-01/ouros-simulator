@@ -21,7 +21,7 @@ pub struct FIFOStat {
     pub length_per_cycle: Vec<u8>,
 }
 
-/// FIFO, with size N. Optionally support pipelining.
+/// FIFO, with size N. Optionally support pipelining (P).
 pub struct FIFO<T: Clone + Default, const N: usize, const P: bool> {
     pub input: FIFOInput<T>,
     pub queue: VecDeque<T>,

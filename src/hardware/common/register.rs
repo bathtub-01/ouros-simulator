@@ -4,7 +4,7 @@ use vstd::prelude::*;
 #[derive(Default)]
 pub struct Register<V: Clone + Default> {
     pub input: V,
-    pub value: V,
+    value: V,
 }
 #[allow(non_snake_case)]
 pub unsafe fn _verus_external_fn_specification_44__60__32_Register_32__60__32_V_32__62__32_as_32_Default_32__62__32__58__58__32_default<
