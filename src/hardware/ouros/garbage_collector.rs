@@ -1,8 +1,4 @@
-use std::default;
-
-use crate::hardware::common::memory::DualInput;
 use crate::hardware::common::{DualPortMem, Register};
-use crate::hardware::ouros::config::*;
 use crate::hw_module::{HwInput, HwModule};
 
 #[derive(Default)]
@@ -31,7 +27,7 @@ struct GCCell {
 
 #[derive(Default)]
 pub struct GbgCollectorInput {
-    addr_out_ready: bool,
+    pub addr_out_ready: bool,
 }
 
 impl HwInput for GbgCollectorInput {}
@@ -122,7 +118,7 @@ fn gc_spec_init() {
 #[test]
 fn gc_spec_draw() {
     let size = 1024;
-    let from = 8;
+    let from = 42;
     let mut gc = GbgCollector::new(size, from).init_freelist();
     let mut it = from;
     use rand::Rng;

@@ -15,3 +15,5 @@ pub mod benchmarks;
 pub mod ouros_core;
 
 pub mod garbage_collector;
+
+pub mod addr_box;
