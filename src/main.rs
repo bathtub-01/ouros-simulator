@@ -25,7 +25,7 @@ fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 1_000_000 {
+        if ouros.done() || cycle == 1000000 {
             break;
         }
         ouros.tick();
@@ -276,7 +276,7 @@ fn run_benchmarks() -> std::io::Result<()> {
 
 fn main() -> std::io::Result<()> {
     println!("calling verus code: {}", expose(3, 4));
-    inspect_prog(&SUMEULER)
+    inspect_prog(&MSS)
     // run_benchmarks()
 }
 

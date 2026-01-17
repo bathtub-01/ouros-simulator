@@ -460,7 +460,7 @@ impl DrfHeap {
                 let ias1 = self.getIAs1();
                 match self.getIAs2(&ias1) {
                     IAs2::NoMoreArgsNoEmit => true,
-                    // IAs2::NoMoreArgsCanEmit => ias1 == IAs1::ExistWHNF && self.need_spit(),
+                    // IAs2::NoMoreArgsCanEmit => ias1 == IAs1::ExistWHNF && self.need_split(),
                     _ => false,
                 }
             }
@@ -537,7 +537,7 @@ impl DrfHeap {
     }
 
     pub fn out_big_drf_valid(&self) -> bool {
-        self.need_spit()
+        self.need_split()
     }
 
     pub fn out_big_drg_bits(&self) -> FrozenApp {
@@ -744,7 +744,7 @@ impl DrfHeap {
         }
 
         // rise addr bumper
-        let need_split = if self.need_spit() { 1 } else { 0 };
+        let need_split = if self.need_split() { 1 } else { 0 };
         self.addr_bumper
             .connect(&(self.addr_bumper.value() + self.input.addr_consumed + need_split));
 
@@ -899,7 +899,7 @@ impl DrfHeap {
         }
     }
 
-    pub fn need_spit(&self) -> bool {
+    pub fn need_split(&self) -> bool {
         match self.stm.value() {
             Stm::IDLE => false,
             Stm::WHNF => {

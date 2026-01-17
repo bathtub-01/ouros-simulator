@@ -74,11 +74,14 @@ impl<T: Clone + Default, const N: usize, const P: bool> FIFO<T, N, P> {
 
 impl<T: Clone + Default, const N: usize, const P: bool> HwModule for FIFO<T, N, P> {
     fn update_local(&mut self) {
+        // NOTE: if not using old value, will be a bug when P=false and fifo is full
+        // Can play verus on this
+        let old_in_ready = self.in_ready();
         if fire(self.out_valid(), self.input.out_ready) {
             self.queue.pop_front();
         }
 
-        if fire(self.input.in_valid, self.in_ready()) {
+        if fire(self.input.in_valid, old_in_ready) {
             self.queue.push_back(self.input.din.clone());
         }
     }

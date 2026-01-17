@@ -1,9 +1,8 @@
 use std::cmp::min;
 
+use super::config::CONSUMERS;
 use crate::hardware::common::Register;
 use crate::hw_module::{HwInput, HwModule};
-
-const CONSUMERS: usize = 8;
 
 #[derive(Default)]
 pub struct AddrBoxInput {
@@ -92,7 +91,7 @@ impl HwModule for AddrBox {
 }
 
 #[test]
-fn addr_box_spec_init() {
+fn addr_box_spec() {
     use super::garbage_collector::GbgCollector;
     let size = 1024;
     let from = 42;

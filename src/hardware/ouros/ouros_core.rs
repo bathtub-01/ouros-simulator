@@ -7,9 +7,11 @@ use crate::hardware::ouros::program::app_length;
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
+use super::addr_box::AddrBox;
 use super::alu::{Alu, AluStat};
 use super::config::*;
 use super::deref_heap_new::{DrfHeap, DrfHeapStat};
+use super::garbage_collector::GbgCollector;
 use super::program::*;
 use super::reducer::{Reducer, ReducerStat};
 
@@ -46,8 +48,12 @@ impl HwInput for OurosCoreInput {}
 pub struct OurosCore {
     pub input: OurosCoreInput,
     pub dheap: DrfHeap,
+    gc: GbgCollector,
+    abox: AddrBox,
     reducer: Reducer,
     alu: Alu,
+
+    buffers_free_addr: FIFO<usize, 2, false>,
 
     buffers_dheap_a_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_dheap_a_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
@@ -79,11 +85,17 @@ impl OurosCore {
         let buffer_usage: bool = detail_lv >= DLV_BUFFER_USAGE;
         Self {
             input: Default::default(),
-            dheap: DrfHeap::new(1024 * 256)
+            dheap: DrfHeap::new(HEAP_SIZE)
                 .program(&prog.heap_img)
                 .detail(detail_lv),
-            reducer: Reducer::new(1024).program(&prog.comb_img).detail(detail_lv),
+            gc: GbgCollector::new(HEAP_SIZE, prog.heap_img.len()).init_freelist(),
+            abox: AddrBox::new(),
+            reducer: Reducer::new(PROG_SIZE)
+                .program(&prog.comb_img)
+                .detail(detail_lv),
             alu: Alu::new().detail(detail_lv),
+
+            buffers_free_addr: FIFO::new(),
 
             buffers_dheap_a_0: FIFO::new().record_stat(buffer_usage),
             buffers_dheap_a_1: FIFO::new().record_stat(buffer_usage),
@@ -199,12 +211,31 @@ impl HwModule for OurosCore {
         self.dheap.input.start = self.input.start;
 
         self.reducer.input.free_addr = self.dheap.free_addr();
-        self.reducer.input.need_split = self.dheap.need_spit();
+        self.reducer.input.need_split = self.dheap.need_split();
 
         // this 'kind of' fixes the ring problem
         for _ in 0..3 {
             // gc control signals
-            self.dheap.input.addr_consumed = self.reducer.addr_consumed();
+            self.buffers_free_addr.input.din = self.gc.addr_out_bits();
+            self.buffers_free_addr.input.in_valid = self.gc.addr_out_valid();
+            self.gc.input.addr_out_ready = self.buffers_free_addr.in_ready();
+
+            // self.dheap.input.addr_consumed = self.reducer.addr_consumed();
+            self.abox.input.free_addr_bits = *self.buffers_free_addr.dout().unwrap_or(&0);
+            self.abox.input.free_addr_valid = self.buffers_free_addr.out_valid();
+            self.abox.input.addr_consume[0] = false;
+            self.abox.input.addr_consume[1..CONSUMERS]
+                .copy_from_slice(&self.reducer.consume_demands());
+            self.reducer
+                .input
+                .free_addrs
+                .copy_from_slice(&self.abox.consume_addr_bits()[1..CONSUMERS]);
+            self.reducer
+                .input
+                .free_addrs_valid
+                .copy_from_slice(&self.abox.consume_addr_valid()[1..CONSUMERS]);
+
+            self.buffers_free_addr.input.out_ready = self.abox.addr_request();
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
@@ -361,6 +392,7 @@ impl HwModule for OurosCore {
                 }
             }
 
+            // when dheap reads an app, search whether that app is still outstanding
             let search = self.dheap.search();
             self.reducer.input.search = search;
             self.rings_dheap_b_0.input.search = search;
@@ -381,6 +413,10 @@ impl HwModule for OurosCore {
         self.dheap.tick();
         self.reducer.tick();
         self.alu.tick();
+        self.gc.tick();
+        self.abox.tick();
+
+        self.buffers_free_addr.tick();
 
         self.buffers_dheap_a_0.tick();
         self.buffers_dheap_a_1.tick();

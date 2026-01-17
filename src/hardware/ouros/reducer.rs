@@ -36,6 +36,8 @@ pub struct ReducerInput {
     pub spine_ready: bool,
     pub app_ready: bool,
     pub free_addr: usize, // receive free address from GC
+    pub free_addrs: [usize; CONSUMERS_REDUCER],
+    pub free_addrs_valid: [bool; CONSUMERS_REDUCER],
     pub need_split: bool,
     pub search: usize, // for `exist` searching
 }
@@ -54,8 +56,9 @@ pub struct Reducer {
     pub input: ReducerInput,
     comb_table: SinglePortMem<App>,
     reg_in: Register<ActiveApp>,
-    pub reg_addr: Register<usize>,
+    // pub reg_addr: Register<usize>,
     pub reg_spine: Register<App>,
+    addr_regs: [Register<usize>; CONSUMERS_REDUCER],
     reg_arity: Register<u8>,
     reg_stm: Register<Stm>,
     reg_idx: Register<usize>,
@@ -72,7 +75,8 @@ impl Reducer {
             stat: Default::default(),
             stat_detail_lv: Default::default(),
             reg_in: Default::default(),
-            reg_addr: Default::default(),
+            // reg_addr: Default::default(),
+            addr_regs: Default::default(),
             reg_spine: Default::default(),
             reg_stm: Default::default(),
             reg_idx: Default::default(),
@@ -113,7 +117,7 @@ impl Reducer {
                     // Y case
                     let mut res: App = self.reg_in.value().load.clone();
                     res[0] = dash_atom(&self.reg_in.value().load[1]);
-                    res[1] = Atom::PTR(*self.reg_addr.value(), false, false);
+                    res[1] = Atom::PTR(*self.addr_regs[0].value(), false, false);
                     res
                 } else {
                     let old_spn = &self.reg_in.value().load;
@@ -144,13 +148,16 @@ impl Reducer {
             heap_addr: {
                 if *self.reg_stm.value() == Stm::SPECIAL {
                     // Y case
-                    *self.reg_addr.value()
+                    // *self.reg_addr.value()
+                    *self.addr_regs[0].value()
                 } else if let Atom::PTR(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
-                    self.reg_addr.value() + p
+                    // self.reg_addr.value() + p
+                    *self.addr_regs[p].value()
                 } else if let Atom::SPE(_, _, _, _, p) =
                     self.reg_spine.value()[*self.reg_idx.value()]
                 {
-                    self.reg_addr.value() + p
+                    // self.reg_addr.value() + p
+                    *self.addr_regs[p].value()
                 } else {
                     Default::default()
                 }
@@ -159,7 +166,7 @@ impl Reducer {
                 if *self.reg_stm.value() == Stm::SPECIAL {
                     let mut res: App = Default::default();
                     res[0] = dash_atom(&self.reg_in.value().load[1]);
-                    res[1] = Atom::PTR(*self.reg_addr.value(), false, false);
+                    res[1] = Atom::PTR(*self.addr_regs[0].value(), false, false);
                     res
                 } else {
                     self.inst(&self.comb_table.dout())
@@ -169,7 +176,7 @@ impl Reducer {
     }
 
     pub fn in_ready(&self) -> bool {
-        match *self.reg_stm.value() {
+        let state_correct = match *self.reg_stm.value() {
             Stm::IDLE => true,
             Stm::SPINE => !self.more_app(self.comb_table.dout()),
             Stm::APP => {
@@ -177,7 +184,9 @@ impl Reducer {
                     && !self.more_app(self.reg_spine.value())
             }
             Stm::SPECIAL => fire(self.input.app_ready, self.app_valid()), // Y case
-        }
+        };
+        // demand all input free addrs are valid
+        state_correct && self.input.free_addrs_valid.iter().all(|&vld| vld)
     }
 
     /// The number of heap cells that will be consumed in this cycle
@@ -195,18 +204,24 @@ impl Reducer {
         }
     }
 
+    /// A bit vector indicating whether free addr is demanded at each slot
+    pub fn consume_demands(&self) -> [bool; CONSUMERS_REDUCER] {
+        std::array::from_fn(|i| i < self.addr_consumed())
+    }
+
+    /// whether an app is not emitted yet
     pub fn found(&self) -> bool {
         match *self.reg_stm.value() {
             Stm::APP => {
                 for atm in self.reg_spine.value().iter().skip(*self.reg_idx.value()) {
                     match atm {
                         Atom::PTR(p, _, true) => {
-                            if self.input.search == self.reg_addr.value() + p {
+                            if self.input.search == *self.addr_regs[*p].value() {
                                 return true;
                             }
                         }
                         Atom::SPE(_, _, _, _, p) if self.is_nested(atm) => {
-                            if self.input.search == self.reg_addr.value() + p {
+                            if self.input.search == *self.addr_regs[*p].value() {
                                 return true;
                             }
                         }
@@ -215,7 +230,7 @@ impl Reducer {
                 }
                 false
             }
-            Stm::SPECIAL => self.input.search == *self.reg_addr.value(),
+            Stm::SPECIAL => self.input.search == *self.addr_regs[0].value(),
             _ => false,
         }
     }
@@ -277,7 +292,8 @@ impl Reducer {
                 Atom::PTR(p, _, new) => {
                     if *new {
                         // assert_eq!(*self.reg_stm.value(), Stm::SPINE);
-                        *a = Atom::PTR(self.reg_addr.value() + *p - hole, true, false);
+                        // *a = Atom::PTR(self.reg_addr.value() + *p - hole, true, false);
+                        *a = Atom::PTR(*self.addr_regs[*p - hole].value(), true, false);
                     }
                 }
                 Atom::SPE(op, rev, l, r, p) => {
@@ -289,7 +305,8 @@ impl Reducer {
                         *a = compute(op, *rev, op1, op2);
                     } else {
                         // speculation fails
-                        *a = Atom::PTR(self.reg_addr.value() + *p - hole, true, false);
+                        // *a = Atom::PTR(self.reg_addr.value() + *p - hole, true, false);
+                        *a = Atom::PTR(*self.addr_regs[*p - hole].value(), true, false);
                     }
                 }
                 Atom::ARG(arg, unq) => {
@@ -311,9 +328,28 @@ impl Reducer {
         if self.in_fire() {
             self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
-            let one = if self.input.need_split { 1 } else { 0 };
-            self.reg_addr
-                .connect(&(self.input.free_addr + self.addr_consumed() + one));
+            // let one = if self.input.need_split { 1 } else { 0 };
+            // self.reg_addr
+            //     .connect(&(self.input.free_addr + self.addr_consumed() + one));
+
+            // self.in_ready() assures all input free addrs are valid
+            // let demands = self.consume_demands();
+            // for i in 0..CONSUMERS_REDUCER {
+            //     self.addr_regs[i].connect(
+            //         &(if demands[i] {
+            //             self.input.free_addrs[i]
+            //         } else {
+            //             0 // this makes self.found() easier
+            //         }),
+            //     );
+            // }
+            self.addr_regs
+                .iter_mut()
+                .zip(self.input.free_addrs)
+                .for_each(|(reg, addr)| {
+                    reg.connect(&addr);
+                });
+
             match self.input.in_app.load[0] {
                 Atom::COM(arity, addr) => {
                     self.reg_stm.connect(&Stm::SPINE);
@@ -350,7 +386,7 @@ impl HwModule for Reducer {
                 self.step_next();
             }
             Stm::SPINE => {
-                // !NOTICE! We are assuming this state won't be blocked.
+                // !NOTE! We are assuming this state won't be blocked.
                 let template = self.comb_table.dout();
                 if self.more_app(template) {
                     let founded = self.find_app(template);
@@ -428,7 +464,10 @@ impl HwModule for Reducer {
     fn tick_children(&mut self) {
         self.comb_table.tick();
         self.reg_in.tick();
-        self.reg_addr.tick();
+        // self.reg_addr.tick();
+        self.addr_regs.iter_mut().for_each(|reg| {
+            reg.tick();
+        });
         self.reg_spine.tick();
         self.reg_arity.tick();
         self.reg_stm.tick();
