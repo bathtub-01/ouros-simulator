@@ -3,15 +3,13 @@
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{Arbiter, Ring, FIFO};
-use crate::hardware::ouros::program::app_length;
-use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
 use super::addr_box::AddrBox;
 use super::alu::{Alu, AluStat};
 use super::config::*;
 use super::deref_heap_new::{DrfHeap, DrfHeapStat};
-use super::garbage_collector::GbgCollector;
+use super::garbage_collector::{GbgCollector, GbgCollectorStat};
 use super::program::*;
 use super::reducer::{Reducer, ReducerStat};
 
@@ -45,6 +43,16 @@ pub struct OurosCoreInput {
 
 impl HwInput for OurosCoreInput {}
 
+// #[derive(Default)]
+pub struct OurosCoreStat<'a> {
+    pub dheap_stat: &'a DrfHeapStat,
+    pub reducer_stat: &'a ReducerStat,
+    pub alu_stat: &'a AluStat,
+    pub fifos_stat: [&'a FIFOStat; 13],
+    pub mem_stat: &'a DualPortMemStat,
+    pub gc_stat: &'a GbgCollectorStat,
+}
+
 pub struct OurosCore {
     pub input: OurosCoreInput,
     pub dheap: DrfHeap,
@@ -53,6 +61,7 @@ pub struct OurosCore {
     reducer: Reducer,
     alu: Alu,
 
+    buffers_dealloc: FIFO<usize, 2, false>,
     buffers_free_addr: FIFO<usize, 2, false>,
 
     buffers_dheap_a_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
@@ -95,6 +104,7 @@ impl OurosCore {
                 .detail(detail_lv),
             alu: Alu::new().detail(detail_lv),
 
+            buffers_dealloc: FIFO::new(),
             buffers_free_addr: FIFO::new(),
 
             buffers_dheap_a_0: FIFO::new().record_stat(buffer_usage),
@@ -127,20 +137,12 @@ impl OurosCore {
         self.dheap.done()
     }
 
-    pub fn get_stat(
-        &self,
-    ) -> (
-        &DrfHeapStat,
-        &ReducerStat,
-        &AluStat,
-        [&FIFOStat; 13],
-        &DualPortMemStat,
-    ) {
-        (
-            self.dheap.get_stat(),
-            self.reducer.get_stat(),
-            self.alu.get_stat(),
-            [
+    pub fn get_stat(&self) -> OurosCoreStat {
+        OurosCoreStat {
+            dheap_stat: self.dheap.get_stat(),
+            reducer_stat: self.reducer.get_stat(),
+            alu_stat: self.alu.get_stat(),
+            fifos_stat: [
                 self.buffers_alu_0.get_stat(),
                 self.buffers_alu_1.get_stat(),
                 self.buffers_alu_2.get_stat(),
@@ -155,8 +157,9 @@ impl OurosCore {
                 self.buffers_reducer_2.get_stat(),
                 self.buffers_reducer_3.get_stat(),
             ],
-            self.dheap.get_mem_stat(),
-        )
+            mem_stat: self.dheap.get_mem_stat(),
+            gc_stat: self.gc.get_stat(),
+        }
     }
 }
 
@@ -213,8 +216,12 @@ impl HwModule for OurosCore {
         // this 'kind of' fixes the ring problem
         for _ in 0..3 {
             // gc control signals
+            self.buffers_dealloc.input.din = self.dheap.dealloc_bits();
+            self.buffers_dealloc.input.in_valid = self.dheap.dealloc_valid();
             self.buffers_free_addr.input.din = self.gc.addr_out_bits();
             self.buffers_free_addr.input.in_valid = self.gc.addr_out_valid();
+            self.gc.input.deallocate_bits = *self.buffers_dealloc.dout().unwrap_or(&0);
+            self.gc.input.deallocate_valid = self.buffers_dealloc.out_valid();
             self.gc.input.addr_out_ready = self.buffers_free_addr.in_ready();
 
             self.abox.input.free_addr_bits = *self.buffers_free_addr.dout().unwrap_or(&0);
@@ -235,6 +242,7 @@ impl HwModule for OurosCore {
                 .free_addrs_valid
                 .copy_from_slice(&free_addr_valid[1..CONSUMERS]);
 
+            self.buffers_dealloc.input.out_ready = self.gc.deallocate_ready();
             self.buffers_free_addr.input.out_ready = self.abox.addr_request();
 
             // connect arbiters as components' input (arbiter first)
@@ -416,6 +424,7 @@ impl HwModule for OurosCore {
         self.gc.tick();
         self.abox.tick();
 
+        self.buffers_dealloc.tick();
         self.buffers_free_addr.tick();
 
         self.buffers_dheap_a_0.tick();

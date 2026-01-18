@@ -135,6 +135,7 @@ enum CONSUMEs {
 }
 
 /// branch conditions for the `WHNF` state
+#[derive(Debug, PartialEq)]
 enum WHNFs {
     MoreDmders,
     NewFrame,
@@ -555,6 +556,19 @@ impl DrfHeap {
             }
             _ => Default::default(),
         }
+    }
+
+    /// Deallocate an address based on one-bit ref count
+    pub fn dealloc_valid(&self) -> bool {
+        // ready signal does not block DHeap, giving up some chances is fine
+        *self.stm.value() == Stm::WHNF
+            && self.getWHNFs() == WHNFs::NoNewFrame
+            && self.can_avoid_update()
+    }
+
+    /// Deallocate an address based on one-bit ref count
+    pub fn dealloc_bits(&self) -> usize {
+        *self.addr_holder.value()
     }
 
     /// machine's work has been finished
@@ -1011,6 +1025,7 @@ impl DrfHeap {
                 if self.can_avoid_update() {
                     /* update avoided */
                     self.stat.update_avoided += 1;
+                    self.working_heap.write_b(whnf_addr, false); // for future re-allocation
                 } else {
                     self.stat.heap_update += 1;
                     self.write_whnf(HeapPort::B);

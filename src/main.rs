@@ -134,43 +134,47 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     writeln!(
         log,
         "       Reducer busy cycles: {} ({:.2}%), blocked cycles: {}",
-        stats.1.busy_cycles,
-        (stats.1.busy_cycles as f32) / (runtime_cycles as f32) * 100.0,
-        stats.1.blocked_cycles
+        stats.reducer_stat.busy_cycles,
+        (stats.reducer_stat.busy_cycles as f32) / (runtime_cycles as f32) * 100.0,
+        stats.reducer_stat.blocked_cycles
     )?;
     writeln!(
         log,
         "         ALU busy cycles: {} ({:.2}%)",
-        stats.2.busy_cycles,
-        (stats.2.busy_cycles as f32) / (runtime_cycles as f32) * 100.0
+        stats.alu_stat.busy_cycles,
+        (stats.alu_stat.busy_cycles as f32) / (runtime_cycles as f32) * 100.0
     )?;
     writeln!(
         log,
         "Heap memory accesses: {} (a_read {}, a_write {}, b_read {}, b_write {})",
-        stats.4.a_reads + stats.4.a_writes + stats.4.b_reads + stats.4.b_writes,
-        stats.4.a_reads,
-        stats.4.a_writes,
-        stats.4.b_reads,
-        stats.4.b_writes,
+        stats.mem_stat.a_reads
+            + stats.mem_stat.a_writes
+            + stats.mem_stat.b_reads
+            + stats.mem_stat.b_writes,
+        stats.mem_stat.a_reads,
+        stats.mem_stat.a_writes,
+        stats.mem_stat.b_reads,
+        stats.mem_stat.b_writes,
     )?;
     writeln!(
         log,
         "heap cell consumed: {}, heap update: {}, avoided: {}",
         // ouros.dheap.addr_bumper.value(),
         0, // FIXME
-        stats.0.heap_update,
-        stats.0.update_avoided
+        stats.dheap_stat.heap_update,
+        stats.dheap_stat.update_avoided
     );
+    writeln!(log, "GC immediate reuse: {}", stats.gc_stat.immediate_reuse,)?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 
     for (i, s) in stats
-        .0
+        .dheap_stat
         .holder_contents
         .iter()
-        .zip(&stats.1.holder_contents)
-        .zip(&stats.2.holder_contents)
-        .zip(&stats.0.heap_stm)
-        .zip(&stats.0.serving_id)
+        .zip(&stats.reducer_stat.holder_contents)
+        .zip(&stats.alu_stat.holder_contents)
+        .zip(&stats.dheap_stat.heap_stm)
+        .zip(&stats.dheap_stat.serving_id)
         .map(|((((a, b), c), d), e)| (a, b, c, d, e))
         .enumerate()
     {
@@ -187,10 +191,10 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     }
 
     let points_on_graph = 150;
-    let chunk_size = stats.0.work_threads.len() / points_on_graph;
+    let chunk_size = stats.dheap_stat.work_threads.len() / points_on_graph;
     // write thread stats
     writeln!(threads, "time,occupied,active")?;
-    let threads_data = chunk_threads(&stats.0.work_threads, chunk_size);
+    let threads_data = chunk_threads(&stats.dheap_stat.work_threads, chunk_size);
     for (i, t) in threads_data.iter().enumerate() {
         writeln!(
             threads,
@@ -202,15 +206,17 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     }
 
     // write busy rate
-    let red_rate_data: Vec<f32> = chunk_rate(&stats.1.busy_per_cycle, chunk_size);
+    let red_rate_data: Vec<f32> = chunk_rate(&stats.reducer_stat.busy_per_cycle, chunk_size);
     write_busy_rate(&mut red_rate, &red_rate_data, chunk_size)?;
 
-    let alu_rate_data: Vec<f32> = chunk_rate(&stats.2.busy_per_cycle, chunk_size);
+    let alu_rate_data: Vec<f32> = chunk_rate(&stats.alu_stat.busy_per_cycle, chunk_size);
     write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)?;
 
     // write buffer utilisation
     writeln!(buffer_util, "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3")?;
-    let buffer_util_data = stats.3.map(|s| chunk_util(&s.length_per_cycle, chunk_size));
+    let buffer_util_data = stats
+        .fifos_stat
+        .map(|s| chunk_util(&s.length_per_cycle, chunk_size));
     for i in 0..buffer_util_data[0].len() {
         writeln!(
             buffer_util,
@@ -235,7 +241,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     writeln!(stm_dist, "state,cycles")?;
     for (s, c) in ["IDLE", "WHNF", "IA", "RESUME"]
         .iter()
-        .zip(stats.0.stm_cycles)
+        .zip(stats.dheap_stat.stm_cycles)
     {
         writeln!(stm_dist, "{},{}", s, c)?;
     }
@@ -277,7 +283,7 @@ fn run_benchmarks() -> std::io::Result<()> {
 
 fn main() -> std::io::Result<()> {
     println!("calling verus code: {}", expose(3, 4));
-    // inspect_prog(&ADJOXO)
+    // inspect_prog(&BRAUN)
     run_benchmarks()
 }
 

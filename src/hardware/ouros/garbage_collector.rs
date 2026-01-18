@@ -27,10 +27,17 @@ struct GCCell {
 
 #[derive(Default)]
 pub struct GbgCollectorInput {
+    pub deallocate_valid: bool,
+    pub deallocate_bits: usize,
     pub addr_out_ready: bool,
 }
 
 impl HwInput for GbgCollectorInput {}
+
+#[derive(Default)]
+pub struct GbgCollectorStat {
+    pub immediate_reuse: u32, // gain from one-bit ref count
+}
 
 pub struct GbgCollector {
     pub input: GbgCollectorInput,
@@ -38,6 +45,7 @@ pub struct GbgCollector {
     reg_free_head: Register<usize>,
     reg_work_head: Register<usize>,
     reg_addr_drawed: Register<bool>, // whether freelist was drawed in previous cycle
+    stat: GbgCollectorStat,
 }
 
 impl GbgCollector {
@@ -48,6 +56,7 @@ impl GbgCollector {
             reg_free_head: Register::init(free_from),
             reg_work_head: Default::default(),
             reg_addr_drawed: Default::default(),
+            stat: Default::default(),
         }
     }
 
@@ -66,13 +75,36 @@ impl GbgCollector {
         self
     }
 
+    fn push_to_freelist(&mut self, addr: usize, old_head: usize) {
+        self.reg_free_head.connect(&addr);
+        self.gc_mem.write_a(
+            addr,
+            GCCell {
+                state: CellState::FreeList,
+                ptr: old_head,
+            },
+        );
+    }
+
     /// draw an address from the freelist
     pub fn addr_out_bits(&self) -> usize {
-        if *self.reg_addr_drawed.value() {
-            self.gc_mem.dout_a().ptr
+        if self.deallocate_fire() {
+            self.input.deallocate_bits
         } else {
-            *self.reg_free_head.value()
+            if *self.reg_addr_drawed.value() {
+                self.gc_mem.dout_a().ptr
+            } else {
+                *self.reg_free_head.value()
+            }
         }
+    }
+
+    pub fn deallocate_ready(&self) -> bool {
+        true
+    }
+
+    pub fn deallocate_fire(&self) -> bool {
+        self.input.deallocate_valid && self.deallocate_ready()
     }
 
     pub fn addr_out_valid(&self) -> bool {
@@ -82,22 +114,43 @@ impl GbgCollector {
     pub fn addr_out_fire(&self) -> bool {
         self.addr_out_valid() && self.input.addr_out_ready
     }
+
+    pub fn get_stat(&self) -> &GbgCollectorStat {
+        &self.stat
+    }
 }
 
 impl HwModule for GbgCollector {
     fn update_local(&mut self) {
-        self.reg_addr_drawed.connect(&self.addr_out_fire());
-        if self.addr_out_fire() {
-            let next: usize;
-            if *self.reg_addr_drawed.value() {
-                next = self.gc_mem.dout_a().ptr;
-            } else {
-                next = *self.reg_free_head.value();
-            }
-            self.gc_mem.read_a(next);
-        }
+        self.gc_mem.input.default_input();
+
+        let real_freelist_head: usize = if *self.reg_addr_drawed.value() {
+            self.gc_mem.dout_a().ptr
+        } else {
+            *self.reg_free_head.value()
+        };
+
+        self.reg_addr_drawed.connect(&false);
+
         if *self.reg_addr_drawed.value() {
             self.reg_free_head.connect(&self.gc_mem.dout_a().ptr);
+        }
+
+        match (self.deallocate_fire(), self.addr_out_fire()) {
+            (true, false) => {
+                self.push_to_freelist(self.input.deallocate_bits, real_freelist_head);
+            }
+            (false, true) => {
+                self.reg_addr_drawed.connect(&true);
+                self.gc_mem.read_a(real_freelist_head);
+            }
+            _ => {}
+        }
+    }
+
+    fn update_stat(&mut self) {
+        if self.deallocate_fire() {
+            self.stat.immediate_reuse += 1;
         }
     }
 
