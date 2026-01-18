@@ -156,7 +156,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     writeln!(
         log,
         "heap cell consumed: {}, heap update: {}, avoided: {}",
-        ouros.dheap.addr_bumper.value(),
+        // ouros.dheap.addr_bumper.value(),
+        0, // FIXME
         stats.0.heap_update,
         stats.0.update_avoided
     );
@@ -276,8 +277,8 @@ fn run_benchmarks() -> std::io::Result<()> {
 
 fn main() -> std::io::Result<()> {
     println!("calling verus code: {}", expose(3, 4));
-    inspect_prog(&MSS)
-    // run_benchmarks()
+    // inspect_prog(&ADJOXO)
+    run_benchmarks()
 }
 
 use vstd::prelude::*;

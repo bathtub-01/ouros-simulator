@@ -22,7 +22,9 @@ pub struct DrfHeapInput {
     pub port_b_bits: FrozenApp,
     pub out_main_ready: bool,
     pub out_sub_ready: bool,
-    pub addr_consumed: usize, // address request from reducer (for GC)
+    // pub addr_consumed: usize, // address request from reducer (for GC)
+    pub free_addr: usize,
+    pub free_addr_valid: bool,
     pub found: bool,
 }
 
@@ -357,7 +359,7 @@ pub struct DrfHeap {
     working_heap: DualPortMem<bool>,
     holder_out: (bool, ActiveApp), // output-reg: (valid, app)
     working: Register<bool>,       // track whether the machine is working
-    pub addr_bumper: Register<usize>,
+    // pub addr_bumper: Register<usize>,
     arg_id: Register<usize>,
     non_exist: Register<bool>,
     stat: DrfHeapStat,
@@ -378,7 +380,7 @@ impl DrfHeap {
             working_heap: DualPortMem::new(heap_size),
             holder_out: Default::default(),
             working: Default::default(),
-            addr_bumper: Default::default(),
+            // addr_bumper: Default::default(),
             stat: Default::default(),
             arg_id: Default::default(),
             non_exist: Default::default(),
@@ -399,8 +401,8 @@ impl DrfHeap {
         // convert Vec<Vec<Atom>> to Vec<HeapCell>
         let img: Vec<App> = prog.iter().map(convert).collect();
         self.heap_mem.image(&img);
-        self.addr_bumper.connect(&img.len());
-        self.addr_bumper.tick();
+        // self.addr_bumper.connect(&img.len());
+        // self.addr_bumper.tick();
         self
     }
 
@@ -446,7 +448,7 @@ impl DrfHeap {
                 RESUMEs::TopInIA => true,
             },
         };
-        local_release
+        local_release && self.input.free_addr_valid
     }
 
     pub fn port_b_ready(&self) -> bool {
@@ -513,7 +515,7 @@ impl DrfHeap {
                             &self.holder_in.value().load,
                             *self.arg_id.value(),
                             target,
-                            self.free_addr_local(),
+                            self.input.free_addr,
                         );
                         self.gen_active_app(updated_dmder)
                     }
@@ -543,7 +545,7 @@ impl DrfHeap {
     pub fn out_big_drg_bits(&self) -> FrozenApp {
         let mk_frozen = |a: Option<App>| match a {
             Some(big) => FrozenApp {
-                heap_addr: self.free_addr_local(),
+                heap_addr: self.input.free_addr,
                 load: big,
             },
             None => Default::default(),
@@ -553,7 +555,7 @@ impl DrfHeap {
             Stm::IA if self.getIAs1() == IAs1::ExistWHNF => {
                 let dmder = &self.holder_in.value().load;
                 let target = self.heap_mem.dout_a();
-                let (_, obig) = deref(dmder, *self.arg_id.value(), target, self.free_addr_local());
+                let (_, obig) = deref(dmder, *self.arg_id.value(), target, self.input.free_addr);
                 mk_frozen(obig)
             }
             _ => Default::default(),
@@ -565,9 +567,9 @@ impl DrfHeap {
         !self.working.value()
     }
 
-    pub fn free_addr(&self) -> usize {
-        *self.addr_bumper.value()
-    }
+    // pub fn free_addr(&self) -> usize {
+    //     *self.addr_bumper.value()
+    // }
 
     pub fn search(&self) -> usize {
         if self.port_a_fire() && self.getCONSUMEs() == CONSUMEs::InputIA {
@@ -744,9 +746,9 @@ impl DrfHeap {
         }
 
         // rise addr bumper
-        let need_split = if self.need_split() { 1 } else { 0 };
-        self.addr_bumper
-            .connect(&(self.addr_bumper.value() + self.input.addr_consumed + need_split));
+        // let need_split = if self.need_split() { 1 } else { 0 };
+        // self.addr_bumper
+        // .connect(&(self.addr_bumper.value() + self.input.addr_consumed + need_split));
 
         // clear holder when output fires
         if self.output_fire() {
@@ -860,15 +862,15 @@ impl DrfHeap {
     }
 
     /// free address to be used for local deref
-    fn free_addr_local(&self) -> usize {
-        *self.addr_bumper.value() + self.input.addr_consumed
-    }
+    // fn free_addr_local(&self) -> usize {
+    //     *self.addr_bumper.value() + self.input.addr_consumed
+    // }
 
     fn gen_output_whnf(&self) -> (App, Option<App>) {
         let dmder = self.heap_mem.dout_a();
         let target = &self.holder_in.value().load;
         let (arg_id, _) = select_1st_arg(dmder);
-        deref(dmder, arg_id, target, self.free_addr_local())
+        deref(dmder, arg_id, target, self.input.free_addr)
     }
 
     fn gen_active_app(&self, app: App) -> ActiveApp {
@@ -1049,7 +1051,7 @@ impl DrfHeap {
             }
             IAs1::ExistWHNF => {
                 let (deref_res, _) =
-                    deref(dmder, *self.arg_id.value(), &target, self.free_addr_local());
+                    deref(dmder, *self.arg_id.value(), &target, self.input.free_addr);
                 updated_dmder = deref_res;
                 self.holder_in.input.load = updated_dmder.clone();
             }
@@ -1181,6 +1183,10 @@ impl HwModule for DrfHeap {
 
         self.handle_port_a();
         self.handle_port_b();
+
+        // if self.need_split() {
+        //     println!("split happens!");
+        // }
     }
 
     fn update_stat(&mut self) {
@@ -1242,7 +1248,7 @@ impl HwModule for DrfHeap {
         self.working_heap.tick();
         self.working.tick();
         self.holder_in.tick();
-        self.addr_bumper.tick();
+        // self.addr_bumper.tick();
         self.arg_id.tick();
         self.addr_holder.tick();
         self.ia_addr.tick();

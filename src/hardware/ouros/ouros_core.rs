@@ -210,8 +210,8 @@ impl HwModule for OurosCore {
         // connect start signal
         self.dheap.input.start = self.input.start;
 
-        self.reducer.input.free_addr = self.dheap.free_addr();
-        self.reducer.input.need_split = self.dheap.need_split();
+        // self.reducer.input.free_addr = self.dheap.free_addr();
+        // self.reducer.input.need_split = self.dheap.need_split();
 
         // this 'kind of' fixes the ring problem
         for _ in 0..3 {
@@ -223,17 +223,21 @@ impl HwModule for OurosCore {
             // self.dheap.input.addr_consumed = self.reducer.addr_consumed();
             self.abox.input.free_addr_bits = *self.buffers_free_addr.dout().unwrap_or(&0);
             self.abox.input.free_addr_valid = self.buffers_free_addr.out_valid();
-            self.abox.input.addr_consume[0] = false;
+            self.abox.input.addr_consume[0] = self.dheap.need_split();
             self.abox.input.addr_consume[1..CONSUMERS]
                 .copy_from_slice(&self.reducer.consume_demands());
+            let free_addr_bits = self.abox.consume_addr_bits();
+            let free_addr_valid = self.abox.consume_addr_valid();
+            self.dheap.input.free_addr = free_addr_bits[0];
+            self.dheap.input.free_addr_valid = free_addr_valid[0];
             self.reducer
                 .input
                 .free_addrs
-                .copy_from_slice(&self.abox.consume_addr_bits()[1..CONSUMERS]);
+                .copy_from_slice(&free_addr_bits[1..CONSUMERS]);
             self.reducer
                 .input
                 .free_addrs_valid
-                .copy_from_slice(&self.abox.consume_addr_valid()[1..CONSUMERS]);
+                .copy_from_slice(&free_addr_valid[1..CONSUMERS]);
 
             self.buffers_free_addr.input.out_ready = self.abox.addr_request();
 

@@ -35,7 +35,6 @@ pub struct ReducerInput {
     pub in_app: ActiveApp,
     pub spine_ready: bool,
     pub app_ready: bool,
-    pub free_addr: usize, // receive free address from GC
     pub free_addrs: [usize; CONSUMERS_REDUCER],
     pub free_addrs_valid: [bool; CONSUMERS_REDUCER],
     pub need_split: bool,
@@ -118,6 +117,7 @@ impl Reducer {
                     let mut res: App = self.reg_in.value().load.clone();
                     res[0] = dash_atom(&self.reg_in.value().load[1]);
                     res[1] = Atom::PTR(*self.addr_regs[0].value(), false, false);
+                    // res[1] = Atom::PTR(self.input.free_addrs[0], false, false);
                     res
                 } else {
                     let old_spn = &self.reg_in.value().load;
@@ -146,21 +146,47 @@ impl Reducer {
     pub fn app_bits(&self) -> FrozenApp {
         FrozenApp {
             heap_addr: {
-                if *self.reg_stm.value() == Stm::SPECIAL {
-                    // Y case
-                    // *self.reg_addr.value()
-                    *self.addr_regs[0].value()
-                } else if let Atom::PTR(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
-                    // self.reg_addr.value() + p
-                    *self.addr_regs[p].value()
-                } else if let Atom::SPE(_, _, _, _, p) =
-                    self.reg_spine.value()[*self.reg_idx.value()]
-                {
-                    // self.reg_addr.value() + p
-                    *self.addr_regs[p].value()
-                } else {
-                    Default::default()
+                match self.reg_stm.value() {
+                    Stm::SPINE | Stm::IDLE => 0,
+                    Stm::APP => {
+                        if let Atom::PTR(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
+                            // self.reg_addr.value() + p
+                            *self.addr_regs[p].value()
+                        } else if let Atom::SPE(_, _, _, _, p) =
+                            self.reg_spine.value()[*self.reg_idx.value()]
+                        {
+                            // self.reg_addr.value() + p
+                            *self.addr_regs[p].value()
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    Stm::SPECIAL => *self.addr_regs[0].value(),
                 }
+                // if *self.reg_stm.value() == Stm::SPECIAL {
+                //     // Y case
+                //     // *self.reg_addr.value()
+                //     *self.addr_regs[0].value()
+                // } else if let Atom::PTR(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
+                //     // self.reg_addr.value() + p
+                //     if p > 7 {
+                //         println!(
+                //             "spine:{:?}, reg_idx:{:?}, stm: {:?}",
+                //             self.reg_spine.value(),
+                //             self.reg_idx.value(),
+                //             self.reg_stm.value()
+                //         );
+                //     }
+                //     *self.addr_regs[p].value()
+                // } else if let Atom::SPE(_, _, _, _, p) =
+                //     self.reg_spine.value()[*self.reg_idx.value()]
+                // {
+                //     // self.reg_addr.value() + p
+                //     *self.addr_regs[p].value()
+                // } else {
+                //     assert!(*self.reg_stm.value() != Stm::APP);
+                //     Default::default()
+                // }
             },
             load: {
                 if *self.reg_stm.value() == Stm::SPECIAL {
@@ -183,7 +209,8 @@ impl Reducer {
                 fire(self.input.app_ready, self.app_valid())
                     && !self.more_app(self.reg_spine.value())
             }
-            Stm::SPECIAL => fire(self.input.app_ready, self.app_valid()), // Y case
+            // Stm::SPECIAL => fire(self.input.app_ready, self.app_valid()), // Y case
+            Stm::SPECIAL => false,
         };
         // demand all input free addrs are valid
         state_correct && self.input.free_addrs_valid.iter().all(|&vld| vld)
@@ -294,6 +321,7 @@ impl Reducer {
                         // assert_eq!(*self.reg_stm.value(), Stm::SPINE);
                         // *a = Atom::PTR(self.reg_addr.value() + *p - hole, true, false);
                         *a = Atom::PTR(*self.addr_regs[*p - hole].value(), true, false);
+                        // *a = Atom::PTR(self.input.free_addrs[*p - hole], true, false);
                     }
                 }
                 Atom::SPE(op, rev, l, r, p) => {
@@ -307,6 +335,7 @@ impl Reducer {
                         // speculation fails
                         // *a = Atom::PTR(self.reg_addr.value() + *p - hole, true, false);
                         *a = Atom::PTR(*self.addr_regs[*p - hole].value(), true, false);
+                        // *a = Atom::PTR(self.input.free_addrs[*p - hole], true, false);
                     }
                 }
                 Atom::ARG(arg, unq) => {
@@ -343,6 +372,7 @@ impl Reducer {
             //         }),
             //     );
             // }
+
             self.addr_regs
                 .iter_mut()
                 .zip(self.input.free_addrs)
@@ -398,6 +428,12 @@ impl HwModule for Reducer {
                             + get_ptr(&template[founded])
                             + 1,
                     );
+                    // self.addr_regs
+                    //     .iter_mut()
+                    //     .zip(self.input.free_addrs)
+                    //     .for_each(|(reg, addr)| {
+                    //         reg.connect(&addr);
+                    //     });
                 } else {
                     self.step_next();
                 }
@@ -428,7 +464,8 @@ impl HwModule for Reducer {
             Stm::SPECIAL => {
                 self.reg_app_mask.connect(&false);
                 if fire(self.input.app_ready, self.app_valid()) {
-                    self.step_next();
+                    // self.step_next();
+                    self.reg_stm.connect(&Stm::IDLE);
                 }
             }
         }
@@ -464,7 +501,6 @@ impl HwModule for Reducer {
     fn tick_children(&mut self) {
         self.comb_table.tick();
         self.reg_in.tick();
-        // self.reg_addr.tick();
         self.addr_regs.iter_mut().for_each(|reg| {
             reg.tick();
         });
