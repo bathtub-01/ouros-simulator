@@ -210,9 +210,6 @@ impl HwModule for OurosCore {
         // connect start signal
         self.dheap.input.start = self.input.start;
 
-        // self.reducer.input.free_addr = self.dheap.free_addr();
-        // self.reducer.input.need_split = self.dheap.need_split();
-
         // this 'kind of' fixes the ring problem
         for _ in 0..3 {
             // gc control signals
@@ -220,7 +217,6 @@ impl HwModule for OurosCore {
             self.buffers_free_addr.input.in_valid = self.gc.addr_out_valid();
             self.gc.input.addr_out_ready = self.buffers_free_addr.in_ready();
 
-            // self.dheap.input.addr_consumed = self.reducer.addr_consumed();
             self.abox.input.free_addr_bits = *self.buffers_free_addr.dout().unwrap_or(&0);
             self.abox.input.free_addr_valid = self.buffers_free_addr.out_valid();
             self.abox.input.addr_consume[0] = self.dheap.need_split();
