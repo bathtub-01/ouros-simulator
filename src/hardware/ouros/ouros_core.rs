@@ -193,7 +193,7 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: 
 impl HwModule for OurosCore {
     fn update_local(&mut self) {
         /*
-        NOTICE: there is an assignment ring in the circuit, the order of
+        NOTE: there is an assignment ring in the circuit, the order of
         assigning inputs matters and might be buggy here.
         Keep this in mind if anything strange occurs in the future..
          */
@@ -226,21 +226,21 @@ impl HwModule for OurosCore {
 
             self.abox.input.free_addr_bits = *self.buffers_free_addr.dout().unwrap_or(&0);
             self.abox.input.free_addr_valid = self.buffers_free_addr.out_valid();
-            self.abox.input.addr_consume[0] = self.dheap.need_split();
-            self.abox.input.addr_consume[1..CONSUMERS]
+            self.abox.input.addr_consume[CONSUMERS - 1] = self.dheap.need_split();
+            self.abox.input.addr_consume[0..CONSUMERS - 1]
                 .copy_from_slice(&self.reducer.consume_demands());
             let free_addr_bits = self.abox.consume_addr_bits();
             let free_addr_valid = self.abox.consume_addr_valid();
-            self.dheap.input.free_addr = free_addr_bits[0];
-            self.dheap.input.free_addr_valid = free_addr_valid[0];
+            self.dheap.input.free_addr = free_addr_bits[CONSUMERS - 1];
+            self.dheap.input.free_addr_valid = free_addr_valid[CONSUMERS - 1];
             self.reducer
                 .input
                 .free_addrs
-                .copy_from_slice(&free_addr_bits[1..CONSUMERS]);
+                .copy_from_slice(&free_addr_bits[0..CONSUMERS - 1]);
             self.reducer
                 .input
                 .free_addrs_valid
-                .copy_from_slice(&free_addr_valid[1..CONSUMERS]);
+                .copy_from_slice(&free_addr_valid[0..CONSUMERS - 1]);
 
             self.buffers_dealloc.input.out_ready = self.gc.deallocate_ready();
             self.buffers_free_addr.input.out_ready = self.abox.addr_request();
