@@ -1,4 +1,4 @@
-use super::config::CONSUMERS;
+use super::config::{CONSUMERS, CONSUMERS_REDUCER};
 use crate::hardware::common::Register;
 use crate::hw_module::{HwInput, HwModule};
 
@@ -15,6 +15,7 @@ impl HwInput for AddrBoxInput {}
 pub struct AddrBox {
     pub input: AddrBoxInput,
     addr_regs: [Register<(bool, usize)>; CONSUMERS], // 1 for DrfHeap, 7 for Reducer
+    feedback_regs: [Register<(bool, usize)>; CONSUMERS_REDUCER],
 }
 
 /// Shift registers for free addrs, can be consumed by the Reducer (0~6) and DrfHeap (7)
@@ -30,6 +31,14 @@ impl AddrBox {
 
     fn addr_fire(&self, idx: usize) -> bool {
         self.addr_regs[idx].value().0 && self.input.addr_consume[idx]
+    }
+
+    fn any_addr_fire(&self) -> bool {
+        self.addr_regs
+            .iter()
+            .zip(self.input.addr_consume)
+            .map(|(reg, csm)| reg.value().0 && csm)
+            .any(|b| b)
     }
 
     /// whether a slot can consume the free addr from upper stream in this cycle
@@ -51,6 +60,28 @@ impl AddrBox {
     pub fn consume_addr_bits(&self) -> [usize; CONSUMERS] {
         std::array::from_fn(|i| self.addr_regs[i].value().1)
     }
+
+    pub fn feedback_valid(&self) -> bool {
+        self.feedback_regs.iter().any(|reg| reg.value().0) || self.any_addr_fire()
+    }
+
+    pub fn feedback_bits(&self) -> usize {
+        if self.addr_fire(CONSUMERS - 1) {
+            self.addr_regs[CONSUMERS - 1].value().1
+        } else if self.addr_fire(0) {
+            self.addr_regs[0].value().1
+        } else {
+            let first = self.feedback_regs.iter().position(|reg| reg.value().0);
+            match first {
+                Some(i) => self.feedback_regs[i].value().1,
+                None => 0,
+            }
+        }
+    }
+
+    fn feedback_chosen(&self, idx: usize) -> bool {
+        todo!()
+    }
 }
 
 impl HwModule for AddrBox {
@@ -67,6 +98,17 @@ impl HwModule for AddrBox {
                         self.addr_regs[i + 1].value().1,
                     ));
                 }
+            }
+        }
+
+        // self.feedback_regs
+        for i in 0..CONSUMERS_REDUCER {
+            if self.addr_fire(i) {
+                self.feedback_regs[i].connect(self.addr_regs[i].value());
+            }
+
+            if self.feedback_chosen(i) {
+                self.feedback_regs[i].connect(&(false, 0));
             }
         }
     }
