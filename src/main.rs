@@ -160,11 +160,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     )?;
     writeln!(
         log,
-        "heap cell consumed: {}, heap update: {}, avoided: {}",
-        // ouros.dheap.addr_bumper.value(),
-        0, // FIXME
-        stats.dheap_stat.heap_update,
-        stats.dheap_stat.update_avoided
+        "heap allocations: {}, heap update: {}, avoided: {}",
+        stats.gc_stat.allocations, stats.dheap_stat.heap_update, stats.dheap_stat.update_avoided
     );
     writeln!(log, "GC immediate reuse: {}", stats.gc_stat.immediate_reuse,)?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
@@ -288,7 +285,7 @@ fn run_benchmarks() -> std::io::Result<()> {
 
 fn main() -> std::io::Result<()> {
     println!("calling verus code: {}", expose(3, 4));
-    inspect_prog(&MSS)
+    inspect_prog(&FIB)
     // run_benchmarks()
 }
 

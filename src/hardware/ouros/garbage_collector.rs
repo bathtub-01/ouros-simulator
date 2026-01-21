@@ -40,6 +40,7 @@ impl HwInput for GbgCollectorInput {}
 
 #[derive(Default)]
 pub struct GbgCollectorStat {
+    pub allocations: u32,
     pub immediate_reuse: u32,           // gain from one-bit ref count
     pub m_request_per_cycle: Vec<bool>, // mutator request
 }
@@ -221,6 +222,10 @@ impl HwModule for GbgCollector {
         if self.stat_detail_lv >= DLV_GC {
             if self.deallocate_fire() {
                 self.stat.immediate_reuse += 1;
+            }
+
+            if self.addr_out_fire() {
+                self.stat.allocations += 1;
             }
 
             self.stat.m_request_per_cycle.push(self.mutator_request())
