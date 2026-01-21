@@ -109,6 +109,47 @@ plot <- ggplot(combined_data, aes(x = time, y = rate, color = source)) +
 
 ggsave("simu-out/busy-rate.pdf", width = 10, height = 6, units = "cm")
 
+# =========== PLOT GC MUTATOR REQ RATE =============
+data <- read.csv("simu-out/gc-mutator-requst-rate.csv", header = TRUE)
+
+plot <- ggplot(data, aes(x = time, y = rate)) +
+  geom_line(linewidth = 0.5, color = "#5e81ac") +
+  labs(x = "Cycles", y = "Mutator Req (%)", title = "Mutator Requests Rate") +
+  guides(color = guide_legend(position = "inside"))+
+  theme(
+    plot.title = element_text(size = 12, hjust = 0.5),  # Smaller & centered title
+    axis.title = element_text(size = 10),               # Smaller axis titles
+    axis.text = element_text(size = 10),               # Smaller tick labels
+    
+    # Remove minor gridlines (keep major if needed)
+    panel.grid.minor = element_blank(),                 
+    panel.grid.major = element_line(color = "gray90"),  # Lighter major grid
+    
+    # Black border around the plot
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    
+    # Legend inside plot with black border
+    legend.position.inside = c(0.7, 0.8),
+    legend.direction = "horizontal",  # Key change: horizontal layout
+    legend.box.just = "center",      # Centers items in the legend box
+    legend.text = element_text(size = 8, margin = margin(r = 1)),  # Smaller legend text
+    legend.background = element_rect(
+      color = "black",  # Black border
+      fill = alpha("white", 0.6),   # White background
+      linewidth = 0.3,   # Border thickness
+    ),
+
+    legend.margin = margin(1, 2, 1, 2),  # Tight internal padding (top,right,bottom,left)
+    
+    # Remove legend title
+    legend.title = element_blank(),
+    
+    panel.background = element_rect(fill = "white"),
+    axis.ticks.length = unit(-0.15, "cm"),  # Negative value flips ticks inward
+  )
+  
+ggsave("simu-out/gc-mutator-requst-rate.pdf", width = 10, height = 6, units = "cm")
+
 # =========== PLOT STM DISTRIBUTION =============
 data <- read.csv("simu-out/stm-dist.csv", header = TRUE)
 # Convert 'state' to a factor with original order

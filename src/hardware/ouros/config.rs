@@ -14,18 +14,23 @@ pub const BUFFER_SIZE: usize = MAX_THREADS + 1;
 pub const ALU_PIPE: bool = false;
 pub const REDUCER_PIPE: bool = false;
 
-// system-wise setup, changing them will require also modifying the compiler
-pub const HOLES: usize = 6;
-pub const APP_LENGTH: usize = 8;
 /// max number of addresses can be consumed in one cycle
 pub const CONSUMERS: usize = CONSUMERS_REDUCER + CONSUMERS_DHEAP;
 pub const CONSUMERS_REDUCER: usize = 7;
 pub const CONSUMERS_DHEAP: usize = 1;
+
+const GC_AT: f64 = 0.5;
+pub const GC_THRESHOLD: usize = (HEAP_SIZE as f64 * GC_AT) as usize;
+
+// system-wise setup, changing them will require also modifying the compiler
+pub const HOLES: usize = 6;
+pub const APP_LENGTH: usize = 8;
 
 // stats detail level
 pub const DLV_THREADS: u8 = 100;
 pub const DLV_FULL_LOG: u8 = 250;
 pub const DLV_STM_DIST: u8 = 240;
 pub const DLV_BUSY_RATE: u8 = 150;
+pub const DLV_GC: u8 = 150;
 pub const DLV_BUFFER_USAGE: u8 = 180;
 pub const DLV_MEM_USAGE: u8 = 170;

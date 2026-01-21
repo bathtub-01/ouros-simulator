@@ -97,7 +97,9 @@ impl OurosCore {
             dheap: DrfHeap::new(HEAP_SIZE)
                 .program(&prog.heap_img)
                 .detail(detail_lv),
-            gc: GbgCollector::new(HEAP_SIZE, prog.heap_img.len()).init_freelist(),
+            gc: GbgCollector::new(HEAP_SIZE, prog.heap_img.len())
+                .init_freelist()
+                .detail(detail_lv),
             abox: AddrBox::new(),
             reducer: Reducer::new(PROG_SIZE)
                 .program(&prog.comb_img)

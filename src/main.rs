@@ -104,6 +104,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let threads_path = Path::new(DIR).join("threads.csv");
     let red_rate_path = Path::new(DIR).join("red-rate.csv");
     let alu_rate_path = Path::new(DIR).join("alu-rate.csv");
+    let gc_mreq_rate_path = Path::new(DIR).join("gc-mutator-requst-rate.csv");
     let buffer_util_path = Path::new(DIR).join("buffer-util.csv");
     let stm_dist_path = Path::new(DIR).join("stm-dist.csv");
 
@@ -113,6 +114,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut threads = File::create(threads_path)?;
     let mut red_rate = File::create(red_rate_path)?;
     let mut alu_rate = File::create(alu_rate_path)?;
+    let mut gc_mreq_rate = File::create(gc_mreq_rate_path)?;
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
@@ -212,6 +214,9 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let alu_rate_data: Vec<f32> = chunk_rate(&stats.alu_stat.busy_per_cycle, chunk_size);
     write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)?;
 
+    let gc_mreq_rate_data: Vec<f32> = chunk_rate(&stats.gc_stat.m_request_per_cycle, chunk_size);
+    write_busy_rate(&mut gc_mreq_rate, &alu_rate_data, chunk_size)?;
+
     // write buffer utilisation
     writeln!(buffer_util, "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3")?;
     let buffer_util_data = stats
@@ -267,7 +272,7 @@ fn run_benchmarks() -> std::io::Result<()> {
     );
     let mut counter = 0;
     let results = benchmarks.map(|p| {
-        let res = simulate(&p, 100);
+        let res = simulate(&p, 0);
         counter += 1;
         print!("\r{}/{} finished.", counter, benchmarks.len());
         io::stdout().flush().unwrap();
@@ -283,8 +288,8 @@ fn run_benchmarks() -> std::io::Result<()> {
 
 fn main() -> std::io::Result<()> {
     println!("calling verus code: {}", expose(3, 4));
-    // inspect_prog(&FIB)
-    run_benchmarks()
+    inspect_prog(&MSS)
+    // run_benchmarks()
 }
 
 use vstd::prelude::*;
