@@ -41,6 +41,7 @@ impl HwInput for GbgCollectorInput {}
 #[derive(Default)]
 pub struct GbgCollectorStat {
     pub allocations: u32,
+    pub feedbacks: u32,
     pub immediate_reuse: u32,           // gain from one-bit ref count
     pub m_request_per_cycle: Vec<bool>, // mutator request
 }
@@ -224,6 +225,10 @@ impl HwModule for GbgCollector {
                 self.stat.immediate_reuse += 1;
             }
 
+            if self.feedback_fire() {
+                self.stat.feedbacks += 1;
+            }
+
             if self.addr_out_fire() {
                 self.stat.allocations += 1;
             }
@@ -233,10 +238,12 @@ impl HwModule for GbgCollector {
     }
 
     fn tick_children(&mut self) {
+        self.reg_collector.tick();
         self.gc_mem.tick();
         self.reg_free_head.tick();
         self.reg_work_head.tick();
         self.reg_addr_drawed.tick();
+        self.reg_free_len.tick();
     }
 }
 

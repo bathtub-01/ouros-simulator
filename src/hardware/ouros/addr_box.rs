@@ -79,8 +79,14 @@ impl AddrBox {
         }
     }
 
-    fn feedback_chosen(&self, idx: usize) -> bool {
-        todo!()
+    fn feedback_chosen(&self) -> Option<usize> {
+        if self.addr_fire(CONSUMERS - 1) {
+            Some(CONSUMERS - 1)
+        } else if self.addr_fire(0) {
+            Some(0)
+        } else {
+            self.feedback_regs.iter().position(|reg| reg.value().0)
+        }
     }
 }
 
@@ -101,13 +107,14 @@ impl HwModule for AddrBox {
             }
         }
 
-        // self.feedback_regs
         for i in 0..CONSUMERS_REDUCER {
             if self.addr_fire(i) {
                 self.feedback_regs[i].connect(self.addr_regs[i].value());
             }
+        }
 
-            if self.feedback_chosen(i) {
+        if let Some(i) = self.feedback_chosen() {
+            if i < CONSUMERS_REDUCER {
                 self.feedback_regs[i].connect(&(false, 0));
             }
         }
@@ -115,6 +122,9 @@ impl HwModule for AddrBox {
 
     fn tick_children(&mut self) {
         self.addr_regs.iter_mut().for_each(|reg| {
+            reg.tick();
+        });
+        self.feedback_regs.iter_mut().for_each(|reg| {
             reg.tick();
         });
     }

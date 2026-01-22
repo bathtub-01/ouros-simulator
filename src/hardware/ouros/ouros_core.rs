@@ -63,6 +63,7 @@ pub struct OurosCore {
 
     buffers_dealloc: FIFO<usize, 2, false>,
     buffers_free_addr: FIFO<usize, 2, false>,
+    buffers_feedback: FIFO<usize, 2, false>,
 
     buffers_dheap_a_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_dheap_a_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
@@ -108,6 +109,7 @@ impl OurosCore {
 
             buffers_dealloc: FIFO::new(),
             buffers_free_addr: FIFO::new(),
+            buffers_feedback: FIFO::new(),
 
             buffers_dheap_a_0: FIFO::new().record_stat(buffer_usage),
             buffers_dheap_a_1: FIFO::new().record_stat(buffer_usage),
@@ -216,15 +218,21 @@ impl HwModule for OurosCore {
         self.dheap.input.start = self.input.start;
 
         // this 'kind of' fixes the ring problem
-        for _ in 0..3 {
+        for _ in 0..2 {
             // gc control signals
             self.buffers_dealloc.input.din = self.dheap.dealloc_bits();
             self.buffers_dealloc.input.in_valid = self.dheap.dealloc_valid();
             self.buffers_free_addr.input.din = self.gc.addr_out_bits();
             self.buffers_free_addr.input.in_valid = self.gc.addr_out_valid();
+            self.buffers_feedback.input.din = self.abox.feedback_bits();
+            self.buffers_feedback.input.in_valid = self.abox.feedback_valid();
+
             self.gc.input.deallocate_bits = *self.buffers_dealloc.dout().unwrap_or(&0);
             self.gc.input.deallocate_valid = self.buffers_dealloc.out_valid();
             self.gc.input.addr_out_ready = self.buffers_free_addr.in_ready();
+
+            self.gc.input.feedback_bits = *self.buffers_feedback.dout().unwrap_or(&0);
+            self.gc.input.feedback_valid = self.buffers_feedback.out_valid();
 
             self.abox.input.free_addr_bits = *self.buffers_free_addr.dout().unwrap_or(&0);
             self.abox.input.free_addr_valid = self.buffers_free_addr.out_valid();
@@ -246,6 +254,7 @@ impl HwModule for OurosCore {
 
             self.buffers_dealloc.input.out_ready = self.gc.deallocate_ready();
             self.buffers_free_addr.input.out_ready = self.abox.addr_request();
+            self.buffers_feedback.input.out_ready = self.gc.feedback_ready();
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
@@ -428,6 +437,7 @@ impl HwModule for OurosCore {
 
         self.buffers_dealloc.tick();
         self.buffers_free_addr.tick();
+        self.buffers_feedback.tick();
 
         self.buffers_dheap_a_0.tick();
         self.buffers_dheap_a_1.tick();

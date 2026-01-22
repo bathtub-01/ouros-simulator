@@ -1,15 +1,21 @@
 mod hardware;
 mod hw_module;
 
+use std::collections::HashMap;
+use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::{self, Write};
 use std::path::Path;
+use std::sync::LazyLock;
 
 use hardware::ouros::ouros_core::OurosCore;
 use hardware::ouros::program::{app_length, ActiveApp, App, Program};
 // use hardware::ouros::deref_heap_new::
-use hardware::ouros::benchmarks::*;
+use hardware::ouros::{
+    self,
+    benchmarks::{self, *},
+};
 use hw_module::HwModule;
 
 fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
@@ -31,6 +37,11 @@ fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
         ouros.tick();
         cycle += 1;
     }
+
+    // let gc_stat = ouros.get_stat().gc_stat;
+    // let allocations = gc_stat.allocations;
+    // let feedbacks = gc_stat.feedbacks;
+    // assert_eq!(allocations, feedbacks + 10); // just a ad-hoc check
 
     (ouros, cycle)
 }
@@ -163,7 +174,11 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         "heap allocations: {}, heap update: {}, avoided: {}",
         stats.gc_stat.allocations, stats.dheap_stat.heap_update, stats.dheap_stat.update_avoided
     );
-    writeln!(log, "GC immediate reuse: {}", stats.gc_stat.immediate_reuse,)?;
+    writeln!(
+        log,
+        "GC immediate reuse: {}, GC feedbacks: {}",
+        stats.gc_stat.immediate_reuse, stats.gc_stat.feedbacks
+    )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 
     for (i, s) in stats
@@ -252,62 +267,42 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
 }
 
 macro_rules! benchmarks {
-    ($($name:ident),* $(,)?) => {
-        {
-            let benchmarks = [$(& $name),*];
-            let names = [$(stringify!($name)),*];
-            (benchmarks, names)
-        }
-    };
+    ($($name:ident),* $(,)?) => {{
+        let mut map = HashMap::new();
+        $(
+            map.insert(stringify!($name), & $name);
+        )*
+        map
+    }};
 }
 
 /// run the benchmark suite with less stat details
-fn run_benchmarks() -> std::io::Result<()> {
-    let (benchmarks, names) = benchmarks!(
-        ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, TREESUM, TRIBELIE, WHILEX,
-    );
-    let mut counter = 0;
-    let results = benchmarks.map(|p| {
+fn run_benchmarks(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
+    let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
+    vec.sort_by_key(|(n, _)| *n);
+    let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
+    let results = benchmarks.iter().map(|p| {
         let res = simulate(&p, 0);
-        counter += 1;
-        print!("\r{}/{} finished.", counter, benchmarks.len());
-        io::stdout().flush().unwrap();
         res
     });
-    println!();
+
     results
-        .iter()
         .zip(names)
-        .for_each(|((core, cycles), n)| println!("{:<12} {:>8} cycles", n, cycles));
+        .for_each(|((_, cycles), n)| println!("{:<12} {:>8} cycles", n, cycles));
+
     Ok(())
 }
 
 fn main() -> std::io::Result<()> {
-    println!("calling verus code: {}", expose(3, 4));
-    inspect_prog(&FIB)
-    // run_benchmarks()
-}
+    let args: Vec<String> = env::args().collect();
+    let progs = benchmarks!(
+        ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
+        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, TREESUM, TRIBELIE, WHILEX,
+    );
 
-use vstd::prelude::*;
-verus! {
-
-spec fn min(x: int, y: int) -> int {
-    if x <= y {
-        x
+    if args.len() == 0 {
+        run_benchmarks(progs)
     } else {
-        y
+        inspect_prog(progs.get(args[1].as_str()).unwrap())
     }
 }
-
-fn expose(x: i32, y: i32) -> bool {
-    assert(min(10, 20) == 10);
-    assert(min(-10, -20) == -20);
-    assert(forall|i: int, j: int| min(i, j) <= i && min(i, j) <= j);
-    assert(forall|i: int, j: int| min(i, j) == i || min(i, j) == j);
-    assert(forall|i: int, j: int| min(i, j) == min(j, i));
-    // if min(x, y) == x {true} else {false}
-    true
-}
-
-} // verus!
