@@ -176,8 +176,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     );
     writeln!(
         log,
-        "GC immediate reuse: {}, GC feedbacks: {}",
-        stats.gc_stat.immediate_reuse, stats.gc_stat.feedbacks
+        "GC immediate reuse: {}, GC feedbacks: {} ({} shadowed)",
+        stats.gc_stat.immediate_reuse, stats.gc_stat.feedbacks, stats.gc_stat.feedbacks_shadowed
     )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 

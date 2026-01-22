@@ -42,6 +42,7 @@ impl HwInput for GbgCollectorInput {}
 pub struct GbgCollectorStat {
     pub allocations: u32,
     pub feedbacks: u32,
+    pub feedbacks_shadowed: u32,
     pub immediate_reuse: u32,           // gain from one-bit ref count
     pub m_request_per_cycle: Vec<bool>, // mutator request
 }
@@ -227,6 +228,9 @@ impl HwModule for GbgCollector {
 
             if self.feedback_fire() {
                 self.stat.feedbacks += 1;
+                if self.deallocate_fire() || self.addr_out_fire() {
+                    self.stat.feedbacks_shadowed += 1;
+                }
             }
 
             if self.addr_out_fire() {
