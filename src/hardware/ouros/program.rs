@@ -166,6 +166,7 @@ pub fn is_ptr(atom: &Atom) -> bool {
     }
 }
 
+/// take pointer value out from a PTR or SPE
 pub fn get_ptr(atom: &Atom) -> usize {
     match atom {
         Atom::PTR(pt, _, _) => *pt,
