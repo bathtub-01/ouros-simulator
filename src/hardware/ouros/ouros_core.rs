@@ -256,6 +256,11 @@ impl HwModule for OurosCore {
             self.buffers_free_addr.input.out_ready = self.abox.addr_request();
             self.buffers_feedback.input.out_ready = self.gc.feedback_ready();
 
+            self.gc.input.heap_read_valid = self.dheap.heap_read_valid();
+            self.gc.input.heap_read_bits = self.dheap.heap_read_bits().clone();
+            self.dheap.input.read_heap_req_valid = self.gc.read_heap_req_valid();
+            self.dheap.input.read_heap_req_addr = self.gc.read_heap_req_addr();
+
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
             self.arbiter_dheap_b.input.out_ready = self.dheap.port_b_ready();

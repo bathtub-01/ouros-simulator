@@ -22,9 +22,12 @@ pub struct DrfHeapInput {
     pub port_b_bits: FrozenApp,
     pub out_main_ready: bool,
     pub out_sub_ready: bool,
+    pub found: bool,
+    // GC signals
     pub free_addr: usize,
     pub free_addr_valid: bool,
-    pub found: bool,
+    pub read_heap_req_valid: bool,
+    pub read_heap_req_addr: usize,
 }
 
 impl HwInput for DrfHeapInput {}
@@ -361,6 +364,7 @@ pub struct DrfHeap {
     working: Register<bool>,       // track whether the machine is working
     arg_id: Register<usize>,
     non_exist: Register<bool>,
+    gc_read_granted: Register<bool>,
     stat: DrfHeapStat,
     stat_detail_lv: u8,
 }
@@ -382,6 +386,7 @@ impl DrfHeap {
             stat: Default::default(),
             arg_id: Default::default(),
             non_exist: Default::default(),
+            gc_read_granted: Default::default(),
             stat_detail_lv: Default::default(),
         }
     }
@@ -601,6 +606,14 @@ impl DrfHeap {
 
     pub fn get_mem_stat(&self) -> &DualPortMemStat {
         self.heap_mem.get_stat()
+    }
+
+    pub fn heap_read_valid(&self) -> bool {
+        *self.gc_read_granted.value()
+    }
+
+    pub fn heap_read_bits(&self) -> &App {
+        self.heap_mem.dout_b()
     }
 
     fn getCONSUMEs(&self) -> CONSUMEs {
@@ -1179,6 +1192,12 @@ impl HwModule for DrfHeap {
 
         self.handle_port_a();
         self.handle_port_b();
+
+        // when port b is not locally used, grant it to GC usage
+        if self.port_b_ready() && !self.input.port_b_valid && self.input.read_heap_req_valid {
+            self.gc_read_granted.connect(&true);
+            self.heap_mem.read_b(self.input.read_heap_req_addr);
+        }
     }
 
     fn update_stat(&mut self) {
@@ -1244,5 +1263,6 @@ impl HwModule for DrfHeap {
         self.addr_holder.tick();
         self.ia_addr.tick();
         self.non_exist.tick();
+        self.gc_read_granted.tick();
     }
 }

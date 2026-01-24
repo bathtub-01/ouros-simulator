@@ -300,7 +300,7 @@ fn main() -> std::io::Result<()> {
         SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, TREESUM, TRIBELIE, WHILEX,
     );
 
-    if args.len() == 0 {
+    if args.len() == 1 {
         run_benchmarks(progs)
     } else {
         inspect_prog(progs.get(args[1].as_str()).unwrap())
