@@ -2,6 +2,8 @@ use super::config::{CONSUMERS, CONSUMERS_REDUCER};
 use crate::hardware::common::Register;
 use crate::hw_module::{HwInput, HwModule};
 
+const DONT_CARE: usize = 42;
+
 #[derive(Default)]
 pub struct AddrBoxInput {
     pub addr_consume: [bool; CONSUMERS], // addr consumed by demander
@@ -74,7 +76,7 @@ impl AddrBox {
             let first = self.feedback_regs.iter().position(|reg| reg.value().0);
             match first {
                 Some(i) => self.feedback_regs[i].value().1,
-                None => 0,
+                None => DONT_CARE,
             }
         }
     }
@@ -92,6 +94,7 @@ impl AddrBox {
 
 impl HwModule for AddrBox {
     fn update_local(&mut self) {
+        // ============ handle free addrs ===========
         for i in 0..CONSUMERS {
             // reg value shifting
             if self.can_consume(i) {
@@ -107,6 +110,7 @@ impl HwModule for AddrBox {
             }
         }
 
+        // ============ handle feedbacks ===========
         for i in 0..CONSUMERS_REDUCER {
             if self.addr_fire(i) {
                 self.feedback_regs[i].connect(self.addr_regs[i].value());
@@ -115,7 +119,7 @@ impl HwModule for AddrBox {
 
         if let Some(i) = self.feedback_chosen() {
             if i < CONSUMERS_REDUCER {
-                self.feedback_regs[i].connect(&(false, 0));
+                self.feedback_regs[i].connect(&(false, DONT_CARE));
             }
         }
     }

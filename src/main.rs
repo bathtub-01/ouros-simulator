@@ -31,7 +31,7 @@ fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 1000000 {
+        if ouros.done() || cycle == 300000 {
             break;
         }
         ouros.tick();
@@ -146,10 +146,9 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     )?;
     writeln!(
         log,
-        "       Reducer busy cycles: {} ({:.2}%), blocked cycles: {}",
+        "       Reducer busy cycles: {} ({:.2}%)",
         stats.reducer_stat.busy_cycles,
         (stats.reducer_stat.busy_cycles as f32) / (runtime_cycles as f32) * 100.0,
-        stats.reducer_stat.blocked_cycles
     )?;
     writeln!(
         log,
@@ -171,13 +170,20 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     )?;
     writeln!(
         log,
-        "heap allocations: {}, heap update: {}, avoided: {}",
+        "heap allocations: {} | heap update: {} | avoided: {}",
         stats.gc_stat.allocations, stats.dheap_stat.heap_update, stats.dheap_stat.update_avoided
     );
     writeln!(
         log,
-        "GC immediate reuse: {}, GC feedbacks: {} ({} shadowed)",
+        "GC immediate reuse: {} | GC feedbacks: {} ({} shadowed)",
         stats.gc_stat.immediate_reuse, stats.gc_stat.feedbacks, stats.gc_stat.feedbacks_shadowed
+    )?;
+    writeln!(
+        log,
+        "GC rounds: {} | GC stalls (Reducer): {} ({:.2}%)",
+        stats.gc_stat.gc_rounds,
+        stats.reducer_stat.gc_stall_cycles,
+        (stats.reducer_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0
     )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 

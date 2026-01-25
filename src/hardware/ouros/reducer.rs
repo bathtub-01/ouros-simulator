@@ -48,6 +48,7 @@ pub struct ReducerStat {
     pub busy_per_cycle: Vec<bool>,
     pub holder_contents: Vec<Option<ActiveApp>>,
     pub blocked_cycles: u32,
+    pub gc_stall_cycles: u32,
 }
 
 pub struct Reducer {
@@ -183,6 +184,21 @@ impl Reducer {
         };
         // demand all input free addrs are valid
         state_correct && self.input.free_addrs_valid.iter().all(|&vld| vld)
+    }
+
+    // for GC stats
+    fn stalled(&self) -> bool {
+        let state_correct = match *self.reg_stm.value() {
+            Stm::IDLE => true,
+            Stm::SPINE => !self.more_app(self.comb_table.dout()),
+            Stm::APP => {
+                fire(self.input.app_ready, self.app_valid())
+                    && !self.more_app(self.reg_spine.value())
+            }
+            Stm::SPECIAL => fire(self.input.app_ready, self.app_valid()),
+        };
+
+        state_correct && !self.input.free_addrs_valid.iter().all(|&vld| vld)
     }
 
     /// The number of heap cells that will be consumed in this cycle
@@ -415,6 +431,10 @@ impl HwModule for Reducer {
             println!("spine leaked!: {:?}", self.spine_bits());
             panic!();
         }
+
+        if self.stat_detail_lv >= DLV_GC && self.stalled() {
+            self.stat.gc_stall_cycles += 1;
+        }
     }
 
     fn update_stat(&mut self) {
@@ -423,9 +443,9 @@ impl HwModule for Reducer {
             {
                 self.stat.busy_cycles += 1;
                 self.stat.busy_per_cycle.push(true);
-                if self.input.in_valid {
-                    self.stat.blocked_cycles += 1;
-                }
+                // if self.input.in_valid {
+                //     self.stat.blocked_cycles += 1;
+                // }
             } else {
                 self.stat.busy_per_cycle.push(false);
             }

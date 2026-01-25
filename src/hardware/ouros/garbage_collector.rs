@@ -52,6 +52,7 @@ pub struct GbgCollectorStat {
     pub feedbacks_shadowed: u32,
     pub immediate_reuse: u32,           // gain from one-bit ref count
     pub m_request_per_cycle: Vec<bool>, // mutator request
+    pub gc_rounds: u32,
 }
 
 pub struct GbgCollector {
@@ -71,6 +72,7 @@ pub struct GbgCollector {
     reg_move: Register<u8>,
     reg_work_on: Register<usize>, // to lock the worklist object we're working on
     reg_app_idx: Register<usize>,
+    const_sweep_from: usize,
     stat: GbgCollectorStat,
     stat_detail_lv: u8,
 }
@@ -94,6 +96,7 @@ impl GbgCollector {
             reg_move: Default::default(),
             reg_work_on: Default::default(),
             reg_app_idx: Default::default(),
+            const_sweep_from: free_from,
             stat: Default::default(),
             stat_detail_lv: Default::default(),
         }
@@ -145,7 +148,7 @@ impl GbgCollector {
 
     /// draw an address from the freelist
     pub fn addr_out_bits(&self) -> usize {
-        if self.deallocate_fire() {
+        if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::MARK {
             self.input.deallocate_bits
         } else {
             if *self.reg_free_drawed.value() {
@@ -166,6 +169,7 @@ impl GbgCollector {
 
     pub fn deallocate_ready(&self) -> bool {
         true
+        // false
     }
 
     pub fn deallocate_fire(&self) -> bool {
@@ -267,9 +271,13 @@ impl GbgCollector {
                 self.gc_mem.read_a(0);
                 self.reg_pre_gc.connect(&true);
                 self.reg_collector.connect(&CollectorState::SWEEP);
+                // for i in 0..164 {
+                //     println!("MARK finished, addr-{} is in {:?}", i, self.gc_mem.ram[i]);
+                // }
             } else {
                 // this is the ONLY operation to reduce worklist length
                 let w_head = *self.reg_work_head.value();
+                // println!("marking: {}", w_head);
                 self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
                 self.reg_work_drawed.connect(&true); // next head will be read out by write_a
                 self.work_len_minus_one();
@@ -280,7 +288,12 @@ impl GbgCollector {
         }
 
         // ========== move-1 logic (wait until main heap read success) ==========
-        if *self.reg_move.value() == 1 && self.input.heap_read_valid {
+        if *self.reg_move.value() == 1 && self.input.heap_read_valid && !self.mutator_request() {
+            // println!(
+            //     "work on: {} | app: {:?}",
+            //     self.reg_work_on.value(),
+            //     self.input.heap_read_bits
+            // );
             let in_app = &self.input.heap_read_bits;
             // splition of move-0 and move-1 is needed because mutator requests can modify worklist
             if in_app.iter().any(|atm| is_ptr(atm)) {
@@ -288,6 +301,7 @@ impl GbgCollector {
                 self.reg_move.connect(&2);
                 // pre read for move-2
                 let found = in_app.iter().position(|atm| is_ptr(atm)).unwrap();
+                // println!("go to move-2, read on: {}", get_ptr(&in_app[found]));
                 self.gc_mem.read_a(get_ptr(&in_app[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
@@ -346,7 +360,9 @@ impl GbgCollector {
                 // recover as Unmarked
                 self.gc_mem
                     .write_b(*self.reg_sweeper.value(), no_ptr_cell(CellState::Unmarked));
-            } else if read_out.state == CellState::Unmarked {
+            } else if read_out.state == CellState::Unmarked
+                && *self.reg_sweeper.value() >= self.const_sweep_from
+            {
                 // push it to freelist
                 let old_head: usize = if *self.reg_free_drawed.value() {
                     self.gc_mem.dout_a().ptr
@@ -357,7 +373,7 @@ impl GbgCollector {
                 self.free_len_plus_one();
             }
 
-            if *self.reg_sweeper.value() >= HEAP_SIZE - 1 {
+            if *self.reg_sweeper.value() < HEAP_SIZE - 1 {
                 // sweep next cell
                 let next = self.reg_sweeper.value() + 1;
                 self.reg_sweeper.connect(&next);
@@ -373,8 +389,6 @@ impl GbgCollector {
 
 impl HwModule for GbgCollector {
     fn update_local(&mut self) {
-        self.gc_mem.input.default_input();
-
         let real_freelist_head: usize = if *self.reg_free_drawed.value() {
             self.gc_mem.dout_a().ptr
         } else {
@@ -385,6 +399,14 @@ impl HwModule for GbgCollector {
         } else {
             *self.reg_work_head.value()
         };
+        if real_freelist_head == 0 {
+            println!(
+                "real_freelist_head == 0, self.gc_mem.dout_a().ptr: {}, read from: {}",
+                self.gc_mem.dout_a().ptr,
+                self.gc_mem.input.port_a.addr
+            );
+        }
+        self.gc_mem.input.default_input();
 
         self.reg_free_drawed.connect(&false);
         self.reg_free_head.connect(&real_freelist_head);
@@ -392,13 +414,16 @@ impl HwModule for GbgCollector {
         self.reg_work_head.connect(&real_worklist_head);
 
         match (self.deallocate_fire(), self.addr_out_fire()) {
-            (true, false) => {
-                if *self.reg_collector.value() != CollectorState::MARK {
-                    self.push_to_freelist(self.input.deallocate_bits, real_freelist_head, true);
-                    self.free_len_plus_one();
-                }
+            (true, false) if *self.reg_collector.value() != CollectorState::MARK => {
+                self.push_to_freelist(self.input.deallocate_bits, real_freelist_head, true);
+                self.free_len_plus_one();
             }
             (false, true) => {
+                self.reg_free_drawed.connect(&true);
+                self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
+                self.free_len_minus_one(); // a bit strange..
+            }
+            (true, true) if *self.reg_collector.value() == CollectorState::MARK => {
                 self.reg_free_drawed.connect(&true);
                 self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
                 self.free_len_minus_one(); // a bit strange..
@@ -419,6 +444,7 @@ impl HwModule for GbgCollector {
                 }
             };
             if cell_state == CellState::WorkList {
+                // println!("feedback: add {} to worklist", self.input.feedback_bits);
                 self.reg_work_head.connect(&self.input.feedback_bits);
                 self.work_len_plus_one();
             }
@@ -437,9 +463,27 @@ impl HwModule for GbgCollector {
             CollectorState::MARK => self.step_mark(),
             CollectorState::SWEEP => self.step_sweep(),
         }
+
+        if self.stat_detail_lv >= DLV_GC
+            && *self.reg_collector.value() == CollectorState::IDLE
+            && self.reg_collector.input == CollectorState::MARK
+        {
+            self.stat.gc_rounds += 1;
+        }
     }
 
     fn update_stat(&mut self) {
+        // println!(
+        //     "collector state: {:?}, worklist len: {}, worklist head: {}, freelist len: {}, freelist head: {}",
+        //     self.reg_collector.value(),
+        //     self.reg_work_len.value(),
+        //     self.reg_work_head.input,
+        //     self.reg_free_len.value(),
+        //     self.reg_free_head.input
+        // );
+        if self.addr_out_fire() && self.addr_out_bits() == 0 {
+            println!("emit 0 as free addr!");
+        }
         if self.stat_detail_lv >= DLV_GC {
             if self.deallocate_fire() {
                 self.stat.immediate_reuse += 1;
@@ -456,7 +500,7 @@ impl HwModule for GbgCollector {
                 self.stat.allocations += 1;
             }
 
-            self.stat.m_request_per_cycle.push(self.mutator_request())
+            self.stat.m_request_per_cycle.push(self.mutator_request());
         }
     }
 

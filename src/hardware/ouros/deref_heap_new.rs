@@ -1158,6 +1158,7 @@ impl DrfHeap {
 impl HwModule for DrfHeap {
     fn update_local(&mut self) {
         self.update_prepare();
+        self.gc_read_granted.connect(&false);
 
         // start the machine (demand flag of `main`, at addr 0, need to be false.)
         if !self.working.value() {
@@ -1197,10 +1198,35 @@ impl HwModule for DrfHeap {
         if self.port_b_ready() && !self.input.port_b_valid && self.input.read_heap_req_valid {
             self.gc_read_granted.connect(&true);
             self.heap_mem.read_b(self.input.read_heap_req_addr);
+            // println!("read {} for GC", self.input.read_heap_req_addr);
         }
+
+        // if self.heap_read_valid() {
+        //     println!("readout {:?} for GC", self.heap_read_bits());
+        // }
     }
 
     fn update_stat(&mut self) {
+        // if self.dealloc_valid() && self.dealloc_bits() == 163 {
+        //     println!("deallocate 163!");
+        // }
+        // if self.heap_mem.input.port_a.addr == 163 && self.heap_mem.input.port_a.is_write {
+        //     println!("a write 163: {:?}", self.heap_mem.input.port_a.din);
+        // }
+        // if self.heap_mem.input.port_b.addr == 163 && self.heap_mem.input.port_b.is_write {
+        //     println!(
+        //         "b write 163: {:?}, port_b ready: {}, port_b in: {:?}",
+        //         self.heap_mem.input.port_b.din,
+        //         self.port_b_ready(),
+        //         self.input.port_b_bits.load
+        //     );
+        // }
+
+        // println!(
+        //     "addr-163 | working: {} | {:?}",
+        //     self.working_heap.ram[163], self.heap_mem.ram[163]
+        // );
+
         if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.holder_out.0 {
                 self.stat

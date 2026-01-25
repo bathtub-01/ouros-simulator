@@ -19,7 +19,7 @@ pub const CONSUMERS: usize = CONSUMERS_REDUCER + CONSUMERS_DHEAP;
 pub const CONSUMERS_REDUCER: usize = 7;
 pub const CONSUMERS_DHEAP: usize = 1;
 
-const GC_AT: f32 = 0.9;
+const GC_AT: f32 = 0.5;
 pub const GC_THRESHOLD: usize = (HEAP_SIZE as f32 * GC_AT) as usize;
 
 // system-wise setup, changing them will require also modifying the compiler
