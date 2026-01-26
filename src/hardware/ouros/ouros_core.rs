@@ -236,7 +236,7 @@ impl HwModule for OurosCore {
 
             self.abox.input.free_addr_bits = *self.buffers_free_addr.dout().unwrap_or(&0);
             self.abox.input.free_addr_valid = self.buffers_free_addr.out_valid();
-            self.abox.input.addr_consume[CONSUMERS - 1] = self.dheap.need_split();
+            self.abox.input.addr_consume[CONSUMERS - 1] = self.dheap.free_addr_req();
             self.abox.input.addr_consume[0..CONSUMERS - 1]
                 .copy_from_slice(&self.reducer.consume_demands());
             let free_addr_bits = self.abox.consume_addr_bits();
@@ -260,6 +260,9 @@ impl HwModule for OurosCore {
             self.gc.input.heap_read_bits = self.dheap.heap_read_bits().clone();
             self.dheap.input.read_heap_req_valid = self.gc.read_heap_req_valid();
             self.dheap.input.read_heap_req_addr = self.gc.read_heap_req_addr();
+
+            self.gc.input.monitor_valid = self.reducer.spine_valid();
+            self.gc.input.monitor_bits = self.reducer.spine_bits();
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();

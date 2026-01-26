@@ -143,7 +143,7 @@ impl Reducer {
     pub fn app_bits(&self) -> FrozenApp {
         FrozenApp {
             heap_addr: {
-                match self.reg_stm.value() {
+                let r = match self.reg_stm.value() {
                     Stm::SPINE | Stm::IDLE => 0,
                     Stm::APP => {
                         if let Atom::PTR(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
@@ -157,7 +157,13 @@ impl Reducer {
                         }
                     }
                     Stm::SPECIAL => self.input.free_addrs[0],
+                };
+                if r == 0
+                    && (*self.reg_stm.value() == Stm::APP || *self.reg_stm.value() == Stm::SPECIAL)
+                {
+                    println!("reducer emit nested app with addr 0!");
                 }
+                r
             },
             load: {
                 if *self.reg_stm.value() == Stm::SPECIAL {

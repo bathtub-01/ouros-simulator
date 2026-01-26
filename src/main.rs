@@ -5,17 +5,14 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::Path;
 use std::sync::LazyLock;
 
 use hardware::ouros::ouros_core::OurosCore;
 use hardware::ouros::program::{app_length, ActiveApp, App, Program};
-// use hardware::ouros::deref_heap_new::
-use hardware::ouros::{
-    self,
-    benchmarks::{self, *},
-};
+
+use hardware::ouros::benchmarks::*;
 use hw_module::HwModule;
 
 fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
@@ -31,7 +28,7 @@ fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 300000 {
+        if ouros.done() || cycle == 1_000_000 {
             break;
         }
         ouros.tick();
@@ -303,7 +300,7 @@ fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let progs = benchmarks!(
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, TREESUM, TRIBELIE, WHILEX,
+        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /* TREESUM,*/ TRIBELIE, WHILEX,
     );
 
     if args.len() == 1 {

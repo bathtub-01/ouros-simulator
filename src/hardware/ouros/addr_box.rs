@@ -1,4 +1,4 @@
-use super::config::{CONSUMERS, CONSUMERS_REDUCER};
+use super::config::{CONSUMERS, CONSUMERS_DHEAP, CONSUMERS_REDUCER};
 use crate::hardware::common::Register;
 use crate::hw_module::{HwInput, HwModule};
 
@@ -122,6 +122,16 @@ impl HwModule for AddrBox {
                 self.feedback_regs[i].connect(&(false, DONT_CARE));
             }
         }
+
+        // for i in 0..CONSUMERS {
+        //     if self.addr_fire(i) && self.consume_addr_bits()[i] == 85 {
+        //         println!("addr box emit 85 as free addr!");
+        //     }
+        // }
+
+        // if self.feedback_valid() && self.feedback_bits() == 85 {
+        //     println!("addr box put 85 as feedback");
+        // }
     }
 
     fn tick_children(&mut self) {

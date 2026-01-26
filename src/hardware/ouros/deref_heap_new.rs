@@ -365,6 +365,7 @@ pub struct DrfHeap {
     arg_id: Register<usize>,
     non_exist: Register<bool>,
     gc_read_granted: Register<bool>,
+    reg_free_addr: Register<(bool, usize)>,
     stat: DrfHeapStat,
     stat_detail_lv: u8,
 }
@@ -387,6 +388,7 @@ impl DrfHeap {
             arg_id: Default::default(),
             non_exist: Default::default(),
             gc_read_granted: Default::default(),
+            reg_free_addr: Default::default(),
             stat_detail_lv: Default::default(),
         }
     }
@@ -516,7 +518,8 @@ impl DrfHeap {
                             &self.holder_in.value().load,
                             *self.arg_id.value(),
                             target,
-                            self.input.free_addr,
+                            // self.input.free_addr,
+                            self.reg_free_addr.value().1,
                         );
                         self.gen_active_app(updated_dmder)
                     }
@@ -546,7 +549,8 @@ impl DrfHeap {
     pub fn out_big_drg_bits(&self) -> FrozenApp {
         let mk_frozen = |a: Option<App>| match a {
             Some(big) => FrozenApp {
-                heap_addr: self.input.free_addr,
+                // heap_addr: self.input.free_addr,
+                heap_addr: self.reg_free_addr.value().1,
                 load: big,
             },
             None => Default::default(),
@@ -556,7 +560,13 @@ impl DrfHeap {
             Stm::IA if self.getIAs1() == IAs1::ExistWHNF => {
                 let dmder = &self.holder_in.value().load;
                 let target = self.heap_mem.dout_a();
-                let (_, obig) = deref(dmder, *self.arg_id.value(), target, self.input.free_addr);
+                // let (_, obig) = deref(dmder, *self.arg_id.value(), target, self.input.free_addr);
+                let (_, obig) = deref(
+                    dmder,
+                    *self.arg_id.value(),
+                    target,
+                    self.reg_free_addr.value().1,
+                );
                 mk_frozen(obig)
             }
             _ => Default::default(),
@@ -569,6 +579,7 @@ impl DrfHeap {
         *self.stm.value() == Stm::WHNF
             && self.getWHNFs() == WHNFs::NoNewFrame
             && self.can_avoid_update()
+            && false
     }
 
     /// Deallocate an address based on one-bit ref count
@@ -581,9 +592,14 @@ impl DrfHeap {
         !self.working.value()
     }
 
+    /// search for the addr of the App, which is currently being read by DHeap
     pub fn search(&self) -> usize {
         if self.port_a_fire() && self.getCONSUMEs() == CONSUMEs::InputIA {
             let in_app = mask_seq(&self.input.port_a_bits.load);
+            // println!(
+            //     "addr: {:?}",
+            //     self.thread_stack[self.input.port_a_bits.stack_idx as usize].top()
+            // );
             let (_, p) = select_1st_arg(&in_app);
             p
         } else if *self.stm.value() == Stm::IA {
@@ -877,8 +893,10 @@ impl DrfHeap {
     fn gen_output_whnf(&self) -> (App, Option<App>) {
         let dmder = self.heap_mem.dout_a();
         let target = &self.holder_in.value().load;
+        // println!("addr: {}", self.heap_mem.input.port_a.addr); // use this for GC debugging
         let (arg_id, _) = select_1st_arg(dmder);
-        deref(dmder, arg_id, target, self.input.free_addr)
+        // deref(dmder, arg_id, target, self.input.free_addr)
+        deref(dmder, arg_id, target, self.reg_free_addr.value().1)
     }
 
     fn gen_active_app(&self, app: App) -> ActiveApp {
@@ -927,6 +945,11 @@ impl DrfHeap {
             },
             Stm::RESUME => false,
         }
+    }
+
+    /// request a free addr from the addr box
+    pub fn free_addr_req(&self) -> bool {
+        self.need_split() || !self.reg_free_addr.value().0
     }
 
     /// if the resolved pointer is unique, update can be avoided
@@ -1035,10 +1058,18 @@ impl DrfHeap {
                     self.frame_stack[stk_id].pop();
                 }
 
+                /*
+                FIXME problem here: upon WHNF's return, we don't update the demander on heap.
+                  If we deallocate the WHNF, a pointer to that WHNF is still on heap..
+                 */
                 if self.can_avoid_update() {
                     /* update avoided */
                     self.stat.update_avoided += 1;
                     self.working_heap.write_b(whnf_addr, false); // for future re-allocation
+                                                                 // let current_stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
+                                                                 // let current_top = current_stk.top().unwrap().1;
+                                                                 // self.heap_mem
+                                                                 //     .write_b(current_top, self.out_main_bits().load);
                 } else {
                     self.stat.heap_update += 1;
                     self.write_whnf(HeapPort::B);
@@ -1060,7 +1091,8 @@ impl DrfHeap {
             }
             IAs1::ExistWHNF => {
                 let (deref_res, _) =
-                    deref(dmder, *self.arg_id.value(), &target, self.input.free_addr);
+                // deref(dmder, *self.arg_id.value(), &target, self.input.free_addr);
+                    deref(dmder, *self.arg_id.value(), &target, self.reg_free_addr.value().1);
                 updated_dmder = deref_res;
                 self.holder_in.input.load = updated_dmder.clone();
             }
@@ -1204,18 +1236,30 @@ impl HwModule for DrfHeap {
         // if self.heap_read_valid() {
         //     println!("readout {:?} for GC", self.heap_read_bits());
         // }
+
+        if !self.reg_free_addr.value().0 || self.need_split() {
+            self.reg_free_addr
+                .connect(&(self.input.free_addr_valid, self.input.free_addr));
+        }
+
+        // if self.out_big_drf_valid() && self.out_big_drg_bits().heap_addr == 0 {
+        //     println!(
+        //         "DHeap emit big drf app with addr 0!, in free addr: {}, valid: {}",
+        //         self.input.free_addr, self.input.free_addr_valid
+        //     );
+        // }
     }
 
     fn update_stat(&mut self) {
-        // if self.dealloc_valid() && self.dealloc_bits() == 163 {
-        //     println!("deallocate 163!");
+        // if self.dealloc_valid() && self.dealloc_bits() == 4077 {
+        //     println!("deallocate 65!");
         // }
-        // if self.heap_mem.input.port_a.addr == 163 && self.heap_mem.input.port_a.is_write {
-        //     println!("a write 163: {:?}", self.heap_mem.input.port_a.din);
+        // if self.heap_mem.input.port_a.addr == 0 && self.heap_mem.input.port_a.is_write {
+        //     println!("a write 0: {:?}", self.heap_mem.input.port_a.din);
         // }
-        // if self.heap_mem.input.port_b.addr == 163 && self.heap_mem.input.port_b.is_write {
+        // if self.heap_mem.input.port_b.addr == 0 && self.heap_mem.input.port_b.is_write {
         //     println!(
-        //         "b write 163: {:?}, port_b ready: {}, port_b in: {:?}",
+        //         "b write 0: {:?}, port_b ready: {}, port_b in: {:?}",
         //         self.heap_mem.input.port_b.din,
         //         self.port_b_ready(),
         //         self.input.port_b_bits.load
@@ -1223,8 +1267,11 @@ impl HwModule for DrfHeap {
         // }
 
         // println!(
-        //     "addr-163 | working: {} | {:?}",
-        //     self.working_heap.ram[163], self.heap_mem.ram[163]
+        //     "addr-82 | working: {} | {:?} | addr-0 | working: {} | {:?}",
+        //     self.working_heap.ram[82],
+        //     self.heap_mem.ram[82],
+        //     self.working_heap.ram[0],
+        //     self.heap_mem.ram[0]
         // );
 
         if self.stat_detail_lv >= DLV_FULL_LOG {
@@ -1290,5 +1337,6 @@ impl HwModule for DrfHeap {
         self.ia_addr.tick();
         self.non_exist.tick();
         self.gc_read_granted.tick();
+        self.reg_free_addr.tick();
     }
 }
