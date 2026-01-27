@@ -579,7 +579,7 @@ impl DrfHeap {
         *self.stm.value() == Stm::WHNF
             && self.getWHNFs() == WHNFs::NoNewFrame
             && self.can_avoid_update()
-            && false
+        // && false
     }
 
     /// Deallocate an address based on one-bit ref count
@@ -1066,10 +1066,6 @@ impl DrfHeap {
                     /* update avoided */
                     self.stat.update_avoided += 1;
                     self.working_heap.write_b(whnf_addr, false); // for future re-allocation
-                                                                 // let current_stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
-                                                                 // let current_top = current_stk.top().unwrap().1;
-                                                                 // self.heap_mem
-                                                                 //     .write_b(current_top, self.out_main_bits().load);
                 } else {
                     self.stat.heap_update += 1;
                     self.write_whnf(HeapPort::B);
