@@ -6,7 +6,7 @@ pub struct OurosConfig {
     heap_size: usize,
     thread_stack_size: usize,
 }
-pub const HEAP_SIZE: usize = 1024 * 8;
+pub const HEAP_SIZE: usize = 1024 * 2;
 pub const PROG_SIZE: usize = 1024;
 pub const MAX_THREADS: usize = 4;
 pub const BUFFER_SIZE: usize = MAX_THREADS + 1;
