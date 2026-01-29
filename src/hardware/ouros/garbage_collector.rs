@@ -46,6 +46,8 @@ pub struct GbgCollectorInput {
     pub heap_read_valid: bool,
     pub monitor_valid: bool,
     pub monitor_bits: ActiveApp,
+    pub snapshot_valid: bool,
+    pub snapshot_bits: App,
 }
 
 impl HwInput for GbgCollectorInput {}
@@ -201,6 +203,40 @@ impl GbgCollector {
             && (*self.reg_move.value() == 0 || *self.reg_move.value() == 1)
     }
 
+    pub fn snapshot_ready(&self) -> bool {
+        *self.reg_collector.value() != CollectorState::MARK || {
+            match *self.reg_move.value() {
+                0 => false,
+                1 => {
+                    let in_app = &self.input.heap_read_bits;
+                    self.input.heap_read_valid
+                        && !self.mutator_request()
+                        && !in_app.iter().any(|atm| is_ptr(atm))
+                }
+                2 => {
+                    let current_app = self.reg_heap_reader.value();
+                    !self.mutator_request() && !self.more_ptr(current_app)
+                }
+                3 => {
+                    let combined: [Atom; MAX_THREADS * APP_LENGTH] =
+                        self.reg_monitors.value().concat().try_into().unwrap();
+
+                    !self.mutator_request() && !combined.iter().any(|atm| is_ptr(atm))
+                }
+                4 => {
+                    let combined: [Atom; MAX_THREADS * APP_LENGTH] =
+                        self.reg_monitors.value().concat().try_into().unwrap();
+                    !self.mutator_request() && !self.more_ptr(&combined)
+                }
+                5 => {
+                    let in_app = self.reg_heap_reader.value();
+                    !self.mutator_request() && !in_app.iter().any(|atm| is_ptr(atm))
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
     pub fn read_heap_req_addr(&self) -> usize {
         if *self.reg_move.value() == 0 {
             *self.reg_work_head.value()
@@ -244,6 +280,15 @@ impl GbgCollector {
     fn find_ptr<const N: usize>(&self, app: &[Atom; N]) -> usize {
         let idx = *self.reg_app_idx.value() + 1;
         idx + app.iter().skip(idx).position(|a| is_ptr(a)).unwrap()
+    }
+
+    fn mark_next(&mut self) {
+        if self.input.snapshot_valid {
+            self.reg_move.connect(&5);
+            self.reg_heap_reader.connect(&self.input.snapshot_bits);
+        } else {
+            self.reg_move.connect(&0);
+        }
     }
 
     fn step_idle(&mut self) {
@@ -302,7 +347,8 @@ impl GbgCollector {
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
             } else {
-                self.reg_move.connect(&0);
+                // self.reg_move.connect(&0);
+                self.mark_next();
             }
         }
 
@@ -335,7 +381,8 @@ impl GbgCollector {
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
             } else {
-                self.reg_move.connect(&0);
+                // self.reg_move.connect(&0);
+                self.mark_next();
             }
         }
 
@@ -382,7 +429,24 @@ impl GbgCollector {
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
             } else {
-                self.reg_move.connect(&0);
+                // self.reg_move.connect(&0);
+                self.mark_next();
+            }
+        }
+
+        // ========== move-5 logic (wait until main heap read success) ==========
+        if *self.reg_move.value() == 5 && !self.mutator_request() {
+            let in_app = self.reg_heap_reader.value();
+            if in_app.iter().any(|atm| is_ptr(atm)) {
+                self.reg_move.connect(&2);
+                // pre read for move-2
+                let found = in_app.iter().position(|atm| is_ptr(atm)).unwrap();
+                self.gc_mem.read_a(get_ptr(&in_app[found]));
+                self.reg_app_idx.connect(&found);
+                self.reg_pre_gc.connect(&true);
+            } else {
+                // self.reg_move.connect(&0);
+                self.mark_next();
             }
         }
 
@@ -425,7 +489,8 @@ impl GbgCollector {
                     self.reg_pre_gc.connect(&true);
                 } else {
                     // go back to move-0, handle the next worklist node
-                    self.reg_move.connect(&0);
+                    // self.reg_move.connect(&0);
+                    self.mark_next();
                 }
             }
         }
@@ -566,7 +631,7 @@ impl HwModule for GbgCollector {
             // }
             let cell_state = match self.reg_collector.value() {
                 CollectorState::IDLE | CollectorState::ROOT => CellState::Unmarked,
-                CollectorState::MARK => CellState::WorkList,
+                CollectorState::MARK => CellState::Marked,
                 CollectorState::SWEEP => {
                     if self.input.feedback_bits <= *self.reg_sweeper.value() {
                         CellState::Unmarked

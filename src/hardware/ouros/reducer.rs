@@ -38,6 +38,7 @@ pub struct ReducerInput {
     pub free_addrs: [usize; CONSUMERS_REDUCER],
     pub free_addrs_valid: [bool; CONSUMERS_REDUCER],
     pub search: usize, // for `exist` searching
+    pub snapshot_ready: bool,
 }
 
 impl HwInput for ReducerInput {}
@@ -189,7 +190,9 @@ impl Reducer {
             Stm::SPECIAL => fire(self.input.app_ready, self.app_valid()), // Y case
         };
         // demand all input free addrs are valid
-        state_correct && self.input.free_addrs_valid.iter().all(|&vld| vld)
+        state_correct
+            && self.input.free_addrs_valid.iter().all(|&vld| vld)
+            && self.input.snapshot_ready
     }
 
     // for GC stats

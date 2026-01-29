@@ -180,8 +180,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         log,
         "GC rounds: {} | GC stalls (Reducer): {} ({:.2}%) | peak workset size: {} (heap size {:.2}x)",
         stats.gc_stat.gc_rounds,
-        stats.reducer_stat.gc_stall_cycles,
-        (stats.reducer_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0,
+        stats.reducer_stat.gc_stall_cycles - 10, // remove start-up stall
+        ((stats.reducer_stat.gc_stall_cycles - 10) as f32) / (runtime_cycles as f32) * 100.0,
         stats.gc_stat.peak_workset_size,
         (HEAP_SIZE as f32) / (stats.gc_stat.peak_workset_size as f32)
     )?;
