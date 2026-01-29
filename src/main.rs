@@ -9,6 +9,7 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::LazyLock;
 
+use hardware::ouros::config::HEAP_SIZE;
 use hardware::ouros::ouros_core::OurosCore;
 use hardware::ouros::program::{app_length, ActiveApp, App, Program};
 
@@ -177,10 +178,12 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     )?;
     writeln!(
         log,
-        "GC rounds: {} | GC stalls (Reducer): {} ({:.2}%)",
+        "GC rounds: {} | GC stalls (Reducer): {} ({:.2}%) | peak workset size: {} (heap size {:.2}x)",
         stats.gc_stat.gc_rounds,
         stats.reducer_stat.gc_stall_cycles,
-        (stats.reducer_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0
+        (stats.reducer_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0,
+        stats.gc_stat.peak_workset_size,
+        (HEAP_SIZE as f32) / (stats.gc_stat.peak_workset_size as f32)
     )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 
@@ -230,7 +233,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)?;
 
     let gc_mreq_rate_data: Vec<f32> = chunk_rate(&stats.gc_stat.m_request_per_cycle, chunk_size);
-    write_busy_rate(&mut gc_mreq_rate, &alu_rate_data, chunk_size)?;
+    write_busy_rate(&mut gc_mreq_rate, &gc_mreq_rate_data, chunk_size)?;
 
     // write buffer utilisation
     writeln!(buffer_util, "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3")?;

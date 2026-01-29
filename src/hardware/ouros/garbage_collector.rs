@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use crate::hardware::common::{DualPortMem, Register};
 use crate::hw_module::{HwInput, HwModule};
 
@@ -56,6 +58,7 @@ pub struct GbgCollectorStat {
     pub immediate_reuse: u32,           // gain from one-bit ref count
     pub m_request_per_cycle: Vec<bool>, // mutator request
     pub gc_rounds: u32,
+    pub peak_workset_size: usize,
 }
 
 pub struct GbgCollector {
@@ -607,11 +610,17 @@ impl HwModule for GbgCollector {
             CollectorState::SWEEP => self.step_sweep(),
         }
 
-        if self.stat_detail_lv >= DLV_GC
-            && *self.reg_collector.value() == CollectorState::IDLE
-            && self.reg_collector.input == CollectorState::ROOT
-        {
-            self.stat.gc_rounds += 1;
+        if self.stat_detail_lv >= DLV_GC {
+            if *self.reg_collector.value() == CollectorState::IDLE
+                && self.reg_collector.input == CollectorState::ROOT
+            {
+                self.stat.gc_rounds += 1;
+            } else if *self.reg_collector.value() == CollectorState::SWEEP
+                && self.reg_collector.input == CollectorState::IDLE
+            {
+                let workset = HEAP_SIZE - *self.reg_free_len.value();
+                self.stat.peak_workset_size = max(workset, self.stat.peak_workset_size);
+            }
         }
 
         // if self.addr_out_fire() && self.addr_out_bits() == 156 {
