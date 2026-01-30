@@ -207,7 +207,9 @@ impl Reducer {
             Stm::SPECIAL => fire(self.input.app_ready, self.app_valid()),
         };
 
-        state_correct && !self.input.free_addrs_valid.iter().all(|&vld| vld)
+        state_correct
+            && (!self.input.free_addrs_valid.iter().all(|&vld| vld) || !self.input.snapshot_ready)
+            && self.input.in_valid
     }
 
     /// The number of heap cells that will be consumed in this cycle
