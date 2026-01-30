@@ -178,10 +178,16 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     )?;
     writeln!(
         log,
-        "GC rounds: {} | GC stalls (Reducer): {} ({:.2}%) | peak workset size: {} (heap size {:.2}x)",
+        "GC rounds: {} | GC stalls (Reducer): {} ({:.2}%) | GC stalls (Reducer): {} ({:.2}%) ",
         stats.gc_stat.gc_rounds,
         stats.reducer_stat.gc_stall_cycles,
         (stats.reducer_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0,
+        stats.dheap_stat.gc_stall_cycles,
+        (stats.dheap_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0,
+    )?;
+    writeln!(
+        log,
+        "peak workset size: {} (heap size {:.2}x)",
         stats.gc_stat.peak_workset_size,
         (HEAP_SIZE as f32) / (stats.gc_stat.peak_workset_size as f32)
     )?;

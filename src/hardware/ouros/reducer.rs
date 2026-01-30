@@ -192,7 +192,7 @@ impl Reducer {
         state_correct && self.input.free_addrs_valid.iter().all(|&vld| vld)
     }
 
-    // for GC stats
+    /// for GC stats
     fn stalled(&self) -> bool {
         let state_correct = match *self.reg_stm.value() {
             Stm::IDLE => true,

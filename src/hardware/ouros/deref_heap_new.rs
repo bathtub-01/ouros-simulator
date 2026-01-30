@@ -121,6 +121,7 @@ pub struct DrfHeapStat {
     pub stm_cycles: [u32; 4],
     pub heap_update: u32,
     pub update_avoided: u32,
+    pub gc_stall_cycles: u32,
 }
 
 /// branch conditions for `consume_next()`
@@ -952,6 +953,29 @@ impl DrfHeap {
         self.need_split() || !self.reg_free_addr.value().0
     }
 
+    /// for GC stats
+    fn stalled(&self) -> bool {
+        let local_release: bool = match *self.stm.value() {
+            Stm::IDLE => true,
+            Stm::WHNF => match self.getWHNFs() {
+                WHNFs::NoNewFrame => true,
+                _ => false,
+            },
+            Stm::IA => {
+                let ias1 = self.getIAs1();
+                match self.getIAs2(&ias1) {
+                    IAs2::NoMoreArgsCanEmit | IAs2::NoMoreArgsNoEmit => !self.is_sensitive(&ias1),
+                    _ => false,
+                }
+            }
+            Stm::RESUME => match self.getRESUMEs() {
+                RESUMEs::TopInWHNF => false,
+                RESUMEs::TopInIA => true,
+            },
+        };
+        local_release && !self.input.free_addr_valid
+    }
+
     /// if the resolved pointer is unique, update can be avoided
     fn can_avoid_update(&self) -> bool {
         // return false;
@@ -1244,6 +1268,9 @@ impl HwModule for DrfHeap {
         //         self.input.free_addr, self.input.free_addr_valid
         //     );
         // }
+        if self.stat_detail_lv >= DLV_GC && self.stalled() {
+            self.stat.gc_stall_cycles += 1;
+        }
     }
 
     fn update_stat(&mut self) {
