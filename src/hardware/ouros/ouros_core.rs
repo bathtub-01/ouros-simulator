@@ -9,7 +9,7 @@ use super::addr_box::AddrBox;
 use super::alu::{Alu, AluStat};
 use super::config::*;
 use super::deref_heap_new::{DrfHeap, DrfHeapStat};
-use super::garbage_collector::{GbgCollector, GbgCollectorStat};
+use super::garbage_collector::{CollectorState, GbgCollector, GbgCollectorStat};
 use super::program::*;
 use super::reducer::{Reducer, ReducerStat};
 
@@ -273,7 +273,8 @@ impl HwModule for OurosCore {
                 .unwrap_or(&Default::default())
                 .clone();
             self.buffers_snapshot.input.out_ready = self.gc.snapshot_ready();
-            self.buffers_snapshot.input.in_valid = self.reducer.in_fire();
+            self.buffers_snapshot.input.in_valid =
+                self.reducer.in_fire() && *self.gc.reg_collector.value() == CollectorState::MARK;
             self.buffers_snapshot.input.din = self.reducer.input.in_app.load.clone();
             self.reducer.input.snapshot_ready = self.buffers_snapshot.in_ready();
 
@@ -450,6 +451,9 @@ impl HwModule for OurosCore {
     }
 
     fn tick_children(&mut self) {
+        if self.buffers_snapshot.queue.len() > 0 {
+            println!("snapshot fifo len: {}", self.buffers_snapshot.queue.len());
+        }
         self.dheap.tick();
         self.reducer.tick();
         self.alu.tick();

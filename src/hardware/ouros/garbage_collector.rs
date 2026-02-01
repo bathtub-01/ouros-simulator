@@ -7,7 +7,7 @@ use super::config::{APP_LENGTH, DLV_GC, GC_THRESHOLD, HEAP_SIZE, MAX_THREADS};
 use super::program::{get_ptr, is_ptr, ActiveApp, App, Atom};
 
 #[derive(Default, Clone, Debug, PartialEq)]
-enum CollectorState {
+pub enum CollectorState {
     #[default]
     IDLE,
     ROOT,
@@ -65,7 +65,7 @@ pub struct GbgCollectorStat {
 
 pub struct GbgCollector {
     pub input: GbgCollectorInput,
-    reg_collector: Register<CollectorState>,
+    pub reg_collector: Register<CollectorState>,
     gc_mem: DualPortMem<GCCell>,
     reg_free_head: Register<usize>,
     reg_work_head: Register<usize>,
@@ -286,6 +286,7 @@ impl GbgCollector {
         if self.input.snapshot_valid {
             self.reg_move.connect(&5);
             self.reg_heap_reader.connect(&self.input.snapshot_bits);
+            println!("snapshot on: {:?}", self.input.snapshot_bits);
         } else {
             self.reg_move.connect(&0);
         }
