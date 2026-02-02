@@ -11,6 +11,7 @@ use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{DualPortMem, Register, Stack};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
+use std::cmp::max;
 use std::fmt;
 
 #[derive(Default)]
@@ -121,7 +122,9 @@ pub struct DrfHeapStat {
     pub stm_cycles: [u32; 4],
     pub heap_update: u32,
     pub update_avoided: u32,
-    pub gc_stall_cycles: u32,
+    pub gc_stall_cycles: u32,  // gc stall in total
+    pub gc_current_stall: u32, // current contiguous stall
+    pub gc_longest_stall: u32, // longest contiguous stall
 }
 
 /// branch conditions for `consume_next()`
@@ -1268,8 +1271,15 @@ impl HwModule for DrfHeap {
         //         self.input.free_addr, self.input.free_addr_valid
         //     );
         // }
-        if self.stat_detail_lv >= DLV_GC && self.stalled() {
-            self.stat.gc_stall_cycles += 1;
+        if self.stat_detail_lv >= DLV_GC {
+            if self.stalled() {
+                self.stat.gc_stall_cycles += 1;
+                self.stat.gc_current_stall += 1;
+            } else {
+                self.stat.gc_longest_stall =
+                    max(self.stat.gc_longest_stall, self.stat.gc_current_stall);
+                self.stat.gc_current_stall = 0;
+            }
         }
     }
 

@@ -105,6 +105,10 @@ fn write_busy_rate(file: &mut File, data: &Vec<f32>, chunk_size: usize) -> std::
     Ok(())
 }
 
+fn percent_of(v: u32, total: u32) -> f32 {
+    (v as f32 / total as f32) * 100.0
+}
+
 const DIR: &str = "simu-out/";
 
 /// inspect a program with full stat details
@@ -146,13 +150,13 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         log,
         "       Reducer busy cycles: {} ({:.2}%)",
         stats.reducer_stat.busy_cycles,
-        (stats.reducer_stat.busy_cycles as f32) / (runtime_cycles as f32) * 100.0,
+        percent_of(stats.reducer_stat.busy_cycles, runtime_cycles)
     )?;
     writeln!(
         log,
         "         ALU busy cycles: {} ({:.2}%)",
         stats.alu_stat.busy_cycles,
-        (stats.alu_stat.busy_cycles as f32) / (runtime_cycles as f32) * 100.0
+        percent_of(stats.alu_stat.busy_cycles, runtime_cycles)
     )?;
     writeln!(
         log,
@@ -170,26 +174,56 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         log,
         "heap allocations: {} | heap update: {} | avoided: {}",
         stats.gc_stat.allocations, stats.dheap_stat.heap_update, stats.dheap_stat.update_avoided
-    );
-    writeln!(
-        log,
-        "GC immediate reuse: {} | GC feedbacks: {} ({} shadowed)",
-        stats.gc_stat.immediate_reuse, stats.gc_stat.feedbacks, stats.gc_stat.feedbacks_shadowed
     )?;
+    writeln!(log, "==================== GC STATS ====================")?;
     writeln!(
         log,
-        "GC rounds: {} | GC stalls (Reducer): {} ({:.2}%) | GC stalls (Reducer): {} ({:.2}%) ",
+        "GC rounds: {} | 1-bit ref count recycle: {} | GC feedbacks: {} ({} shadowed)",
         stats.gc_stat.gc_rounds,
-        stats.reducer_stat.gc_stall_cycles,
-        (stats.reducer_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0,
-        stats.dheap_stat.gc_stall_cycles,
-        (stats.dheap_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0,
+        stats.gc_stat.immediate_reuse,
+        stats.gc_stat.feedbacks,
+        stats.gc_stat.feedbacks_shadowed
     )?;
     writeln!(
         log,
-        "peak workset size: {} (heap size {:.2}x)",
+        "GC stalls (Reducer): {} ({:.2}%, longest {}) | GC stalls (DHeap): {} ({:.2}%, longest {}) ",
+        stats.reducer_stat.gc_stall_cycles,
+        percent_of(stats.reducer_stat.gc_stall_cycles, runtime_cycles), stats.reducer_stat.gc_longest_stall,
+        stats.dheap_stat.gc_stall_cycles,
+        percent_of(stats.dheap_stat.gc_stall_cycles, runtime_cycles), stats.dheap_stat.gc_longest_stall
+    )?;
+    writeln!(
+        log,
+        "peak workset size: {} (heap size {:.2}x) | cycles on marking: {} ({:?})",
         stats.gc_stat.peak_workset_size,
-        (HEAP_SIZE as f32) / (stats.gc_stat.peak_workset_size as f32)
+        (HEAP_SIZE as f32) / (stats.gc_stat.peak_workset_size as f32),
+        stats.gc_stat.mark_cycles,
+        stats.gc_stat.mark_cycles_move
+    )?;
+    let gc_mark_reads = stats.gc_stat.cache_hit + stats.gc_stat.cache_miss;
+    writeln!(
+        log,
+        "new apps with ptr: {} | new apps without ptr: {} | gc cache hit: {} ({:.2}%) miss: {} ({:.2}%)",
+        stats.reducer_stat.nested_with_ptr,
+        stats.reducer_stat.nested_no_ptr,
+        stats.gc_stat.cache_hit, percent_of(stats.gc_stat.cache_hit, gc_mark_reads),
+        stats.gc_stat.cache_miss, percent_of(stats.gc_stat.cache_miss, gc_mark_reads),
+    )?;
+    let jump_move_sum = stats.gc_stat.jump_move_01
+        + stats.gc_stat.jump_move_10
+        + stats.gc_stat.jump_move_11
+        + stats.gc_stat.jump_move_12
+        + stats.gc_stat.jump_move_22
+        + stats.gc_stat.jump_move_20;
+    writeln!(
+        log,
+        "mark moves | 01: {} ({:.2}%) | 10: {} ({:.2}%) | 11: {} ({:.2}%) | 12: {} ({:.2}%) | 22: {} ({:.2}%) | 20: {} ({:.2}%)",
+        stats.gc_stat.jump_move_01, percent_of(stats.gc_stat.jump_move_01, jump_move_sum),
+        stats.gc_stat.jump_move_10, percent_of(stats.gc_stat.jump_move_10, jump_move_sum),
+        stats.gc_stat.jump_move_11, percent_of(stats.gc_stat.jump_move_11, jump_move_sum),
+        stats.gc_stat.jump_move_12, percent_of(stats.gc_stat.jump_move_12, jump_move_sum),
+        stats.gc_stat.jump_move_22, percent_of(stats.gc_stat.jump_move_22, jump_move_sum),
+        stats.gc_stat.jump_move_20, percent_of(stats.gc_stat.jump_move_20, jump_move_sum),
     )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 

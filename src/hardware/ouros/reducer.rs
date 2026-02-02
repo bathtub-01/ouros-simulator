@@ -5,6 +5,8 @@
 //          |                 |
 //          +-----------------+===> app
 
+use std::cmp::max;
+
 use super::alu::compute;
 use super::program::*;
 use crate::hardware::common::{Register, SinglePortMem};
@@ -48,7 +50,11 @@ pub struct ReducerStat {
     pub busy_per_cycle: Vec<bool>,
     pub holder_contents: Vec<Option<ActiveApp>>,
     pub blocked_cycles: u32,
-    pub gc_stall_cycles: u32,
+    pub gc_stall_cycles: u32,  // gc stall in total
+    pub gc_current_stall: u32, // current contiguous stall
+    pub gc_longest_stall: u32, // longest contiguous stall
+    pub nested_with_ptr: u32,
+    pub nested_no_ptr: u32,
 }
 
 pub struct Reducer {
@@ -438,12 +444,29 @@ impl HwModule for Reducer {
             panic!();
         }
 
-        if self.stat_detail_lv >= DLV_GC && self.stalled() {
-            self.stat.gc_stall_cycles += 1;
+        if self.stat_detail_lv >= DLV_GC {
+            if self.stalled() {
+                self.stat.gc_stall_cycles += 1;
+                self.stat.gc_current_stall += 1;
+            } else {
+                self.stat.gc_longest_stall =
+                    max(self.stat.gc_longest_stall, self.stat.gc_current_stall);
+                self.stat.gc_current_stall = 0;
+            }
         }
     }
 
     fn update_stat(&mut self) {
+        if self.stat_detail_lv >= DLV_GC {
+            if fire(self.input.app_ready, self.app_valid()) {
+                if self.app_bits().load.iter().any(|atm| is_ptr(atm)) {
+                    self.stat.nested_with_ptr += 1;
+                } else {
+                    self.stat.nested_no_ptr += 1;
+                }
+            }
+        }
+
         if self.stat_detail_lv >= DLV_BUSY_RATE {
             if *self.reg_stm.value() != Stm::IDLE && self.input.app_ready && self.input.spine_ready
             {
