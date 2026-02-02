@@ -171,19 +171,31 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         "heap allocations: {} | heap update: {} | avoided: {}",
         stats.gc_stat.allocations, stats.dheap_stat.heap_update, stats.dheap_stat.update_avoided
     );
+    writeln!(log, "==================== GC STATS ====================")?;
     writeln!(
         log,
-        "GC immediate reuse: {} | GC feedbacks: {} ({} shadowed)",
-        stats.gc_stat.immediate_reuse, stats.gc_stat.feedbacks, stats.gc_stat.feedbacks_shadowed
+        "GC rounds: {} | 1-bit ref count recycle: {} | GC feedbacks: {} ({} shadowed)",
+        stats.gc_stat.gc_rounds,
+        stats.gc_stat.immediate_reuse,
+        stats.gc_stat.feedbacks,
+        stats.gc_stat.feedbacks_shadowed
     )?;
     writeln!(
         log,
-        "GC rounds: {} | GC stalls (Reducer): {} ({:.2}%) | peak workset size: {} (heap size {:.2}x)",
-        stats.gc_stat.gc_rounds,
-        stats.reducer_stat.gc_stall_cycles - 10, // remove start-up stall
+        "GC stalls (Reducer): {} ({:.2}%, longest {}) | GC stalls (DHeap): {} ({:.2}%, longest {}) ",
+        stats.reducer_stat.gc_stall_cycles - 10,
         ((stats.reducer_stat.gc_stall_cycles - 10) as f32) / (runtime_cycles as f32) * 100.0,
+        stats.reducer_stat.gc_longest_stall,
+        stats.dheap_stat.gc_stall_cycles,
+        (stats.dheap_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0,
+        stats.dheap_stat.gc_longest_stall
+    )?;
+    writeln!(
+        log,
+        "peak workset size: {} (heap size {:.2}x) | cycles on marking: {}",
         stats.gc_stat.peak_workset_size,
-        (HEAP_SIZE as f32) / (stats.gc_stat.peak_workset_size as f32)
+        (HEAP_SIZE as f32) / (stats.gc_stat.peak_workset_size as f32),
+        stats.gc_stat.mark_cycles,
     )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 

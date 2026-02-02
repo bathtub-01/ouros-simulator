@@ -451,9 +451,9 @@ impl HwModule for OurosCore {
     }
 
     fn tick_children(&mut self) {
-        if self.buffers_snapshot.queue.len() > 0 {
-            println!("snapshot fifo len: {}", self.buffers_snapshot.queue.len());
-        }
+        // if self.buffers_snapshot.queue.len() > 0 {
+        //     println!("snapshot fifo len: {}", self.buffers_snapshot.queue.len());
+        // }
         self.dheap.tick();
         self.reducer.tick();
         self.alu.tick();

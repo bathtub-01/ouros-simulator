@@ -61,6 +61,7 @@ pub struct GbgCollectorStat {
     pub m_request_per_cycle: Vec<bool>, // mutator request
     pub gc_rounds: u32,
     pub peak_workset_size: usize,
+    pub mark_cycles: u32,
 }
 
 pub struct GbgCollector {
@@ -286,7 +287,7 @@ impl GbgCollector {
         if self.input.snapshot_valid {
             self.reg_move.connect(&5);
             self.reg_heap_reader.connect(&self.input.snapshot_bits);
-            println!("snapshot on: {:?}", self.input.snapshot_bits);
+            // println!("snapshot on: {:?}", self.input.snapshot_bits);
         } else {
             self.reg_move.connect(&0);
         }
@@ -498,6 +499,11 @@ impl GbgCollector {
     }
 
     fn step_sweep(&mut self) {
+        if self.stat_detail_lv >= DLV_GC {
+            if !self.mutator_request() {
+                self.stat.mark_cycles += 1;
+            }
+        }
         // ========== defaults (update regs from previous demands) ==========
         self.reg_pre_gc.connect(&false);
         if *self.reg_pre_gc.value() {
@@ -681,10 +687,15 @@ impl HwModule for GbgCollector {
                 && self.reg_collector.input == CollectorState::ROOT
             {
                 self.stat.gc_rounds += 1;
-            } else if *self.reg_collector.value() == CollectorState::SWEEP
-                && self.reg_collector.input == CollectorState::IDLE
+            } else if *self.reg_collector.value() == CollectorState::MARK
+                && self.reg_collector.input == CollectorState::SWEEP
             {
-                let workset = HEAP_SIZE - *self.reg_free_len.value();
+                let workset = self
+                    .gc_mem
+                    .ram
+                    .iter()
+                    .filter(|cell| cell.state == CellState::Marked)
+                    .count();
                 self.stat.peak_workset_size = max(workset, self.stat.peak_workset_size);
             }
         }
@@ -713,7 +724,7 @@ impl HwModule for GbgCollector {
         // );
 
         if self.stat_detail_lv >= DLV_GC {
-            if self.deallocate_fire() {
+            if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::MARK {
                 self.stat.immediate_reuse += 1;
             }
 
