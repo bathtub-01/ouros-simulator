@@ -719,7 +719,7 @@ impl HwModule for GbgCollector {
         // );
 
         if self.stat_detail_lv >= DLV_GC {
-            if self.deallocate_fire() {
+            if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::MARK {
                 self.stat.immediate_reuse += 1;
             }
 
