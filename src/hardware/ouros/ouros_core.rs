@@ -54,6 +54,7 @@ pub struct OurosCoreStat<'a> {
 }
 
 pub struct OurosCore {
+    pub heap_size: usize,
     pub input: OurosCoreInput,
     pub dheap: DrfHeap,
     gc: GbgCollector,
@@ -91,14 +92,15 @@ pub struct OurosCore {
 }
 
 impl OurosCore {
-    pub fn new(prog: &Program, detail_lv: u8) -> Self {
+    pub fn new(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> Self {
         let buffer_usage: bool = detail_lv >= DLV_BUFFER_USAGE;
         Self {
+            heap_size,
             input: Default::default(),
-            dheap: DrfHeap::new(HEAP_SIZE)
+            dheap: DrfHeap::new(heap_size)
                 .program(&prog.heap_img)
                 .detail(detail_lv),
-            gc: GbgCollector::new(HEAP_SIZE, prog.heap_img.len())
+            gc: GbgCollector::new(heap_size, prog.heap_img.len(), gc_at)
                 .init_freelist()
                 .detail(detail_lv),
             abox: AddrBox::new(),

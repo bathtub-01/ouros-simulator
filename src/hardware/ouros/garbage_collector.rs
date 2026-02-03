@@ -3,7 +3,7 @@ use std::cmp::max;
 use crate::hardware::common::{DualPortMem, Register};
 use crate::hw_module::{HwInput, HwModule};
 
-use super::config::{APP_LENGTH, DLV_GC, GC_THRESHOLD, HEAP_SIZE, MAX_THREADS};
+use super::config::{APP_LENGTH, DLV_GC, MAX_THREADS};
 use super::program::{get_ptr, is_ptr, ActiveApp, App, Atom};
 use std::collections::VecDeque;
 
@@ -116,13 +116,16 @@ pub struct GbgCollector {
     reg_app_idx: Register<usize>,
     reg_monitors: Register<[App; MAX_THREADS]>,
     const_sweep_from: usize,
+    const_heap_size: usize,
+    const_gc_at: f32,
+    const_gc_threshold: usize,
     gc_cache: FixedFifo<usize>,
     stat: GbgCollectorStat,
     stat_detail_lv: u8,
 }
 
 impl GbgCollector {
-    pub fn new(heap_size: usize, free_from: usize) -> Self {
+    pub fn new(heap_size: usize, free_from: usize, gc_at: f32) -> Self {
         Self {
             input: Default::default(),
             reg_collector: Default::default(),
@@ -131,7 +134,7 @@ impl GbgCollector {
             reg_work_head: Default::default(),
             reg_free_drawed: Default::default(),
             reg_work_drawed: Default::default(),
-            reg_free_len: Register::init(HEAP_SIZE - free_from),
+            reg_free_len: Register::init(heap_size - free_from),
             reg_work_len: Default::default(),
             reg_sweeper: Default::default(),
             reg_bk_reader: Default::default(),
@@ -142,6 +145,9 @@ impl GbgCollector {
             reg_app_idx: Default::default(),
             reg_monitors: Default::default(),
             const_sweep_from: free_from,
+            const_heap_size: heap_size,
+            const_gc_at: gc_at,
+            const_gc_threshold: (heap_size as f32 * gc_at) as usize,
             gc_cache: FixedFifo::new(8),
             stat: Default::default(),
             stat_detail_lv: Default::default(),
@@ -297,7 +303,7 @@ impl GbgCollector {
     }
 
     fn step_idle(&mut self) {
-        if !self.mutator_request() && *self.reg_free_len.value() <= GC_THRESHOLD {
+        if !self.mutator_request() && *self.reg_free_len.value() <= self.const_gc_threshold {
             self.reg_collector.connect(&CollectorState::ROOT);
             // put `main` into worklist
             self.reg_work_head.connect(&0);
@@ -552,7 +558,7 @@ impl GbgCollector {
                 panic!("Broken WorkList! addr: {}", *self.reg_sweeper.value());
             }
 
-            if *self.reg_sweeper.value() < HEAP_SIZE - 1 {
+            if *self.reg_sweeper.value() < self.const_heap_size - 1 {
                 // sweep next cell
                 let next = self.reg_sweeper.value() + 1;
                 self.reg_sweeper.connect(&next);

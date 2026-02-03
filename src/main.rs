@@ -1,6 +1,7 @@
 mod hardware;
 mod hw_module;
 
+use std::cmp::max;
 use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
@@ -9,15 +10,15 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::LazyLock;
 
-use hardware::ouros::config::HEAP_SIZE;
+use hardware::ouros::config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE};
 use hardware::ouros::ouros_core::OurosCore;
 use hardware::ouros::program::{app_length, ActiveApp, App, Program};
 
 use hardware::ouros::benchmarks::*;
 use hw_module::HwModule;
 
-fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
-    let mut ouros = OurosCore::new(prog, detail_lv);
+fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (OurosCore, u32) {
+    let mut ouros = OurosCore::new(prog, detail_lv, heap_size, gc_at);
     let mut cycle: u32 = 0;
 
     ouros.tick();
@@ -35,11 +36,6 @@ fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
         ouros.tick();
         cycle += 1;
     }
-
-    // let gc_stat = ouros.get_stat().gc_stat;
-    // let allocations = gc_stat.allocations;
-    // let feedbacks = gc_stat.feedbacks;
-    // assert_eq!(allocations, feedbacks + 10); // just a ad-hoc check
 
     (ouros, cycle)
 }
@@ -131,7 +127,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::max_value());
+    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), HEAP_SIZE, GC_AT);
     let stats = ouros.get_stat();
 
     println!(
@@ -328,7 +324,7 @@ fn run_benchmarks(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<(
     vec.sort_by_key(|(n, _)| *n);
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
     let results = benchmarks.iter().map(|p| {
-        let res = simulate(&p, 0);
+        let res = simulate(&p, 0, HEAP_SIZE, GC_AT);
         res
     });
 
@@ -339,16 +335,70 @@ fn run_benchmarks(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<(
     Ok(())
 }
 
+/// evaluate the GC behabiour of the benchmarks
+fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
+    let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
+    vec.sort_by_key(|(n, _)| *n);
+    let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
+    let results = benchmarks.iter().map(|p| {
+        // run two tests to get gc free runtime and an approximate peak work set size
+        let (_, gc_free_runtime) = simulate(&p, 0, BIG_HEAP, 0.0);
+        println!("{}", gc_free_runtime);
+        let (c, _) = simulate(&p, DLV_GC, HEAP_SIZE, GC_AT);
+        let peak_workset = c.get_stat().gc_stat.peak_workset_size;
+        // run several more rounds with different heap size
+        let points = [1.5, 2.0, 3.0, 5.0, 10.0];
+        let res = points.map(|pt| simulate(&p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT));
+        let res_gc_percent: Vec<f32> = res
+            .iter()
+            .map(|(_, time)| percent_of(time - gc_free_runtime, gc_free_runtime))
+            .collect();
+        let res_max_pause: Vec<u32> = res
+            .iter()
+            .map(|(core, _)| {
+                max(
+                    core.get_stat().reducer_stat.gc_longest_stall,
+                    core.get_stat().dheap_stat.gc_longest_stall,
+                )
+            })
+            .collect();
+        let res_points: Vec<f32> = res
+            .iter()
+            .map(|(core, _)| {
+                core.heap_size as f32 / (core.get_stat().gc_stat.peak_workset_size as f32)
+            })
+            .collect();
+        (res_gc_percent, res_max_pause, res_points)
+    });
+
+    results
+        .zip(names)
+        .for_each(|((percent, max_pause, points), n)| {
+            println!(
+                "{:<12} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
+                n, percent, max_pause, points
+            )
+        });
+
+    Ok(())
+}
+
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let progs = benchmarks!(
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /* TREESUM,*/ TRIBELIE, WHILEX,
+        SKIABSEVAL, /*SUMEULER,*/ SUMPUZ, /*TAUT, TREEPARI,*/ /* TREESUM,*/ TRIBELIE,
+        WHILEX,
     );
 
     if args.len() == 1 {
-        run_benchmarks(progs)
+        println!("usage: cargo run --release ALL/GC/<prog>");
+        Ok(())
     } else {
-        inspect_prog(progs.get(args[1].as_str()).unwrap())
+        match args[1].as_str() {
+            "ALL" => run_benchmarks(progs),
+            "GC" => eval_gc(progs),
+            prog => inspect_prog(progs.get(prog).unwrap()),
+        }
     }
 }
