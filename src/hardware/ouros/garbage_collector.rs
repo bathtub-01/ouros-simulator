@@ -200,7 +200,10 @@ impl GbgCollector {
 
     /// draw an address from the freelist
     pub fn addr_out_bits(&self) -> usize {
-        if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::MARK {
+        if self.deallocate_fire()
+            && *self.reg_collector.value() != CollectorState::MARK
+            && self.input.deallocate_bits != *self.reg_sweeper.value()
+        {
             self.input.deallocate_bits
         } else {
             if *self.reg_free_drawed.value() {
@@ -527,13 +530,8 @@ impl GbgCollector {
                 // recover as Unmarked
                 // self.gc_mem
                 // .write_b(*self.reg_sweeper.value(), no_ptr_cell(CellState::Unmarked));
-                self.gc_mem.write_b(
-                    *self.reg_sweeper.value(),
-                    GCCell {
-                        state: CellState::Unmarked,
-                        ptr: self.gc_mem.ram[*self.reg_sweeper.value()].ptr,
-                    },
-                );
+                self.gc_mem
+                    .write_b(*self.reg_sweeper.value(), no_ptr_cell(CellState::Unmarked));
                 // if *self.reg_sweeper.value() == 156 {
                 //     println!("recover 156 as Unmarked");
                 // }
@@ -589,13 +587,15 @@ impl HwModule for GbgCollector {
         } else {
             *self.reg_work_head.value()
         };
-        // if real_freelist_head == 156 {
+        // if real_freelist_head == 16 {
         //     println!(
-        //         "real_freelist_head == 156, read from: {}-{:?}, state: {:?}, len: {}",
+        //         "real_freelist_head == 16-{:?}, read from: {}-{:?}, state: {:?}, len: {}, sweep: {}",
+        //         self.gc_mem.ram[16],
         //         self.gc_mem.input.port_a.addr,
         //         self.gc_mem.ram[self.gc_mem.input.port_a.addr],
         //         self.reg_collector.value(),
-        //         self.reg_free_len.value()
+        //         self.reg_free_len.value(),
+        //         self.reg_sweeper.value(),
         //     );
         // }
         self.gc_mem.input.default_input();
@@ -606,8 +606,11 @@ impl HwModule for GbgCollector {
         self.reg_work_head.connect(&real_worklist_head);
 
         match (self.deallocate_fire(), self.addr_out_fire()) {
-            (true, false) if *self.reg_collector.value() != CollectorState::MARK => {
-                // if self.input.deallocate_bits == 156 {
+            (true, false)
+                if *self.reg_collector.value() != CollectorState::MARK
+                    && self.input.deallocate_bits != *self.reg_sweeper.value() =>
+            {
+                // if self.input.deallocate_bits == 16 {
                 //     println!(
                 //         "deallocate: put {} into FreeList, state: {:?}",
                 //         self.input.deallocate_bits,
@@ -622,7 +625,10 @@ impl HwModule for GbgCollector {
                 self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
                 self.free_len_minus_one(); // a bit strange..
             }
-            (true, true) if *self.reg_collector.value() == CollectorState::MARK => {
+            (true, true)
+                if *self.reg_collector.value() == CollectorState::MARK
+                    || self.input.deallocate_bits == *self.reg_sweeper.value() =>
+            {
                 self.reg_free_drawed.connect(&true);
                 self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
                 self.free_len_minus_one(); // a bit strange..
@@ -631,9 +637,9 @@ impl HwModule for GbgCollector {
         }
 
         if self.feedback_fire() {
-            // if self.input.feedback_bits == 156 {
+            // if self.input.feedback_bits == 16 {
             //     println!(
-            //         "feedback 156 arrived GC, state: {:?}",
+            //         "feedback 16 arrived GC, state: {:?}",
             //         self.reg_collector.value()
             //     );
             // }
@@ -701,17 +707,17 @@ impl HwModule for GbgCollector {
             }
         }
 
-        // if self.addr_out_fire() && self.addr_out_bits() == 156 {
-        //     println!(
-        //         "emit 156 as free addr!, 156: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
-        //         self.gc_mem.ram[156],
-        //         self.reg_collector.value(),
-        //         self.gc_mem.dout_a().ptr,
-        //         self.reg_free_head.value(),
-        //         self.input.deallocate_bits,
-        //         self.reg_sweeper.value()
-        //     );
-        // }
+        if self.addr_out_fire() && self.addr_out_bits() == 0 {
+            println!(
+                "emit 0 as free addr!, 0: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
+                self.gc_mem.ram[0],
+                self.reg_collector.value(),
+                self.gc_mem.dout_a().ptr,
+                self.reg_free_head.value(),
+                self.input.deallocate_bits,
+                self.reg_sweeper.value()
+            );
+        }
     }
 
     fn update_stat(&mut self) {

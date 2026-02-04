@@ -127,7 +127,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), HEAP_SIZE, GC_AT);
+    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), 728, GC_AT);
     let stats = ouros.get_stat();
 
     println!(
@@ -348,7 +348,14 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
         let peak_workset = c.get_stat().gc_stat.peak_workset_size;
         // run several more rounds with different heap size
         let points = [1.5, 2.0, 3.0, 5.0, 10.0];
-        let res = points.map(|pt| simulate(&p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT));
+        let res = points.map(|pt| {
+            println!(
+                "PEAK: {}; HEAP SIZE: {}",
+                peak_workset,
+                (peak_workset as f32 * pt) as usize
+            );
+            simulate(&p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
+        });
         let res_gc_percent: Vec<f32> = res
             .iter()
             .map(|(_, time)| percent_of(time - gc_free_runtime, gc_free_runtime))
@@ -387,9 +394,9 @@ fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let progs = benchmarks!(
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        SKIABSEVAL, /*SUMEULER,*/ SUMPUZ, /*TAUT, TREEPARI,*/ /* TREESUM,*/ TRIBELIE,
-        WHILEX,
+        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /* TREESUM,*/ TRIBELIE, WHILEX,
     );
+    // let progs = benchmarks!(QUEENS);
 
     if args.len() == 1 {
         println!("usage: cargo run --release ALL/GC/<prog>");
