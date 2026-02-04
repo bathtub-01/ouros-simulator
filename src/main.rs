@@ -127,7 +127,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), 728, GC_AT);
+    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), 690, GC_AT);
     let stats = ouros.get_stat();
 
     println!(

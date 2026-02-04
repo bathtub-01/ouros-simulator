@@ -356,6 +356,7 @@ impl GbgCollector {
 
         // ========== move-3 logic (pre read for move-4 ) ==========
         if *self.reg_move.value() == 3 && !self.mutator_request() {
+            // println!("================ NEW GC ====================");
             let combined: [Atom; MAX_THREADS * APP_LENGTH] =
                 self.reg_monitors.value().concat().try_into().unwrap();
             if combined.iter().any(|atm| is_ptr(atm)) {
@@ -434,10 +435,30 @@ impl GbgCollector {
         // ========== move-1 logic (wait until main heap read success) ==========
         if *self.reg_move.value() == 1 && self.input.heap_read_valid && !self.mutator_request() {
             // println!(
-            //     "work on: {} | app: {:?}",
+            //     "work on: {} | app: {:?} | worklist len: {}",
             //     self.reg_work_on.value(),
-            //     self.input.heap_read_bits
+            //     self.input.heap_read_bits,
+            //     self.reg_work_len.value()
             // );
+            ///////////////////////////////////////////////
+            // let real_worklist_head: usize = if *self.reg_work_drawed.value() {
+            //     self.gc_mem.dout_a().ptr
+            // } else {
+            //     *self.reg_work_head.value()
+            // };
+            // let mut fl: Vec<usize> = Vec::new();
+
+            // for i in 0..*self.reg_work_len.value() {
+            //     if i == 0 {
+            //         fl.push(real_worklist_head);
+            //     } else {
+            //         let fst = fl.last().unwrap();
+            //         assert!(self.gc_mem.ram[*fst].state == CellState::WorkList);
+            //         fl.push(self.gc_mem.ram[*fst].ptr);
+            //     }
+            // }
+            // println!("worklist at this point: {:?}", fl);
+            ///////////////////////////////////////////////
             let in_app = &self.input.heap_read_bits;
             // splition of move-0 and move-1 is needed because mutator requests can modify worklist
             if in_app.iter().any(|atm| is_ptr(atm)) {
@@ -633,15 +654,23 @@ impl HwModule for GbgCollector {
                 self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
                 self.free_len_minus_one(); // a bit strange..
             }
+            (true, true)
+                if *self.reg_collector.value() != CollectorState::MARK
+                    && self.input.deallocate_bits != *self.reg_sweeper.value() =>
+            {
+                self.gc_mem
+                    .write_a(self.input.deallocate_bits, no_ptr_cell(CellState::FreeList));
+            }
             _ => { /* do nothing as addr-out can take deallocated addrs*/ }
         }
 
         if self.feedback_fire() {
-            // if self.input.feedback_bits == 16 {
-            //     println!(
-            //         "feedback 16 arrived GC, state: {:?}",
-            //         self.reg_collector.value()
-            //     );
+            // if self.input.feedback_bits == 1 {
+            // println!(
+            //     "feedback {} arrived GC, state: {:?}",
+            //     self.input.feedback_bits,
+            //     self.reg_collector.value()
+            // );
             // }
             let cell_state = match self.reg_collector.value() {
                 CollectorState::IDLE | CollectorState::ROOT => CellState::Unmarked,
