@@ -1217,6 +1217,23 @@ impl DrfHeap {
 
 impl HwModule for DrfHeap {
     fn update_local(&mut self) {
+        // a heavy check to discover wrong addr recycles
+        if self.port_b_fire() {
+            self.thread_stack.iter().for_each(|stk| {
+                if stk
+                    .mem
+                    .iter()
+                    .take(stk.mem.len() - 1)
+                    .any(|e| e.1 == self.input.port_b_bits.heap_addr)
+                {
+                    panic!(
+                        "on stack addr {} being recycled! stack: {:?}",
+                        self.input.port_b_bits.heap_addr, stk.mem
+                    );
+                }
+            });
+        }
+
         self.update_prepare();
         self.gc_read_granted.connect(&false);
 
@@ -1305,14 +1322,14 @@ impl HwModule for DrfHeap {
         // }
 
         // println!(
-        //     "addr-642 | working: {} | {:?} | addr-15 | working: {} | {:?}",
-        //     self.working_heap.ram[642],
-        //     self.heap_mem.ram[642],
-        //     self.working_heap.ram[15],
-        //     self.heap_mem.ram[15]
+        //     "addr-785 | working: {} | {:?} | addr-806 | working: {} | {:?}",
+        //     self.working_heap.ram[785],
+        //     self.heap_mem.ram[785],
+        //     self.working_heap.ram[806],
+        //     self.heap_mem.ram[806]
         // );
 
-        // println!("stack: {:?}", self.thread_stack[0].mem);
+        // println!("stack: {:?}", self.thread_stack[1].mem);
 
         if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.holder_out.0 {

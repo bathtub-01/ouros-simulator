@@ -3,6 +3,7 @@
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{Arbiter, Ring, FIFO};
+use crate::hardware::ouros::garbage_collector::CellState;
 use crate::hw_module::{HwInput, HwModule};
 
 use super::addr_box::AddrBox;
@@ -55,12 +56,14 @@ pub struct OurosCoreStat<'a> {
 
 pub struct OurosCore {
     pub heap_size: usize,
+    free_from: usize,
     pub input: OurosCoreInput,
     pub dheap: DrfHeap,
     gc: GbgCollector,
     abox: AddrBox,
     reducer: Reducer,
     alu: Alu,
+    pre_collector: CollectorState,
 
     buffers_dealloc: FIFO<usize, 2, false>,
     buffers_free_addr: FIFO<usize, 2, false>,
@@ -97,6 +100,7 @@ impl OurosCore {
         let buffer_usage: bool = detail_lv >= DLV_BUFFER_USAGE;
         Self {
             heap_size,
+            free_from: prog.heap_img.len(),
             input: Default::default(),
             dheap: DrfHeap::new(heap_size)
                 .program(&prog.heap_img)
@@ -109,6 +113,7 @@ impl OurosCore {
                 .program(&prog.comb_img)
                 .detail(detail_lv),
             alu: Alu::new().detail(detail_lv),
+            pre_collector: CollectorState::IDLE,
 
             buffers_dealloc: FIFO::new(),
             buffers_free_addr: FIFO::new(),
@@ -271,14 +276,23 @@ impl HwModule for OurosCore {
             self.gc.input.monitor_bits = self.reducer.spine_bits();
 
             self.gc.input.snapshot_valid = self.buffers_snapshot.out_valid();
-            self.gc.input.snapshot_bits = self
+            let snapshot = self
                 .buffers_snapshot
                 .dout()
                 .unwrap_or(&Default::default())
                 .clone();
+            // if is_ptr(&snapshot[2]) && get_ptr(&snapshot[2]) == 806 {
+            //     println!(
+            //         "806 in snapshot!, valid {}, ready {}, collector {:?}",
+            //         self.buffers_snapshot.out_valid(),
+            //         self.gc.snapshot_ready(),
+            //         self.gc.reg_collector.value()
+            //     );
+            // }
+            self.gc.input.snapshot_bits = snapshot;
+
             self.buffers_snapshot.input.out_ready = self.gc.snapshot_ready();
-            self.buffers_snapshot.input.in_valid =
-                self.reducer.in_fire() && *self.gc.reg_collector.value() == CollectorState::MARK;
+            self.buffers_snapshot.input.in_valid = self.reducer.in_fire();
             self.buffers_snapshot.input.din = self.reducer.input.in_app.load.clone();
             self.reducer.input.snapshot_ready = self.buffers_snapshot.in_ready();
 
@@ -452,9 +466,28 @@ impl HwModule for OurosCore {
                 || self.rings_dheap_b_0.found()
                 || self.rings_dheap_b_1.found();
         }
+        // runtime checking: when a MARK finishes, check whether all reachable nodes are marked
+        if self.pre_collector == CollectorState::MARK
+            && *self.gc.reg_collector.value() == CollectorState::SWEEP
+        {
+            let work_set = traverse(&self.dheap.heap_mem.ram, self.heap_size, self.free_from);
+            // println!("work set size: {}", work_set.len());
+            for addr in work_set {
+                // if addr == 785 {
+                // println!("785 marked!");
+                // }
+                if self.gc.gc_mem.ram[addr].state != CellState::Marked {
+                    panic!(
+                        "live node {} is not marked after GC: {:?}",
+                        addr, self.gc.gc_mem.ram[addr].state
+                    );
+                }
+            }
+        }
     }
 
     fn tick_children(&mut self) {
+        self.pre_collector = self.gc.reg_collector.value().clone();
         // if self.buffers_snapshot.queue.len() > 0 {
         //     println!("snapshot fifo len: {}", self.buffers_snapshot.queue.len());
         // }
@@ -493,6 +526,36 @@ impl HwModule for OurosCore {
         self.buffers_alu_2.tick();
         self.arbiter_alu.tick();
     }
+}
+
+///////////////////// helper function for heap graph traversal /////////////////////
+/// traverse the heap and return all reachable addrs from the roots
+fn traverse(ram: &Vec<App>, size: usize, free_from: usize) -> Vec<usize> {
+    let mut visited: Vec<bool> = vec![false; size];
+    let mut traverse_stk: Vec<usize> = Vec::new();
+    let mut res: Vec<usize> = Vec::new();
+
+    // push all roots
+    for i in 0..free_from {
+        traverse_stk.push(i);
+    }
+
+    while !traverse_stk.is_empty() {
+        let work_on = traverse_stk.pop().unwrap();
+        let app = &ram[work_on];
+        res.push(work_on);
+        for atm in app {
+            if is_ptr(atm) && !visited[get_ptr(atm)] {
+                // if get_ptr(atm) == 806 {
+                // println!("{} reachable from {}", get_ptr(atm), work_on);
+                // }
+                traverse_stk.push(get_ptr(atm));
+                visited[get_ptr(atm)] = true;
+            }
+        }
+    }
+
+    res
 }
 
 // /// Quickly test whether the machine terminates and produces

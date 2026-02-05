@@ -42,7 +42,7 @@ pub enum CollectorState {
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
-enum CellState {
+pub enum CellState {
     #[default]
     Unmarked,
     Marked,
@@ -52,8 +52,8 @@ enum CellState {
 
 /// Basic cell of the GC bookkeeping memory
 #[derive(Default, Clone, Debug)]
-struct GCCell {
-    state: CellState,
+pub struct GCCell {
+    pub state: CellState,
     ptr: usize,
 }
 
@@ -102,7 +102,7 @@ pub struct GbgCollectorStat {
 pub struct GbgCollector {
     pub input: GbgCollectorInput,
     pub reg_collector: Register<CollectorState>,
-    gc_mem: DualPortMem<GCCell>,
+    pub gc_mem: DualPortMem<GCCell>,
     reg_free_head: Register<usize>,
     reg_work_head: Register<usize>,
     reg_free_drawed: Register<bool>, // whether freelist was drawed in previous cycle
@@ -251,8 +251,10 @@ impl GbgCollector {
     }
 
     pub fn snapshot_ready(&self) -> bool {
-        *self.reg_collector.value() != CollectorState::MARK || {
-            match *self.reg_move.value() {
+        match self.reg_collector.value() {
+            CollectorState::IDLE => true,
+            CollectorState::ROOT => false, // ad-hoc fix
+            CollectorState::MARK => match *self.reg_move.value() {
                 0 => false,
                 1 => {
                     let in_app = &self.input.heap_read_bits;
@@ -280,7 +282,8 @@ impl GbgCollector {
                     !self.mutator_request() && !in_app.iter().any(|atm| is_ptr(atm))
                 }
                 _ => unreachable!(),
-            }
+            },
+            CollectorState::SWEEP => true,
         }
     }
 
@@ -527,7 +530,7 @@ impl GbgCollector {
             }
         }
 
-        // ========== move-5 logic (wait until main heap read success) ==========
+        // ========== move-5 logic (handle snapshot) ==========
         if *self.reg_move.value() == 5 && !self.mutator_request() {
             let in_app = self.reg_heap_reader.value();
             if in_app.iter().any(|atm| is_ptr(atm)) {
@@ -541,8 +544,6 @@ impl GbgCollector {
                 // self.reg_move.connect(&0);
                 self.mark_next();
             }
-        } else if *self.reg_move.value() == 1 && !self.mutator_request() {
-            self.stat.jump_move_11 += 1;
         }
 
         // ========== move-2 logic (push one, read one) ==========
@@ -637,8 +638,8 @@ impl GbgCollector {
                 };
                 self.push_to_freelist(*self.reg_sweeper.value(), old_head, false);
                 self.free_len_plus_one();
-                // if *self.reg_sweeper.value() == 433 {
-                //     println!("pushing 433 to freelist!, old head: {}", old_head);
+                // if *self.reg_sweeper.value() == 110 {
+                // println!("pushing 110 to freelist!, old head: {}", old_head);
                 // }
                 if old_head == 0 {
                     println!("old head is 0 when pushing to freelist!");
@@ -735,11 +736,11 @@ impl HwModule for GbgCollector {
         }
 
         if self.feedback_fire() {
-            // if self.input.feedback_bits == 1 {
+            // if self.input.feedback_bits == 785 {
             // println!(
-            //     "feedback {} arrived GC, state: {:?}",
-            //     self.input.feedback_bits,
-            //     self.reg_collector.value()
+            // "feedback {} arrived GC, state: {:?}",
+            // self.input.feedback_bits,
+            // self.reg_collector.value()
             // );
             // }
             let cell_state = match self.reg_collector.value() {
@@ -807,10 +808,10 @@ impl HwModule for GbgCollector {
         }
 
         // print!("collector: {:?}", self.reg_collector.value());
-        // if self.addr_out_fire() && self.addr_out_bits() == 433 {
+        // if self.addr_out_fire() && self.addr_out_bits() == 110 {
         //     println!(
-        //         "emit 433 as free addr!, 0: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
-        //         self.gc_mem.ram[433],
+        //         "emit 110 as free addr!, 2864: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
+        //         self.gc_mem.ram[110],
         //         self.reg_collector.value(),
         //         self.gc_mem.dout_a().ptr,
         //         self.reg_free_head.value(),
@@ -878,6 +879,10 @@ impl HwModule for GbgCollector {
         self.reg_work_on.tick();
         self.reg_app_idx.tick();
         self.reg_monitors.tick();
+
+        if self.addr_out_fire() {
+            assert!(self.gc_mem.ram[self.addr_out_bits()].state == CellState::FreeList);
+        }
     }
 }
 
