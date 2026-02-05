@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 rand = "0.9.2"
 vstd = "=0.0.0-2026-01-11-0057"
+rayon = "1.10"
+indicatif = { version = "0.17", features = ["rayon"] }
 
 [package.metadata.verus]
 verify = true

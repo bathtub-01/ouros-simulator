@@ -8,7 +8,7 @@ pub struct OurosConfig {
 }
 
 pub const BIG_HEAP: usize = 1024 * 256; // a big heap size that won't trigger GC
-pub const HEAP_SIZE: usize = 1024 * 2;
+pub const HEAP_SIZE: usize = 1024 * 3;
 pub const PROG_SIZE: usize = 1024;
 pub const MAX_THREADS: usize = 4;
 pub const BUFFER_SIZE: usize = MAX_THREADS + 1;
