@@ -6,7 +6,9 @@ pub struct OurosConfig {
     heap_size: usize,
     thread_stack_size: usize,
 }
-pub const HEAP_SIZE: usize = 1024 * 2;
+
+pub const BIG_HEAP: usize = 1024 * 256; // a big heap size that won't trigger GC
+pub const HEAP_SIZE: usize = 1024 * 3;
 pub const PROG_SIZE: usize = 1024;
 pub const MAX_THREADS: usize = 4;
 pub const BUFFER_SIZE: usize = MAX_THREADS + 1;
@@ -19,8 +21,9 @@ pub const CONSUMERS: usize = CONSUMERS_REDUCER + CONSUMERS_DHEAP;
 pub const CONSUMERS_REDUCER: usize = 7;
 pub const CONSUMERS_DHEAP: usize = 1;
 
-const GC_AT: f32 = 0.1;
-pub const GC_THRESHOLD: usize = (HEAP_SIZE as f32 * GC_AT) as usize;
+pub const GC_AT: f32 = 0.1; // start GC when freelist is shorter than this
+
+// pub const GC_THRESHOLD: usize = (HEAP_SIZE as f32 * GC_AT) as usize;
 
 // system-wise setup, changing them will require also modifying the compiler
 pub const HOLES: usize = 6;

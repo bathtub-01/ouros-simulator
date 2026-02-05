@@ -1,6 +1,9 @@
 mod hardware;
 mod hw_module;
 
+use indicatif::ParallelProgressIterator;
+use rayon::prelude::*;
+use std::cmp::max;
 use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
@@ -9,15 +12,15 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::LazyLock;
 
-use hardware::ouros::config::HEAP_SIZE;
+use hardware::ouros::config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE};
 use hardware::ouros::ouros_core::OurosCore;
 use hardware::ouros::program::{app_length, ActiveApp, App, Program};
 
-use hardware::ouros::benchmarks::*;
+use hardware::ouros::benchmarks::{self, *};
 use hw_module::HwModule;
 
-fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
-    let mut ouros = OurosCore::new(prog, detail_lv);
+fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (OurosCore, u32) {
+    let mut ouros = OurosCore::new(prog, detail_lv, heap_size, gc_at);
     let mut cycle: u32 = 0;
 
     ouros.tick();
@@ -35,11 +38,6 @@ fn simulate(prog: &Program, detail_lv: u8) -> (OurosCore, u32) {
         ouros.tick();
         cycle += 1;
     }
-
-    // let gc_stat = ouros.get_stat().gc_stat;
-    // let allocations = gc_stat.allocations;
-    // let feedbacks = gc_stat.feedbacks;
-    // assert_eq!(allocations, feedbacks + 10); // just a ad-hoc check
 
     (ouros, cycle)
 }
@@ -105,6 +103,10 @@ fn write_busy_rate(file: &mut File, data: &Vec<f32>, chunk_size: usize) -> std::
     Ok(())
 }
 
+fn percent_of(v: u32, total: u32) -> f32 {
+    (v as f32 / total as f32) * 100.0
+}
+
 const DIR: &str = "simu-out/";
 
 /// inspect a program with full stat details
@@ -127,7 +129,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::max_value());
+    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), HEAP_SIZE, GC_AT);
     let stats = ouros.get_stat();
 
     println!(
@@ -146,13 +148,13 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         log,
         "       Reducer busy cycles: {} ({:.2}%)",
         stats.reducer_stat.busy_cycles,
-        (stats.reducer_stat.busy_cycles as f32) / (runtime_cycles as f32) * 100.0,
+        percent_of(stats.reducer_stat.busy_cycles, runtime_cycles)
     )?;
     writeln!(
         log,
         "         ALU busy cycles: {} ({:.2}%)",
         stats.alu_stat.busy_cycles,
-        (stats.alu_stat.busy_cycles as f32) / (runtime_cycles as f32) * 100.0
+        percent_of(stats.alu_stat.busy_cycles, runtime_cycles)
     )?;
     writeln!(
         log,
@@ -170,7 +172,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         log,
         "heap allocations: {} | heap update: {} | avoided: {}",
         stats.gc_stat.allocations, stats.dheap_stat.heap_update, stats.dheap_stat.update_avoided
-    );
+    )?;
     writeln!(log, "==================== GC STATS ====================")?;
     writeln!(
         log,
@@ -183,19 +185,43 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     writeln!(
         log,
         "GC stalls (Reducer): {} ({:.2}%, longest {}) | GC stalls (DHeap): {} ({:.2}%, longest {}) ",
-        stats.reducer_stat.gc_stall_cycles - 10,
-        ((stats.reducer_stat.gc_stall_cycles - 10) as f32) / (runtime_cycles as f32) * 100.0,
-        stats.reducer_stat.gc_longest_stall,
+        stats.reducer_stat.gc_stall_cycles,
+        percent_of(stats.reducer_stat.gc_stall_cycles, runtime_cycles), stats.reducer_stat.gc_longest_stall,
         stats.dheap_stat.gc_stall_cycles,
-        (stats.dheap_stat.gc_stall_cycles as f32) / (runtime_cycles as f32) * 100.0,
-        stats.dheap_stat.gc_longest_stall
+        percent_of(stats.dheap_stat.gc_stall_cycles, runtime_cycles), stats.dheap_stat.gc_longest_stall
     )?;
     writeln!(
         log,
-        "peak workset size: {} (heap size {:.2}x) | cycles on marking: {}",
+        "peak workset size: {} (heap size {:.2}x) | cycles on marking: {} ({:?})",
         stats.gc_stat.peak_workset_size,
         (HEAP_SIZE as f32) / (stats.gc_stat.peak_workset_size as f32),
         stats.gc_stat.mark_cycles,
+        stats.gc_stat.mark_cycles_move
+    )?;
+    let gc_mark_reads = stats.gc_stat.cache_hit + stats.gc_stat.cache_miss;
+    writeln!(
+        log,
+        "new apps with ptr: {} | new apps without ptr: {} | gc cache hit: {} ({:.2}%) miss: {} ({:.2}%)",
+        stats.reducer_stat.nested_with_ptr,
+        stats.reducer_stat.nested_no_ptr,
+        stats.gc_stat.cache_hit, percent_of(stats.gc_stat.cache_hit, gc_mark_reads),
+        stats.gc_stat.cache_miss, percent_of(stats.gc_stat.cache_miss, gc_mark_reads),
+    )?;
+    let jump_move_sum = stats.gc_stat.jump_move_01
+        + stats.gc_stat.jump_move_10
+        + stats.gc_stat.jump_move_11
+        + stats.gc_stat.jump_move_12
+        + stats.gc_stat.jump_move_22
+        + stats.gc_stat.jump_move_20;
+    writeln!(
+        log,
+        "mark moves | 01: {} ({:.2}%) | 10: {} ({:.2}%) | 11: {} ({:.2}%) | 12: {} ({:.2}%) | 22: {} ({:.2}%) | 20: {} ({:.2}%)",
+        stats.gc_stat.jump_move_01, percent_of(stats.gc_stat.jump_move_01, jump_move_sum),
+        stats.gc_stat.jump_move_10, percent_of(stats.gc_stat.jump_move_10, jump_move_sum),
+        stats.gc_stat.jump_move_11, percent_of(stats.gc_stat.jump_move_11, jump_move_sum),
+        stats.gc_stat.jump_move_12, percent_of(stats.gc_stat.jump_move_12, jump_move_sum),
+        stats.gc_stat.jump_move_22, percent_of(stats.gc_stat.jump_move_22, jump_move_sum),
+        stats.gc_stat.jump_move_20, percent_of(stats.gc_stat.jump_move_20, jump_move_sum),
     )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 
@@ -300,7 +326,7 @@ fn run_benchmarks(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<(
     vec.sort_by_key(|(n, _)| *n);
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
     let results = benchmarks.iter().map(|p| {
-        let res = simulate(&p, 0);
+        let res = simulate(&p, 0, HEAP_SIZE, GC_AT);
         res
     });
 
@@ -311,16 +337,81 @@ fn run_benchmarks(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<(
     Ok(())
 }
 
+/// evaluate the GC behabiour of the benchmarks
+fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
+    let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
+    vec.sort_by_key(|(n, _)| *n);
+    let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
+    let results: Vec<_> = benchmarks
+        .par_iter()
+        .progress_count(benchmarks.len() as u64)
+        .map(|p| {
+            // run two tests to get gc free runtime and an approximate peak work set size
+            let (_, gc_free_runtime) = simulate(&p, 0, BIG_HEAP, 0.0);
+            // println!("GC FREE RUNTIME: {}", gc_free_runtime);
+            let (c, _) = simulate(&p, DLV_GC, HEAP_SIZE, GC_AT);
+            let peak_workset = c.get_stat().gc_stat.peak_workset_size;
+            // run several more rounds with different heap size
+            let points = [1.5, 2.0, 3.0, 5.0, 10.0];
+            let res = points.map(|pt| {
+                // println!(
+                //     "PEAK: {}; HEAP SIZE: {}",
+                //     peak_workset,
+                //     (peak_workset as f32 * pt) as usize
+                // );
+                simulate(&p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
+            });
+            let res_gc_percent: Vec<f32> = res
+                .iter()
+                .map(|(_, time)| percent_of(time - gc_free_runtime, gc_free_runtime))
+                .collect();
+            let res_max_pause: Vec<u32> = res
+                .iter()
+                .map(|(core, _)| {
+                    max(
+                        core.get_stat().reducer_stat.gc_longest_stall,
+                        core.get_stat().dheap_stat.gc_longest_stall,
+                    )
+                })
+                .collect();
+            let res_points: Vec<f32> = res
+                .iter()
+                .map(|(core, _)| {
+                    core.heap_size as f32 / (core.get_stat().gc_stat.peak_workset_size as f32)
+                })
+                .collect();
+            (res_gc_percent, res_max_pause, res_points)
+        })
+        .collect();
+
+    results
+        .into_iter()
+        .zip(names)
+        .for_each(|((percent, max_pause, points), n)| {
+            println!(
+                "{:<12} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
+                n, percent, max_pause, points
+            )
+        });
+
+    Ok(())
+}
+
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let progs = benchmarks!(
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /* TREESUM,*/ TRIBELIE, WHILEX,
-    );
+        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
+    ); // ignoring TREESUM as it does not have much garbage..
 
     if args.len() == 1 {
-        run_benchmarks(progs)
+        println!("usage: cargo run --release @ALL/@GC/<prog>");
+        Ok(())
     } else {
-        inspect_prog(progs.get(args[1].as_str()).unwrap())
+        match args[1].as_str() {
+            "@ALL" => run_benchmarks(progs),
+            "@GC" => eval_gc(progs),
+            prog => inspect_prog(progs.get(prog).unwrap()),
+        }
     }
 }

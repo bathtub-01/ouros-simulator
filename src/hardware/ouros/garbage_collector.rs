@@ -3,8 +3,34 @@ use std::cmp::max;
 use crate::hardware::common::{DualPortMem, Register};
 use crate::hw_module::{HwInput, HwModule};
 
-use super::config::{APP_LENGTH, DLV_GC, GC_THRESHOLD, HEAP_SIZE, MAX_THREADS};
+use super::config::{APP_LENGTH, DLV_GC, MAX_THREADS};
 use super::program::{get_ptr, is_ptr, ActiveApp, App, Atom};
+use std::collections::VecDeque;
+
+struct FixedFifo<T> {
+    capacity: usize,
+    data: VecDeque<T>,
+}
+
+impl<T: PartialEq> FixedFifo<T> {
+    fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            data: VecDeque::with_capacity(capacity),
+        }
+    }
+
+    fn push(&mut self, item: T) {
+        if self.data.len() == self.capacity {
+            self.data.pop_front(); // evict the oldest
+        }
+        self.data.push_back(item);
+    }
+
+    fn contains(&self, v: &T) -> bool {
+        self.data.contains(v)
+    }
+}
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub enum CollectorState {
@@ -62,6 +88,15 @@ pub struct GbgCollectorStat {
     pub gc_rounds: u32,
     pub peak_workset_size: usize,
     pub mark_cycles: u32,
+    pub mark_cycles_move: [u32; 6],
+    pub cache_hit: u32,
+    pub cache_miss: u32,
+    pub jump_move_01: u32,
+    pub jump_move_10: u32,
+    pub jump_move_11: u32,
+    pub jump_move_12: u32,
+    pub jump_move_22: u32,
+    pub jump_move_20: u32,
 }
 
 pub struct GbgCollector {
@@ -79,16 +114,20 @@ pub struct GbgCollector {
     reg_heap_reader: Register<App>,
     reg_pre_gc: Register<bool>, // whet previous cycle is used by GC
     reg_move: Register<u8>,
-    reg_work_on: Register<usize>, // to lock the worklist object we're working on
+    reg_work_on: Register<usize>, // to lock the worklist object for marking
     reg_app_idx: Register<usize>,
     reg_monitors: Register<[App; MAX_THREADS]>,
     const_sweep_from: usize,
+    const_heap_size: usize,
+    const_gc_at: f32,
+    const_gc_threshold: usize,
+    gc_cache: FixedFifo<usize>,
     stat: GbgCollectorStat,
     stat_detail_lv: u8,
 }
 
 impl GbgCollector {
-    pub fn new(heap_size: usize, free_from: usize) -> Self {
+    pub fn new(heap_size: usize, free_from: usize, gc_at: f32) -> Self {
         Self {
             input: Default::default(),
             reg_collector: Default::default(),
@@ -97,7 +136,7 @@ impl GbgCollector {
             reg_work_head: Default::default(),
             reg_free_drawed: Default::default(),
             reg_work_drawed: Default::default(),
-            reg_free_len: Register::init(HEAP_SIZE - free_from),
+            reg_free_len: Register::init(heap_size - free_from),
             reg_work_len: Default::default(),
             reg_sweeper: Default::default(),
             reg_bk_reader: Default::default(),
@@ -108,6 +147,10 @@ impl GbgCollector {
             reg_app_idx: Default::default(),
             reg_monitors: Default::default(),
             const_sweep_from: free_from,
+            const_heap_size: heap_size,
+            const_gc_at: gc_at,
+            const_gc_threshold: (heap_size as f32 * gc_at) as usize,
+            gc_cache: FixedFifo::new(8),
             stat: Default::default(),
             stat_detail_lv: Default::default(),
         }
@@ -159,7 +202,10 @@ impl GbgCollector {
 
     /// draw an address from the freelist
     pub fn addr_out_bits(&self) -> usize {
-        if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::MARK {
+        if self.deallocate_fire()
+            && *self.reg_collector.value() != CollectorState::MARK
+            && self.input.deallocate_bits != *self.reg_sweeper.value()
+        {
             self.input.deallocate_bits
         } else {
             if *self.reg_free_drawed.value() {
@@ -293,8 +339,20 @@ impl GbgCollector {
         }
     }
 
+    fn mark_read(&mut self, addr: usize) {
+        if self.stat_detail_lv >= DLV_GC {
+            if self.gc_cache.contains(&addr) {
+                self.stat.cache_hit += 1;
+            } else {
+                self.stat.cache_miss += 1;
+            }
+        }
+        self.gc_mem.read_a(addr);
+        self.gc_cache.push(addr);
+    }
+
     fn step_idle(&mut self) {
-        if !self.mutator_request() && *self.reg_free_len.value() <= GC_THRESHOLD {
+        if !self.mutator_request() && *self.reg_free_len.value() <= self.const_gc_threshold {
             self.reg_collector.connect(&CollectorState::ROOT);
             // put `main` into worklist
             self.reg_work_head.connect(&0);
@@ -332,6 +390,10 @@ impl GbgCollector {
     }
 
     fn step_mark(&mut self) {
+        if self.stat_detail_lv >= DLV_GC && !self.mutator_request() {
+            self.stat.mark_cycles += 1;
+            self.stat.mark_cycles_move[*self.reg_move.value() as usize] += 1;
+        }
         // ========== defaults (update regs from previous demands) ==========
         self.reg_pre_gc.connect(&false);
         if *self.reg_pre_gc.value() {
@@ -340,12 +402,15 @@ impl GbgCollector {
 
         // ========== move-3 logic (pre read for move-4 ) ==========
         if *self.reg_move.value() == 3 && !self.mutator_request() {
+            // println!("================ NEW GC ====================");
             let combined: [Atom; MAX_THREADS * APP_LENGTH] =
                 self.reg_monitors.value().concat().try_into().unwrap();
             if combined.iter().any(|atm| is_ptr(atm)) {
                 self.reg_move.connect(&4);
                 let found = combined.iter().position(|atm| is_ptr(atm)).unwrap();
-                self.gc_mem.read_a(get_ptr(&combined[found]));
+                self.mark_read(get_ptr(&combined[found]));
+                // self.gc_mem.read_a(get_ptr(&combined[found]));
+                // self.gc_cache.push(get_ptr(&combined[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
             } else {
@@ -379,7 +444,8 @@ impl GbgCollector {
 
             if self.more_ptr(&combined) {
                 let found = self.find_ptr(&combined);
-                self.gc_mem.read_a(get_ptr(&combined[found]));
+                self.mark_read(get_ptr(&combined[found]));
+                // self.gc_mem.read_a(get_ptr(&combined[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
             } else {
@@ -404,21 +470,44 @@ impl GbgCollector {
                 let w_head = *self.reg_work_head.value();
                 // println!("marking: {}", w_head);
                 self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
+                self.gc_cache.push(w_head);
                 self.reg_work_drawed.connect(&true); // next head will be read out by write_a
                 self.work_len_minus_one();
                 self.reg_work_on.connect(&w_head);
                 self.reg_move.connect(&1);
                 self.reg_app_idx.connect(&0);
+                self.stat.jump_move_01 += 1;
             }
         }
 
         // ========== move-1 logic (wait until main heap read success) ==========
         if *self.reg_move.value() == 1 && self.input.heap_read_valid && !self.mutator_request() {
             // println!(
-            //     "work on: {} | app: {:?}",
+            //     // useful MARK log
+            //     "work on: {} | app: {:?} | worklist len: {}",
             //     self.reg_work_on.value(),
-            //     self.input.heap_read_bits
+            //     self.input.heap_read_bits,
+            //     self.reg_work_len.value()
             // );
+            ///////////////////////////////////////////////
+            // let real_worklist_head: usize = if *self.reg_work_drawed.value() {
+            //     self.gc_mem.dout_a().ptr
+            // } else {
+            //     *self.reg_work_head.value()
+            // };
+            // let mut fl: Vec<usize> = Vec::new();
+
+            // for i in 0..*self.reg_work_len.value() {
+            //     if i == 0 {
+            //         fl.push(real_worklist_head);
+            //     } else {
+            //         let fst = fl.last().unwrap();
+            //         assert!(self.gc_mem.ram[*fst].state == CellState::WorkList);
+            //         fl.push(self.gc_mem.ram[*fst].ptr);
+            //     }
+            // }
+            // println!("worklist at this point: {:?}", fl);
+            ///////////////////////////////////////////////
             let in_app = &self.input.heap_read_bits;
             // splition of move-0 and move-1 is needed because mutator requests can modify worklist
             if in_app.iter().any(|atm| is_ptr(atm)) {
@@ -427,9 +516,11 @@ impl GbgCollector {
                 // pre read for move-2
                 let found = in_app.iter().position(|atm| is_ptr(atm)).unwrap();
                 // println!("go to move-2, read on: {}", get_ptr(&in_app[found]));
-                self.gc_mem.read_a(get_ptr(&in_app[found]));
+                self.mark_read(get_ptr(&in_app[found]));
+                // self.gc_mem.read_a(get_ptr(&in_app[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
+                self.stat.jump_move_12 += 1;
             } else {
                 // self.reg_move.connect(&0);
                 self.mark_next();
@@ -450,6 +541,8 @@ impl GbgCollector {
                 // self.reg_move.connect(&0);
                 self.mark_next();
             }
+        } else if *self.reg_move.value() == 1 && !self.mutator_request() {
+            self.stat.jump_move_11 += 1;
         }
 
         // ========== move-2 logic (push one, read one) ==========
@@ -460,7 +553,7 @@ impl GbgCollector {
                 self.reg_bk_reader.value()
             };
             let current_app = self.reg_heap_reader.value();
-            // NOTE For snapshot version, shoudl also allow FreeList here, as feedback might not arrived yet
+            // NOTE For snapshot version, should also allow FreeList here, as feedback might not arrived yet
             // NO, in snapshot version we can simply let feedback Mark it
             // if read_out.state == CellState::FreeList {
             //     println!(
@@ -486,9 +579,11 @@ impl GbgCollector {
                 if self.more_ptr(current_app) {
                     // read the next PTR
                     let found = self.find_ptr(current_app);
-                    self.gc_mem.read_a(get_ptr(&current_app[found]));
+                    self.mark_read(get_ptr(&current_app[found]));
+                    // self.gc_mem.read_a(get_ptr(&current_app[found]));
                     self.reg_app_idx.connect(&found);
                     self.reg_pre_gc.connect(&true);
+                    self.stat.jump_move_22 += 1;
                 } else {
                     // go back to move-0, handle the next worklist node
                     // self.reg_move.connect(&0);
@@ -526,13 +621,8 @@ impl GbgCollector {
                 // recover as Unmarked
                 // self.gc_mem
                 // .write_b(*self.reg_sweeper.value(), no_ptr_cell(CellState::Unmarked));
-                self.gc_mem.write_b(
-                    *self.reg_sweeper.value(),
-                    GCCell {
-                        state: CellState::Unmarked,
-                        ptr: self.gc_mem.ram[*self.reg_sweeper.value()].ptr,
-                    },
-                );
+                self.gc_mem
+                    .write_b(*self.reg_sweeper.value(), no_ptr_cell(CellState::Unmarked));
                 // if *self.reg_sweeper.value() == 156 {
                 //     println!("recover 156 as Unmarked");
                 // }
@@ -547,8 +637,8 @@ impl GbgCollector {
                 };
                 self.push_to_freelist(*self.reg_sweeper.value(), old_head, false);
                 self.free_len_plus_one();
-                // if *self.reg_sweeper.value() == 156 {
-                //     println!("pushing 156 to freelist!, old head: {}", old_head);
+                // if *self.reg_sweeper.value() == 433 {
+                //     println!("pushing 433 to freelist!, old head: {}", old_head);
                 // }
                 if old_head == 0 {
                     println!("old head is 0 when pushing to freelist!");
@@ -557,7 +647,7 @@ impl GbgCollector {
                 panic!("Broken WorkList! addr: {}", *self.reg_sweeper.value());
             }
 
-            if *self.reg_sweeper.value() < HEAP_SIZE - 1 {
+            if *self.reg_sweeper.value() < self.const_heap_size - 1 {
                 // sweep next cell
                 let next = self.reg_sweeper.value() + 1;
                 self.reg_sweeper.connect(&next);
@@ -588,13 +678,15 @@ impl HwModule for GbgCollector {
         } else {
             *self.reg_work_head.value()
         };
-        // if real_freelist_head == 156 {
+        // if real_freelist_head == 16 {
         //     println!(
-        //         "real_freelist_head == 156, read from: {}-{:?}, state: {:?}, len: {}",
+        //         "real_freelist_head == 16-{:?}, read from: {}-{:?}, state: {:?}, len: {}, sweep: {}",
+        //         self.gc_mem.ram[16],
         //         self.gc_mem.input.port_a.addr,
         //         self.gc_mem.ram[self.gc_mem.input.port_a.addr],
         //         self.reg_collector.value(),
-        //         self.reg_free_len.value()
+        //         self.reg_free_len.value(),
+        //         self.reg_sweeper.value(),
         //     );
         // }
         self.gc_mem.input.default_input();
@@ -605,8 +697,11 @@ impl HwModule for GbgCollector {
         self.reg_work_head.connect(&real_worklist_head);
 
         match (self.deallocate_fire(), self.addr_out_fire()) {
-            (true, false) if *self.reg_collector.value() != CollectorState::MARK => {
-                // if self.input.deallocate_bits == 156 {
+            (true, false)
+                if *self.reg_collector.value() != CollectorState::MARK
+                    && self.input.deallocate_bits != *self.reg_sweeper.value() =>
+            {
+                // if self.input.deallocate_bits == 16 {
                 //     println!(
                 //         "deallocate: put {} into FreeList, state: {:?}",
                 //         self.input.deallocate_bits,
@@ -621,20 +716,31 @@ impl HwModule for GbgCollector {
                 self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
                 self.free_len_minus_one(); // a bit strange..
             }
-            (true, true) if *self.reg_collector.value() == CollectorState::MARK => {
+            (true, true)
+                if *self.reg_collector.value() == CollectorState::MARK
+                    || self.input.deallocate_bits == *self.reg_sweeper.value() =>
+            {
                 self.reg_free_drawed.connect(&true);
                 self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
                 self.free_len_minus_one(); // a bit strange..
+            }
+            (true, true)
+                if *self.reg_collector.value() != CollectorState::MARK
+                    && self.input.deallocate_bits != *self.reg_sweeper.value() =>
+            {
+                self.gc_mem
+                    .write_a(self.input.deallocate_bits, no_ptr_cell(CellState::FreeList));
             }
             _ => { /* do nothing as addr-out can take deallocated addrs*/ }
         }
 
         if self.feedback_fire() {
-            // if self.input.feedback_bits == 156 {
-            //     println!(
-            //         "feedback 156 arrived GC, state: {:?}",
-            //         self.reg_collector.value()
-            //     );
+            // if self.input.feedback_bits == 1 {
+            // println!(
+            //     "feedback {} arrived GC, state: {:?}",
+            //     self.input.feedback_bits,
+            //     self.reg_collector.value()
+            // );
             // }
             let cell_state = match self.reg_collector.value() {
                 CollectorState::IDLE | CollectorState::ROOT => CellState::Unmarked,
@@ -700,10 +806,11 @@ impl HwModule for GbgCollector {
             }
         }
 
-        // if self.addr_out_fire() && self.addr_out_bits() == 156 {
+        // print!("collector: {:?}", self.reg_collector.value());
+        // if self.addr_out_fire() && self.addr_out_bits() == 433 {
         //     println!(
-        //         "emit 156 as free addr!, 156: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
-        //         self.gc_mem.ram[156],
+        //         "emit 433 as free addr!, 0: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
+        //         self.gc_mem.ram[433],
         //         self.reg_collector.value(),
         //         self.gc_mem.dout_a().ptr,
         //         self.reg_free_head.value(),
@@ -711,6 +818,17 @@ impl HwModule for GbgCollector {
         //         self.reg_sweeper.value()
         //     );
         // }
+        if self.addr_out_fire() && self.addr_out_bits() == 0 {
+            println!(
+                "emit 0 as free addr!, 0: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
+                self.gc_mem.ram[0],
+                self.reg_collector.value(),
+                self.gc_mem.dout_a().ptr,
+                self.reg_free_head.value(),
+                self.input.deallocate_bits,
+                self.reg_sweeper.value()
+            );
+        }
     }
 
     fn update_stat(&mut self) {

@@ -54,6 +54,8 @@ pub struct ReducerStat {
     pub gc_stall_cycles: u32,  // gc stall in total
     pub gc_current_stall: u32, // current contiguous stall
     pub gc_longest_stall: u32, // longest contiguous stall
+    pub nested_with_ptr: u32,
+    pub nested_no_ptr: u32,
 }
 
 pub struct Reducer {
@@ -199,7 +201,7 @@ impl Reducer {
             && self.input.snapshot_ready
     }
 
-    // for GC stats
+    /// for GC stats
     fn stalled(&self) -> bool {
         let state_correct = match *self.reg_stm.value() {
             Stm::IDLE => true,
@@ -460,6 +462,16 @@ impl HwModule for Reducer {
     }
 
     fn update_stat(&mut self) {
+        if self.stat_detail_lv >= DLV_GC {
+            if fire(self.input.app_ready, self.app_valid()) {
+                if self.app_bits().load.iter().any(|atm| is_ptr(atm)) {
+                    self.stat.nested_with_ptr += 1;
+                } else {
+                    self.stat.nested_no_ptr += 1;
+                }
+            }
+        }
+
         if self.stat_detail_lv >= DLV_BUSY_RATE {
             if *self.reg_stm.value() != Stm::IDLE && self.input.app_ready && self.input.spine_ready
             {

@@ -54,6 +54,7 @@ pub struct OurosCoreStat<'a> {
 }
 
 pub struct OurosCore {
+    pub heap_size: usize,
     pub input: OurosCoreInput,
     pub dheap: DrfHeap,
     gc: GbgCollector,
@@ -92,14 +93,15 @@ pub struct OurosCore {
 }
 
 impl OurosCore {
-    pub fn new(prog: &Program, detail_lv: u8) -> Self {
+    pub fn new(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> Self {
         let buffer_usage: bool = detail_lv >= DLV_BUFFER_USAGE;
         Self {
+            heap_size,
             input: Default::default(),
-            dheap: DrfHeap::new(HEAP_SIZE)
+            dheap: DrfHeap::new(heap_size)
                 .program(&prog.heap_img)
                 .detail(detail_lv),
-            gc: GbgCollector::new(HEAP_SIZE, prog.heap_img.len())
+            gc: GbgCollector::new(heap_size, prog.heap_img.len(), gc_at)
                 .init_freelist()
                 .detail(detail_lv),
             abox: AddrBox::new(),
@@ -241,6 +243,8 @@ impl HwModule for OurosCore {
             self.abox.input.addr_consume[CONSUMERS - 1] = self.dheap.free_addr_req();
             self.abox.input.addr_consume[0..CONSUMERS - 1]
                 .copy_from_slice(&self.reducer.consume_demands());
+            self.abox.input.dheap_feedback_valid = self.dheap.need_split();
+            self.abox.input.dheap_feedback_bits = self.dheap.free_addr_feedback();
             let free_addr_bits = self.abox.consume_addr_bits();
             let free_addr_valid = self.abox.consume_addr_valid();
             self.dheap.input.free_addr = free_addr_bits[CONSUMERS - 1];

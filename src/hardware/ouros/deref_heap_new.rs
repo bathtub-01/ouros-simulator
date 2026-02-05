@@ -268,7 +268,7 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
         (vec_to_app(res_v), None)
     } else {
         let mut wb_app = res_v[APP_LENGTH..res_v.len()].to_vec();
-        wb_app.insert(0, Atom::PTR(free_addr, unique, false));
+        wb_app.insert(0, Atom::PTR(free_addr, unique, false)); // FIXME unique should be true
         (
             vec_to_app(wb_app),
             Some(vec_to_app(res_v[0..APP_LENGTH].to_vec())),
@@ -618,6 +618,11 @@ impl DrfHeap {
         } else {
             0
         }
+    }
+
+    /// feedback signal on when the free addr is used
+    pub fn free_addr_feedback(&self) -> usize {
+        self.reg_free_addr.value().1
     }
 
     pub fn get_stat(&self) -> &DrfHeapStat {
@@ -1300,12 +1305,14 @@ impl HwModule for DrfHeap {
         // }
 
         // println!(
-        //     "addr-82 | working: {} | {:?} | addr-0 | working: {} | {:?}",
-        //     self.working_heap.ram[82],
-        //     self.heap_mem.ram[82],
-        //     self.working_heap.ram[0],
-        //     self.heap_mem.ram[0]
+        //     "addr-642 | working: {} | {:?} | addr-15 | working: {} | {:?}",
+        //     self.working_heap.ram[642],
+        //     self.heap_mem.ram[642],
+        //     self.working_heap.ram[15],
+        //     self.heap_mem.ram[15]
         // );
+
+        // println!("stack: {:?}", self.thread_stack[0].mem);
 
         if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.holder_out.0 {
