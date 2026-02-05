@@ -241,6 +241,8 @@ impl HwModule for OurosCore {
             self.abox.input.addr_consume[CONSUMERS - 1] = self.dheap.free_addr_req();
             self.abox.input.addr_consume[0..CONSUMERS - 1]
                 .copy_from_slice(&self.reducer.consume_demands());
+            self.abox.input.dheap_feedback_valid = self.dheap.need_split();
+            self.abox.input.dheap_feedback_bits = self.dheap.free_addr_feedback();
             let free_addr_bits = self.abox.consume_addr_bits();
             let free_addr_valid = self.abox.consume_addr_valid();
             self.dheap.input.free_addr = free_addr_bits[CONSUMERS - 1];

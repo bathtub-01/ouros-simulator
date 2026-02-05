@@ -30,7 +30,7 @@ fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (Our
 
     loop {
         assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 1_000_000 {
+        if ouros.done() || cycle == 123_929 {
             break;
         }
         ouros.tick();
@@ -399,12 +399,12 @@ fn main() -> std::io::Result<()> {
     // let progs = benchmarks!(QUEENS);
 
     if args.len() == 1 {
-        println!("usage: cargo run --release ALL/GC/<prog>");
+        println!("usage: cargo run --release @ALL/@GC/<prog>");
         Ok(())
     } else {
         match args[1].as_str() {
-            "ALL" => run_benchmarks(progs),
-            "GC" => eval_gc(progs),
+            "@ALL" => run_benchmarks(progs),
+            "@GC" => eval_gc(progs),
             prog => inspect_prog(progs.get(prog).unwrap()),
         }
     }

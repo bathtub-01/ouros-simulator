@@ -9,6 +9,8 @@ pub struct AddrBoxInput {
     pub addr_consume: [bool; CONSUMERS], // addr consumed by demander
     pub free_addr_bits: usize,           // free addr from GC
     pub free_addr_valid: bool,
+    pub dheap_feedback_bits: usize,
+    pub dheap_feedback_valid: bool,
 }
 
 impl HwInput for AddrBoxInput {}
@@ -35,9 +37,11 @@ impl AddrBox {
         self.addr_regs[idx].value().0 && self.input.addr_consume[idx]
     }
 
+    /// exclude fire of dheap
     fn any_addr_fire(&self) -> bool {
         self.addr_regs
             .iter()
+            .take(CONSUMERS_REDUCER)
             .zip(self.input.addr_consume)
             .map(|(reg, csm)| reg.value().0 && csm)
             .any(|b| b)
@@ -64,12 +68,17 @@ impl AddrBox {
     }
 
     pub fn feedback_valid(&self) -> bool {
-        self.feedback_regs.iter().any(|reg| reg.value().0) || self.any_addr_fire()
+        self.feedback_regs.iter().any(|reg| reg.value().0)
+            || self.any_addr_fire()
+            || self.input.dheap_feedback_valid
     }
 
     pub fn feedback_bits(&self) -> usize {
-        if self.addr_fire(CONSUMERS - 1) {
-            self.addr_regs[CONSUMERS - 1].value().1
+        // if self.addr_fire(CONSUMERS - 1) {
+        //     self.addr_regs[CONSUMERS - 1].value().1
+        // }
+        if self.input.dheap_feedback_valid {
+            self.input.dheap_feedback_bits
         } else if self.addr_fire(0) {
             self.addr_regs[0].value().1
         } else {
@@ -82,7 +91,10 @@ impl AddrBox {
     }
 
     fn feedback_chosen(&self) -> Option<usize> {
-        if self.addr_fire(CONSUMERS - 1) {
+        // if self.addr_fire(CONSUMERS - 1) {
+        // Some(CONSUMERS - 1)
+        // }
+        if self.input.dheap_feedback_valid {
             Some(CONSUMERS - 1)
         } else if self.addr_fire(0) {
             Some(0)

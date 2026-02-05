@@ -435,6 +435,7 @@ impl GbgCollector {
         // ========== move-1 logic (wait until main heap read success) ==========
         if *self.reg_move.value() == 1 && self.input.heap_read_valid && !self.mutator_request() {
             // println!(
+            //     // useful MARK log
             //     "work on: {} | app: {:?} | worklist len: {}",
             //     self.reg_work_on.value(),
             //     self.input.heap_read_bits,
@@ -567,8 +568,8 @@ impl GbgCollector {
                 };
                 self.push_to_freelist(*self.reg_sweeper.value(), old_head, false);
                 self.free_len_plus_one();
-                // if *self.reg_sweeper.value() == 156 {
-                //     println!("pushing 156 to freelist!, old head: {}", old_head);
+                // if *self.reg_sweeper.value() == 433 {
+                //     println!("pushing 433 to freelist!, old head: {}", old_head);
                 // }
                 if old_head == 0 {
                     println!("old head is 0 when pushing to freelist!");
@@ -736,6 +737,18 @@ impl HwModule for GbgCollector {
             }
         }
 
+        // print!("collector: {:?}", self.reg_collector.value());
+        // if self.addr_out_fire() && self.addr_out_bits() == 433 {
+        //     println!(
+        //         "emit 433 as free addr!, 0: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
+        //         self.gc_mem.ram[433],
+        //         self.reg_collector.value(),
+        //         self.gc_mem.dout_a().ptr,
+        //         self.reg_free_head.value(),
+        //         self.input.deallocate_bits,
+        //         self.reg_sweeper.value()
+        //     );
+        // }
         if self.addr_out_fire() && self.addr_out_bits() == 0 {
             println!(
                 "emit 0 as free addr!, 0: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
