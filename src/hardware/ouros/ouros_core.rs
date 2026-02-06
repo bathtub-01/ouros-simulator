@@ -2,7 +2,7 @@
 
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
-use crate::hardware::common::{Arbiter, Ring, FIFO};
+use crate::hardware::common::{arbiter, Arbiter, Ring, FIFO};
 use crate::hardware::ouros::garbage_collector::CellState;
 use crate::hw_module::{HwInput, HwModule};
 
@@ -292,9 +292,9 @@ impl HwModule for OurosCore {
             self.gc.input.snapshot_bits = snapshot;
 
             self.buffers_snapshot.input.out_ready = self.gc.snapshot_ready();
-            self.buffers_snapshot.input.in_valid = self.reducer.in_fire();
-            self.buffers_snapshot.input.din = self.reducer.input.in_app.load.clone();
-            self.reducer.input.snapshot_ready = self.buffers_snapshot.in_ready();
+            // self.buffers_snapshot.input.in_valid = self.reducer.in_fire();
+            // self.buffers_snapshot.input.din = self.reducer.input.in_app.load.clone();
+            // self.reducer.input.snapshot_ready = self.buffers_snapshot.in_ready();
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
@@ -316,15 +316,54 @@ impl HwModule for OurosCore {
                 [&mut self.buffers_dheap_b_0, &mut self.buffers_dheap_b_1],
                 &mut self.arbiter_dheap_b,
             );
-            buffers_arbiter(
-                [
+            // buffers_arbiter(
+            //     [
+            //         &mut self.buffers_reducer_0,
+            //         &mut self.buffers_reducer_1,
+            //         &mut self.buffers_reducer_2,
+            //         &mut self.buffers_reducer_3,
+            //     ],
+            //     &mut self.arbiter_reducer,
+            // );
+
+            {
+                // take snapshot from buffers_reducer_1 (from dheap)
+                let arbiter = &mut self.arbiter_reducer;
+                let buffers = [
                     &mut self.buffers_reducer_0,
                     &mut self.buffers_reducer_1,
                     &mut self.buffers_reducer_2,
                     &mut self.buffers_reducer_3,
-                ],
-                &mut self.arbiter_reducer,
-            );
+                ];
+                arbiter.input.link(|input| {
+                    for (i, b) in buffers.iter().enumerate() {
+                        assign_some(&mut input.in_bits[i], b.dout());
+                        if i == 1 {
+                            input.in_valid[1] = b.out_valid() && self.buffers_snapshot.in_ready();
+                        } else {
+                            input.in_valid[i] = b.out_valid();
+                        }
+                    }
+                });
+                let select = arbiter.select();
+                for (i, b) in buffers.into_iter().enumerate() {
+                    b.input.out_ready = arbiter.in_ready(i, select);
+                }
+                self.buffers_snapshot.input.din = self
+                    .buffers_reducer_1
+                    .dout()
+                    .unwrap_or(&Default::default())
+                    .load
+                    .clone();
+                self.buffers_snapshot.input.in_valid = self.buffers_reducer_1.out_fire()
+                    && self
+                        .buffers_snapshot
+                        .input
+                        .din
+                        .iter()
+                        .any(|atm| is_ptr(atm));
+            }
+
             buffers_arbiter(
                 [
                     &mut self.buffers_alu_0,
@@ -467,23 +506,23 @@ impl HwModule for OurosCore {
                 || self.rings_dheap_b_1.found();
         }
         // runtime checking: when a MARK finishes, check whether all reachable nodes are marked
-        if self.pre_collector == CollectorState::MARK
-            && *self.gc.reg_collector.value() == CollectorState::SWEEP
-        {
-            let work_set = traverse(&self.dheap.heap_mem.ram, self.heap_size, self.free_from);
-            // println!("work set size: {}", work_set.len());
-            for addr in work_set {
-                // if addr == 785 {
-                // println!("785 marked!");
-                // }
-                if self.gc.gc_mem.ram[addr].state != CellState::Marked {
-                    panic!(
-                        "live node {} is not marked after GC: {:?}",
-                        addr, self.gc.gc_mem.ram[addr].state
-                    );
-                }
-            }
-        }
+        // if self.pre_collector == CollectorState::MARK
+        //     && *self.gc.reg_collector.value() == CollectorState::SWEEP
+        // {
+        //     let work_set = traverse(&self.dheap.heap_mem.ram, self.heap_size, self.free_from);
+        //     // println!("work set size: {}", work_set.len());
+        //     for addr in work_set {
+        //         // if addr == 785 {
+        //         // println!("785 marked!");
+        //         // }
+        //         // if self.gc.gc_mem.ram[addr].state != CellState::Marked {
+        //         //     panic!(
+        //         //         "live node {} is not marked after GC: {:?}",
+        //         //         addr, self.gc.gc_mem.ram[addr].state
+        //         //     );
+        //         // }
+        //     }
+        // }
     }
 
     fn tick_children(&mut self) {

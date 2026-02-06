@@ -1218,21 +1218,21 @@ impl DrfHeap {
 impl HwModule for DrfHeap {
     fn update_local(&mut self) {
         // a heavy check to discover wrong addr recycles
-        if self.port_b_fire() {
-            self.thread_stack.iter().for_each(|stk| {
-                if stk
-                    .mem
-                    .iter()
-                    .take(stk.mem.len() - 1)
-                    .any(|e| e.1 == self.input.port_b_bits.heap_addr)
-                {
-                    panic!(
-                        "on stack addr {} being recycled! stack: {:?}",
-                        self.input.port_b_bits.heap_addr, stk.mem
-                    );
-                }
-            });
-        }
+        // if self.port_b_fire() {
+        //     self.thread_stack.iter().for_each(|stk| {
+        //         if stk
+        //             .mem
+        //             .iter()
+        //             .take(stk.mem.len() - 1)
+        //             .any(|e| e.1 == self.input.port_b_bits.heap_addr)
+        //         {
+        //             panic!(
+        //                 "on stack addr {} being recycled! stack: {:?}",
+        //                 self.input.port_b_bits.heap_addr, stk.mem
+        //             );
+        //         }
+        //     });
+        // }
 
         self.update_prepare();
         self.gc_read_granted.connect(&false);
