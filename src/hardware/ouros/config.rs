@@ -21,7 +21,7 @@ pub const CONSUMERS: usize = CONSUMERS_REDUCER + CONSUMERS_DHEAP;
 pub const CONSUMERS_REDUCER: usize = 7;
 pub const CONSUMERS_DHEAP: usize = 1;
 
-pub const GC_AT: f32 = 0.4; // start GC when freelist is shorter than this
+pub const GC_AT: f32 = 0.1; // start GC when freelist is shorter than this
 
 // pub const GC_THRESHOLD: usize = (HEAP_SIZE as f32 * GC_AT) as usize;
 
