@@ -107,19 +107,19 @@ fn percent_of(v: u32, total: u32) -> f32 {
     (v as f32 / total as f32) * 100.0
 }
 
-const DIR: &str = "simu-out/";
+const DIR_SIMU_OUT: &str = "simu-out/";
 
 /// inspect a program with full stat details
 fn inspect_prog(prog: &Program) -> std::io::Result<()> {
-    let log_path = Path::new(DIR).join("log.txt");
-    let threads_path = Path::new(DIR).join("threads.csv");
-    let red_rate_path = Path::new(DIR).join("red-rate.csv");
-    let alu_rate_path = Path::new(DIR).join("alu-rate.csv");
-    let gc_mreq_rate_path = Path::new(DIR).join("gc-mutator-requst-rate.csv");
-    let buffer_util_path = Path::new(DIR).join("buffer-util.csv");
-    let stm_dist_path = Path::new(DIR).join("stm-dist.csv");
+    let log_path = Path::new(DIR_SIMU_OUT).join("log.txt");
+    let threads_path = Path::new(DIR_SIMU_OUT).join("threads.csv");
+    let red_rate_path = Path::new(DIR_SIMU_OUT).join("red-rate.csv");
+    let alu_rate_path = Path::new(DIR_SIMU_OUT).join("alu-rate.csv");
+    let gc_mreq_rate_path = Path::new(DIR_SIMU_OUT).join("gc-mutator-requst-rate.csv");
+    let buffer_util_path = Path::new(DIR_SIMU_OUT).join("buffer-util.csv");
+    let stm_dist_path = Path::new(DIR_SIMU_OUT).join("stm-dist.csv");
 
-    fs::create_dir_all(DIR)?;
+    fs::create_dir_all(DIR_SIMU_OUT)?;
 
     let mut log = File::create(log_path)?;
     let mut threads = File::create(threads_path)?;
@@ -337,8 +337,29 @@ fn run_benchmarks(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<(
     Ok(())
 }
 
+const DIR_SIMU_OUT_GC: &str = "simu-out/gc/";
+
+fn vec_to_string<T: std::fmt::Display>(vec: &Vec<T>) -> String {
+    vec.iter()
+        .map(|item| item.to_string())
+        .collect::<Vec<String>>()
+        .join(",")
+}
+
 /// evaluate the GC behabiour of the benchmarks
 fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
+    let gc_percent_path = Path::new(DIR_SIMU_OUT_GC).join("gc_percent.csv");
+    let max_pause_path = Path::new(DIR_SIMU_OUT_GC).join("max_pause.csv");
+    let heap_peak_path = Path::new(DIR_SIMU_OUT_GC).join("heap_peak.csv");
+    let peak_workset_path = Path::new(DIR_SIMU_OUT_GC).join("peak_workset.csv");
+
+    fs::create_dir_all(DIR_SIMU_OUT_GC)?;
+
+    let mut gc_percent_file = File::create(gc_percent_path)?;
+    let mut max_pause_file = File::create(max_pause_path)?;
+    let mut heap_peak_file = File::create(heap_peak_path)?;
+    let mut peak_workset_file = File::create(peak_workset_path)?;
+
     let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
     vec.sort_by_key(|(n, _)| *n);
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
@@ -363,7 +384,7 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
             });
             let res_gc_percent: Vec<f32> = res
                 .iter()
-                .map(|(_, time)| percent_of(time - gc_free_runtime, gc_free_runtime))
+                .map(|(_, time)| percent_of(time - gc_free_runtime, *time))
                 .collect();
             let res_max_pause: Vec<u32> = res
                 .iter()
@@ -380,18 +401,22 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
                     core.heap_size as f32 / (core.get_stat().gc_stat.peak_workset_size as f32)
                 })
                 .collect();
-            (res_gc_percent, res_max_pause, res_points)
+            (res_gc_percent, res_max_pause, res_points, peak_workset)
         })
         .collect();
 
     results
         .into_iter()
         .zip(names)
-        .for_each(|((percent, max_pause, points), n)| {
+        .for_each(|((percent, max_pause, points, peak), n)| {
             println!(
-                "{:<12} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
-                n, percent, max_pause, points
-            )
+                "{:<10} | Peak work set {} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
+                n, peak, percent, max_pause, points
+            );
+            writeln!(gc_percent_file, "{},{}", n, vec_to_string(&percent)).unwrap();
+            writeln!(max_pause_file, "{},{}", n, vec_to_string(&max_pause)).unwrap();
+            writeln!(heap_peak_file, "{},{}", n, vec_to_string(&points)).unwrap();
+            writeln!(peak_workset_file, "{},{}", n, peak).unwrap();
         });
 
     Ok(())
