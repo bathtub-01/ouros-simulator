@@ -1,5 +1,7 @@
 // Top level module of the Ouros core.
 
+use std::cmp::max;
+
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{Arbiter, Ring, FIFO};
@@ -51,10 +53,14 @@ pub struct OurosCoreStat<'a> {
     pub fifos_stat: [&'a FIFOStat; 13],
     pub mem_stat: &'a DualPortMemStat,
     pub gc_stat: &'a GbgCollectorStat,
+    pub peak_workset_size: usize,
 }
 
 pub struct OurosCore {
     pub heap_size: usize,
+    cycle_ctr: u32,
+    peak_workset_size: usize,
+    free_from: usize,
     pub input: OurosCoreInput,
     pub dheap: DrfHeap,
     gc: GbgCollector,
@@ -96,6 +102,9 @@ impl OurosCore {
         let buffer_usage: bool = detail_lv >= DLV_BUFFER_USAGE;
         Self {
             heap_size,
+            cycle_ctr: 0,
+            peak_workset_size: 0,
+            free_from: prog.heap_img.len(),
             input: Default::default(),
             dheap: DrfHeap::new(heap_size)
                 .program(&prog.heap_img)
@@ -165,6 +174,7 @@ impl OurosCore {
             ],
             mem_stat: self.dheap.get_mem_stat(),
             gc_stat: self.gc.get_stat(),
+            peak_workset_size: self.peak_workset_size,
         }
     }
 }
@@ -438,6 +448,13 @@ impl HwModule for OurosCore {
                 || self.rings_dheap_b_0.found()
                 || self.rings_dheap_b_1.found();
         }
+
+        self.cycle_ctr += 1;
+        if self.cycle_ctr == 500 {
+            let work_set = traverse(&self.dheap.heap_mem.ram, self.heap_size, self.free_from);
+            self.peak_workset_size = max(work_set.len(), self.peak_workset_size);
+            self.cycle_ctr = 0;
+        }
     }
 
     fn tick_children(&mut self) {
@@ -475,6 +492,36 @@ impl HwModule for OurosCore {
         self.buffers_alu_2.tick();
         self.arbiter_alu.tick();
     }
+}
+
+///////////////////// helper function for heap graph traversal /////////////////////
+/// traverse the heap and return all reachable addrs from the roots
+fn traverse(ram: &Vec<App>, size: usize, free_from: usize) -> Vec<usize> {
+    let mut visited: Vec<bool> = vec![false; size];
+    let mut traverse_stk: Vec<usize> = Vec::new();
+    let mut res: Vec<usize> = Vec::new();
+
+    // push all roots
+    for i in 0..free_from {
+        traverse_stk.push(i);
+    }
+
+    while !traverse_stk.is_empty() {
+        let work_on = traverse_stk.pop().unwrap();
+        let app = &ram[work_on];
+        res.push(work_on);
+        for atm in app {
+            if is_ptr(atm) && !visited[get_ptr(atm)] {
+                // if get_ptr(atm) == 806 {
+                // println!("{} reachable from {}", get_ptr(atm), work_on);
+                // }
+                traverse_stk.push(get_ptr(atm));
+                visited[get_ptr(atm)] = true;
+            }
+        }
+    }
+
+    res
 }
 
 // /// Quickly test whether the machine terminates and produces
