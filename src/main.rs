@@ -371,7 +371,7 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
             let (c, gc_free_runtime) = simulate(&p, 0, BIG_HEAP, 0.0);
             let peak_workset = c.get_stat().peak_workset_size;
             // run several more rounds with different heap size
-            let points = [2.0, 5.0, 10.0, 20.0];
+            let points = [2.5, 5.0, 10.0, 20.0];
             let res = points.map(|pt| {
                 // println!(
                 //     "PEAK: {}; HEAP SIZE: {}",
