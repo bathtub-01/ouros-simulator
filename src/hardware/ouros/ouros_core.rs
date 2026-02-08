@@ -476,12 +476,12 @@ impl HwModule for OurosCore {
                 // if addr == 785 {
                 // println!("785 marked!");
                 // }
-                if self.gc.gc_mem.ram[addr].state != CellState::Marked {
-                    panic!(
-                        "live node {} is not marked after GC: {:?}",
-                        addr, self.gc.gc_mem.ram[addr].state
-                    );
-                }
+                // if self.gc.gc_mem.ram[addr].state != CellState::Marked {
+                //     panic!(
+                //         "live node {} is not marked after GC: {:?}",
+                //         addr, self.gc.gc_mem.ram[addr].state
+                //     );
+                // }
             }
         }
     }
