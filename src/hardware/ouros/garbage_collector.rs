@@ -86,7 +86,6 @@ pub struct GbgCollectorStat {
     pub immediate_reuse: u32,           // gain from one-bit ref count
     pub m_request_per_cycle: Vec<bool>, // mutator request
     pub gc_rounds: u32,
-    pub peak_workset_size: usize,
     pub mark_cycles: u32,
     pub mark_cycles_move: [u32; 6],
     pub cache_hit: u32,
@@ -794,16 +793,6 @@ impl HwModule for GbgCollector {
                 && self.reg_collector.input == CollectorState::ROOT
             {
                 self.stat.gc_rounds += 1;
-            } else if *self.reg_collector.value() == CollectorState::MARK
-                && self.reg_collector.input == CollectorState::SWEEP
-            {
-                let workset = self
-                    .gc_mem
-                    .ram
-                    .iter()
-                    .filter(|cell| cell.state == CellState::Marked)
-                    .count();
-                self.stat.peak_workset_size = max(workset, self.stat.peak_workset_size);
             }
         }
 

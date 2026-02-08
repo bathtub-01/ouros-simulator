@@ -1,5 +1,7 @@
 // Top level module of the Ouros core.
 
+use std::cmp::max;
+
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{Arbiter, Ring, FIFO};
@@ -52,10 +54,13 @@ pub struct OurosCoreStat<'a> {
     pub fifos_stat: [&'a FIFOStat; 13],
     pub mem_stat: &'a DualPortMemStat,
     pub gc_stat: &'a GbgCollectorStat,
+    pub peak_workset_size: usize,
 }
 
 pub struct OurosCore {
     pub heap_size: usize,
+    cycle_ctr: u32,
+    peak_workset_size: usize,
     free_from: usize,
     pub input: OurosCoreInput,
     pub dheap: DrfHeap,
@@ -100,6 +105,8 @@ impl OurosCore {
         let buffer_usage: bool = detail_lv >= DLV_BUFFER_USAGE;
         Self {
             heap_size,
+            cycle_ctr: 0,
+            peak_workset_size: 0,
             free_from: prog.heap_img.len(),
             input: Default::default(),
             dheap: DrfHeap::new(heap_size)
@@ -172,6 +179,7 @@ impl OurosCore {
             ],
             mem_stat: self.dheap.get_mem_stat(),
             gc_stat: self.gc.get_stat(),
+            peak_workset_size: self.peak_workset_size,
         }
     }
 }
@@ -466,23 +474,25 @@ impl HwModule for OurosCore {
                 || self.rings_dheap_b_0.found()
                 || self.rings_dheap_b_1.found();
         }
+
+        self.cycle_ctr += 1;
         // runtime checking: when a MARK finishes, check whether all reachable nodes are marked
-        if self.pre_collector == CollectorState::MARK
-            && *self.gc.reg_collector.value() == CollectorState::SWEEP
-        {
+        if self.cycle_ctr == 500 {
             let work_set = traverse(&self.dheap.heap_mem.ram, self.heap_size, self.free_from);
+            self.peak_workset_size = max(work_set.len(), self.peak_workset_size);
+            self.cycle_ctr = 0;
             // println!("work set size: {}", work_set.len());
-            for addr in work_set {
-                // if addr == 785 {
-                // println!("785 marked!");
-                // }
-                // if self.gc.gc_mem.ram[addr].state != CellState::Marked {
-                //     panic!(
-                //         "live node {} is not marked after GC: {:?}",
-                //         addr, self.gc.gc_mem.ram[addr].state
-                //     );
-                // }
-            }
+            // for addr in work_set {
+            //     // if addr == 785 {
+            //     // println!("785 marked!");
+            //     // }
+            //     // if self.gc.gc_mem.ram[addr].state != CellState::Marked {
+            //     //     panic!(
+            //     //         "live node {} is not marked after GC: {:?}",
+            //     //         addr, self.gc.gc_mem.ram[addr].state
+            //     //     );
+            //     // }
+            // }
         }
     }
 

@@ -193,8 +193,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     writeln!(
         log,
         "peak workset size: {} (heap size {:.2}x) | cycles on marking: {} ({:?})",
-        stats.gc_stat.peak_workset_size,
-        (HEAP_SIZE as f32) / (stats.gc_stat.peak_workset_size as f32),
+        stats.peak_workset_size,
+        (HEAP_SIZE as f32) / (stats.peak_workset_size as f32),
         stats.gc_stat.mark_cycles,
         stats.gc_stat.mark_cycles_move
     )?;
@@ -367,13 +367,11 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
         .par_iter()
         .progress_count(benchmarks.len() as u64)
         .map(|p| {
-            // run two tests to get gc free runtime and an approximate peak work set size
-            let (_, gc_free_runtime) = simulate(&p, 0, BIG_HEAP, 0.0);
-            // println!("GC FREE RUNTIME: {}", gc_free_runtime);
-            let (c, _) = simulate(&p, DLV_GC, HEAP_SIZE, GC_AT);
-            let peak_workset = c.get_stat().gc_stat.peak_workset_size;
+            // run a test to get gc free runtime and an approximate peak work set size
+            let (c, gc_free_runtime) = simulate(&p, 0, BIG_HEAP, 0.0);
+            let peak_workset = c.get_stat().peak_workset_size;
             // run several more rounds with different heap size
-            let points = [1.5, 2.0, 3.0, 5.0, 10.0];
+            let points = [2.0, 5.0, 10.0, 20.0];
             let res = points.map(|pt| {
                 // println!(
                 //     "PEAK: {}; HEAP SIZE: {}",
@@ -397,9 +395,7 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
                 .collect();
             let res_points: Vec<f32> = res
                 .iter()
-                .map(|(core, _)| {
-                    core.heap_size as f32 / (core.get_stat().gc_stat.peak_workset_size as f32)
-                })
+                .map(|(core, _)| core.heap_size as f32 / (core.get_stat().peak_workset_size as f32))
                 .collect();
             (res_gc_percent, res_max_pause, res_points, peak_workset)
         })
