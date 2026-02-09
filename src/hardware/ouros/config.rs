@@ -22,8 +22,7 @@ pub const CONSUMERS_REDUCER: usize = 7;
 pub const CONSUMERS_DHEAP: usize = 1;
 
 pub const GC_AT: f32 = 0.1; // start GC when freelist is shorter than this
-
-// pub const GC_THRESHOLD: usize = (HEAP_SIZE as f32 * GC_AT) as usize;
+pub const CACHE_SIZE: usize = 8;
 
 // system-wise setup, changing them will require also modifying the compiler
 pub const HOLES: usize = 6;

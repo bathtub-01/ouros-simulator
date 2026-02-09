@@ -3,7 +3,7 @@ use std::cmp::max;
 use crate::hardware::common::{DualPortMem, Register};
 use crate::hw_module::{HwInput, HwModule};
 
-use super::config::{APP_LENGTH, DLV_GC, MAX_THREADS};
+use super::config::{APP_LENGTH, CACHE_SIZE, DLV_GC, MAX_THREADS};
 use super::program::{get_ptr, is_ptr, ActiveApp, App, Atom};
 use std::collections::VecDeque;
 
@@ -29,6 +29,10 @@ impl<T: PartialEq> FixedFifo<T> {
 
     fn contains(&self, v: &T) -> bool {
         self.data.contains(v)
+    }
+
+    fn flush(&mut self) {
+        self.data = VecDeque::with_capacity(self.capacity);
     }
 }
 
@@ -149,7 +153,7 @@ impl GbgCollector {
             const_heap_size: heap_size,
             const_gc_at: gc_at,
             const_gc_threshold: (heap_size as f32 * gc_at) as usize,
-            gc_cache: FixedFifo::new(8),
+            gc_cache: FixedFifo::new(CACHE_SIZE),
             stat: Default::default(),
             stat_detail_lv: Default::default(),
         }
@@ -322,13 +326,19 @@ impl GbgCollector {
     /// stolen from `reducer.rs`
     fn more_ptr<const N: usize>(&self, app: &[Atom; N]) -> bool {
         let idx = *self.reg_app_idx.value() + 1;
-        app.into_iter().skip(idx as usize).any(|a| is_ptr(a))
+        app.into_iter()
+            .skip(idx as usize)
+            .any(|a| is_ptr(a) && !self.gc_cache.contains(&get_ptr(a)))
     }
 
     /// stolen from `reducer.rs`
     fn find_ptr<const N: usize>(&self, app: &[Atom; N]) -> usize {
         let idx = *self.reg_app_idx.value() + 1;
-        idx + app.iter().skip(idx).position(|a| is_ptr(a)).unwrap()
+        idx + app
+            .iter()
+            .skip(idx)
+            .position(|a| is_ptr(a) && !self.gc_cache.contains(&get_ptr(a)))
+            .unwrap()
     }
 
     fn mark_next(&mut self) {
@@ -342,6 +352,7 @@ impl GbgCollector {
     }
 
     fn mark_read(&mut self, addr: usize) {
+        // FIXME this doesn't make sense any more, how to track hit rate?
         if self.stat_detail_lv >= DLV_GC {
             if self.gc_cache.contains(&addr) {
                 self.stat.cache_hit += 1;
@@ -383,6 +394,7 @@ impl GbgCollector {
                 self.reg_collector.connect(&CollectorState::MARK);
                 self.reg_move.connect(&3);
                 self.reg_pre_gc.connect(&false);
+                self.gc_cache.flush();
 
                 // for i in 0..100 {
                 //     println!("brefore MARK, addr-{} is in {:?}", i, self.gc_mem.ram[i]);
@@ -411,7 +423,6 @@ impl GbgCollector {
                 self.reg_move.connect(&4);
                 let found = combined.iter().position(|atm| is_ptr(atm)).unwrap();
                 self.mark_read(get_ptr(&combined[found]));
-                // self.gc_mem.read_a(get_ptr(&combined[found]));
                 // self.gc_cache.push(get_ptr(&combined[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
@@ -447,7 +458,6 @@ impl GbgCollector {
             if self.more_ptr(&combined) {
                 let found = self.find_ptr(&combined);
                 self.mark_read(get_ptr(&combined[found]));
-                // self.gc_mem.read_a(get_ptr(&combined[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
             } else {
@@ -519,7 +529,6 @@ impl GbgCollector {
                 let found = in_app.iter().position(|atm| is_ptr(atm)).unwrap();
                 // println!("go to move-2, read on: {}", get_ptr(&in_app[found]));
                 self.mark_read(get_ptr(&in_app[found]));
-                // self.gc_mem.read_a(get_ptr(&in_app[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
                 self.stat.jump_move_12 += 1;
@@ -580,7 +589,6 @@ impl GbgCollector {
                     // read the next PTR
                     let found = self.find_ptr(current_app);
                     self.mark_read(get_ptr(&current_app[found]));
-                    // self.gc_mem.read_a(get_ptr(&current_app[found]));
                     self.reg_app_idx.connect(&found);
                     self.reg_pre_gc.connect(&true);
                     self.stat.jump_move_22 += 1;
