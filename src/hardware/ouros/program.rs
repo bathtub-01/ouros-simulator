@@ -72,6 +72,7 @@ pub type App = [Atom; APP_LENGTH];
 
 #[derive(Default, Clone, Debug)]
 pub struct ActiveApp {
+    pub snapshot_dirty: bool,
     pub stack_idx: u8,
     pub load: App,
 }

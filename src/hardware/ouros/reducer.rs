@@ -115,6 +115,7 @@ impl Reducer {
 
     pub fn spine_bits(&self) -> ActiveApp {
         ActiveApp {
+            snapshot_dirty: true,
             stack_idx: self.reg_in.value().stack_idx,
             load: {
                 if *self.reg_stm.value() == Stm::SPECIAL {

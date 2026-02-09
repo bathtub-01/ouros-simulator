@@ -58,12 +58,15 @@ fn compress(oapp: &Option<ActiveApp>) -> String {
     }
 }
 
-fn chunk_threads(threads: &Vec<(u8, u8)>, chunk_size: usize) -> Vec<(f32, f32)> {
+fn chunk_pairs<T>(threads: &Vec<(T, T)>, chunk_size: usize) -> Vec<(f32, f32)>
+where
+    T: Copy + Into<u32>,
+{
     threads
         .chunks(chunk_size)
         .map(|chunk| {
-            let occupied = chunk.iter().fold((0, 0), |(a, b), (c, d)| {
-                (a as u32 + *c as u32, b as u32 + *d as u32)
+            let occupied = chunk.iter().fold((0u32, 0u32), |(a, b), (c, d)| {
+                (a + (*c).into(), b + (*d).into())
             });
             (
                 occupied.0 as f32 / chunk.len() as f32,
@@ -72,6 +75,21 @@ fn chunk_threads(threads: &Vec<(u8, u8)>, chunk_size: usize) -> Vec<(f32, f32)> 
         })
         .collect()
 }
+
+// fn chunk_threads(threads: &Vec<(u8, u8)>, chunk_size: usize) -> Vec<(f32, f32)> {
+//     threads
+//         .chunks(chunk_size)
+//         .map(|chunk| {
+//             let occupied = chunk.iter().fold((0, 0), |(a, b), (c, d)| {
+//                 (a as u32 + *c as u32, b as u32 + *d as u32)
+//             });
+//             (
+//                 occupied.0 as f32 / chunk.len() as f32,
+//                 occupied.1 as f32 / chunk.len() as f32,
+//             )
+//         })
+//         .collect()
+// }
 
 fn chunk_rate(bpc: &Vec<bool>, chunk_size: usize) -> Vec<f32> {
     bpc.chunks(chunk_size)
@@ -118,6 +136,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let gc_mreq_rate_path = Path::new(DIR_SIMU_OUT).join("gc-mutator-requst-rate.csv");
     let buffer_util_path = Path::new(DIR_SIMU_OUT).join("buffer-util.csv");
     let stm_dist_path = Path::new(DIR_SIMU_OUT).join("stm-dist.csv");
+    let free_work_path = Path::new(DIR_SIMU_OUT).join("free-work.csv");
 
     fs::create_dir_all(DIR_SIMU_OUT)?;
 
@@ -128,6 +147,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut gc_mreq_rate = File::create(gc_mreq_rate_path)?;
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
+    let mut free_work = File::create(free_work_path)?;
 
     let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), HEAP_SIZE, GC_AT);
     let stats = ouros.get_stat();
@@ -252,10 +272,23 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let chunk_size = stats.dheap_stat.work_threads.len() / points_on_graph;
     // write thread stats
     writeln!(threads, "time,occupied,active")?;
-    let threads_data = chunk_threads(&stats.dheap_stat.work_threads, chunk_size);
+    let threads_data = chunk_pairs(&stats.dheap_stat.work_threads, chunk_size);
     for (i, t) in threads_data.iter().enumerate() {
         writeln!(
             threads,
+            "{},{},{}",
+            i * chunk_size + chunk_size / 2,
+            t.0,
+            t.1
+        )?;
+    }
+
+    // write free and work list length
+    writeln!(free_work, "time,freelist,worklist")?;
+    let free_work_data = chunk_pairs(&stats.gc_stat.len_per_cycle, chunk_size);
+    for (i, t) in free_work_data.iter().enumerate() {
+        writeln!(
+            free_work,
             "{},{},{}",
             i * chunk_size + chunk_size / 2,
             t.0,

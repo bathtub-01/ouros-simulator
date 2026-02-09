@@ -89,6 +89,7 @@ pub struct GbgCollectorStat {
     pub feedbacks_shadowed: u32,
     pub immediate_reuse: u32,           // gain from one-bit ref count
     pub m_request_per_cycle: Vec<bool>, // mutator request
+    pub len_per_cycle: Vec<(u32, u32)>,
     pub gc_rounds: u32,
     pub mark_cycles: u32,
     pub mark_cycles_move: [u32; 6],
@@ -802,6 +803,10 @@ impl HwModule for GbgCollector {
             {
                 self.stat.gc_rounds += 1;
             }
+            self.stat.len_per_cycle.push((
+                *self.reg_free_len.value() as u32,
+                *self.reg_work_len.value() as u32,
+            ));
         }
 
         // print!("collector: {:?}", self.reg_collector.value());

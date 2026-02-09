@@ -125,7 +125,7 @@ impl OurosCore {
             buffers_dealloc: FIFO::new(),
             buffers_free_addr: FIFO::new(),
             buffers_feedback: FIFO::new(),
-            buffers_snapshot: FIFO::new(),
+            buffers_snapshot: FIFO::new().record_stat(buffer_usage),
 
             buffers_dheap_a_0: FIFO::new().record_stat(buffer_usage),
             buffers_dheap_a_1: FIFO::new().record_stat(buffer_usage),
@@ -163,7 +163,8 @@ impl OurosCore {
             reducer_stat: self.reducer.get_stat(),
             alu_stat: self.alu.get_stat(),
             fifos_stat: [
-                self.buffers_alu_0.get_stat(),
+                // self.buffers_alu_0.get_stat(),
+                self.buffers_snapshot.get_stat(),
                 self.buffers_alu_1.get_stat(),
                 self.buffers_alu_2.get_stat(),
                 self.buffers_dheap_a_0.get_stat(),
@@ -299,10 +300,11 @@ impl HwModule for OurosCore {
             // }
             self.gc.input.snapshot_bits = snapshot;
 
+            let need_snapshot = !self.reducer.input.in_app.snapshot_dirty;
+            self.reducer.input.snapshot_ready = self.buffers_snapshot.in_ready() || !need_snapshot;
             self.buffers_snapshot.input.out_ready = self.gc.snapshot_ready();
-            self.buffers_snapshot.input.in_valid = self.reducer.in_fire();
+            self.buffers_snapshot.input.in_valid = self.reducer.in_fire() && need_snapshot;
             self.buffers_snapshot.input.din = self.reducer.input.in_app.load.clone();
-            self.reducer.input.snapshot_ready = self.buffers_snapshot.in_ready();
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();

@@ -541,6 +541,7 @@ impl DrfHeap {
     pub fn out_sub_bits(&self) -> ActiveApp {
         let load = extend_to_app(&self.input.port_b_bits.load);
         ActiveApp {
+            snapshot_dirty: false,
             stack_idx: self.find_dmder_stk(),
             load: dash_app(&load),
         }
@@ -910,6 +911,7 @@ impl DrfHeap {
 
     fn gen_active_app(&self, app: App) -> ActiveApp {
         ActiveApp {
+            snapshot_dirty: false,
             stack_idx: self.holder_in.value().stack_idx,
             load: app,
         }
@@ -1022,6 +1024,7 @@ impl DrfHeap {
     fn consume_next(&mut self) {
         let in_app = mask_seq(&self.input.port_a_bits.load);
         self.holder_in.connect(&ActiveApp {
+            snapshot_dirty: false,
             stack_idx: self.input.port_a_bits.stack_idx,
             load: in_app.clone(),
         });
@@ -1248,6 +1251,7 @@ impl HwModule for DrfHeap {
                 self.holder_out = (
                     true,
                     ActiveApp {
+                        snapshot_dirty: false,
                         stack_idx: 0,
                         load: self.heap_mem.dout_a().clone(),
                     },

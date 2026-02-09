@@ -63,6 +63,61 @@ plot <- ggplot(data_long, aes(x = time, y = value, color = metric)) +
 
 ggsave("simu-out/working-threads.pdf", width = 10, height = 5, units = "cm")
 
+
+# =========== PLOT FREELIST & WORKLIST LEN =============
+data <- read.csv("simu-out/free-work.csv", header = TRUE)
+
+# Reshape the data from wide to long format
+# This is crucial for plotting multiple lines with ggplot2
+data_long <- data %>%
+  pivot_longer(
+    cols = c(freelist, worklist), # Columns to pivot
+    names_to = "metric",                             # New column for original column names
+    values_to = "value"                              # New column for the values
+  )
+
+plot <- ggplot(data_long, aes(x = time, y = value, color = metric)) +
+  geom_line(linewidth = 0.5) + # Color aesthetic is now mapped to 'metric'
+  guides(color = guide_legend(position = "inside"))+
+  labs(
+    x = "Cycles",
+    y = "Length", # Changed y-axis label to be more generic for both metrics
+    title = "List Length Over Time",
+  ) +
+  scale_color_manual(
+    breaks = c("freelist", "worklist"), # Original column names
+    values = c("freelist" = "#5e81ac", "worklist" = "#bf616a"), # Custom colors for each line
+    labels = c("Free list", "Work list") # New, custom labels for the legend
+  ) +
+  theme(
+    plot.title = element_text(size = 12, hjust = 0.5),
+    axis.title = element_text(size = 10),
+    axis.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    panel.background = element_rect(fill = "white"),
+    axis.ticks.length = unit(-0.15, "cm"),
+    
+    # Legend inside plot with black border
+    legend.position.inside = c(0.65, 0.8),
+    legend.direction = "horizontal",  # Key change: horizontal layout
+    legend.box.just = "center",      # Centers items in the legend box
+    legend.text = element_text(size = 8, margin = margin(r = 1)),  # Smaller legend text
+    legend.background = element_rect(
+      color = "black",  # Black border
+      fill = alpha("white", 0.6),   # White background
+      linewidth = 0.3,   # Border thickness
+    ),
+
+    legend.margin = margin(1, 2, 1, 2),  # Tight internal padding (top,right,bottom,left)
+    
+    # Remove legend title
+    legend.title = element_blank(),
+  )
+
+ggsave("simu-out/free-work.pdf", width = 10, height = 5, units = "cm")
+
 # =========== PLOT BUSY RATES =============
 data1 <- read.csv("simu-out/red-rate.csv", header = TRUE)
 data2 <- read.csv("simu-out/alu-rate.csv", header = TRUE)

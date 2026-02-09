@@ -134,6 +134,7 @@ impl Alu {
         }
 
         ActiveApp {
+            snapshot_dirty: self.input.input_bits.snapshot_dirty,
             stack_idx: self.input.input_bits.stack_idx,
             load: {
                 let mut arr: App = Default::default();
