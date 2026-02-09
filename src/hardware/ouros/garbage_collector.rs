@@ -248,12 +248,45 @@ impl GbgCollector {
 
     pub fn read_heap_req_valid(&self) -> bool {
         *self.reg_collector.value() == CollectorState::MARK
-            && (*self.reg_move.value() == 0 || *self.reg_move.value() == 1)
+            && (*self.reg_move.value() == 0
+                || *self.reg_move.value() == 1
+                || *self.reg_move.value() == 2)
     }
 
     pub fn read_heap_req_addr(&self) -> usize {
         if *self.reg_move.value() == 0 {
             *self.reg_work_head.value()
+        } else if *self.reg_move.value() == 1
+            && self.input.heap_read_valid
+            && !self.mutator_request()
+        {
+            let in_app = &self.input.heap_read_bits;
+            if in_app.iter().any(|atm| is_ptr(atm)) {
+                0
+            } else {
+                if *self.reg_work_drawed.value() {
+                    self.gc_mem.dout_a().ptr
+                } else {
+                    *self.reg_work_head.value()
+                }
+            }
+        } else if *self.reg_move.value() == 2 && !self.mutator_request() {
+            let read_out = if *self.reg_pre_gc.value() {
+                self.gc_mem.dout_a()
+            } else {
+                self.reg_bk_reader.value()
+            };
+            let mark_this = read_out.state == CellState::Unmarked;
+            let current_app = self.reg_heap_reader.value();
+            if self.more_ptr(current_app) {
+                0
+            } else {
+                if mark_this {
+                    get_ptr(&current_app[*self.reg_app_idx.value()])
+                } else {
+                    *self.reg_work_head.value()
+                }
+            }
         } else {
             *self.reg_work_on.value()
         }
@@ -312,6 +345,31 @@ impl GbgCollector {
         }
         self.gc_mem.read_a(addr);
         self.gc_cache.push(addr);
+    }
+
+    fn consume_worklist(&mut self) {
+        if *self.reg_work_len.value() == 0 {
+            // pre read for SWEEP
+            self.reg_sweeper.connect(&0);
+            self.gc_mem.read_a(0);
+            self.reg_pre_gc.connect(&true);
+            self.reg_collector.connect(&CollectorState::SWEEP);
+        } else {
+            // this is the ONLY operation to reduce worklist length
+            let w_head: usize = if *self.reg_work_drawed.value() {
+                self.gc_mem.dout_a().ptr
+            } else {
+                *self.reg_work_head.value()
+            };
+            // println!("marking: {}", w_head);
+            self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
+            self.gc_cache.push(w_head);
+            self.reg_work_drawed.connect(&true); // next head will be read out by write_a
+            self.work_len_minus_one();
+            self.reg_work_on.connect(&w_head);
+            self.reg_move.connect(&1);
+            self.reg_app_idx.connect(&0);
+        }
     }
 
     fn step_idle(&mut self) {
@@ -418,28 +476,7 @@ impl GbgCollector {
 
         // ========== move-0 logic (pop a node from worklist) ==========
         if *self.reg_move.value() == 0 && !self.mutator_request() {
-            if *self.reg_work_len.value() == 0 {
-                // pre read for SWEEP
-                self.reg_sweeper.connect(&0);
-                self.gc_mem.read_a(0);
-                self.reg_pre_gc.connect(&true);
-                self.reg_collector.connect(&CollectorState::SWEEP);
-                // for i in 0..100 {
-                //     println!("MARK finished, addr-{} is in {:?}", i, self.gc_mem.ram[i]);
-                // }
-            } else {
-                // this is the ONLY operation to reduce worklist length
-                let w_head = *self.reg_work_head.value();
-                // println!("marking: {}", w_head);
-                self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
-                self.gc_cache.push(w_head);
-                self.reg_work_drawed.connect(&true); // next head will be read out by write_a
-                self.work_len_minus_one();
-                self.reg_work_on.connect(&w_head);
-                self.reg_move.connect(&1);
-                self.reg_app_idx.connect(&0);
-                self.stat.jump_move_01 += 1;
-            }
+            self.consume_worklist();
         }
 
         // ========== move-1 logic (wait until main heap read success) ==========
@@ -482,13 +519,10 @@ impl GbgCollector {
                 // self.gc_mem.read_a(get_ptr(&in_app[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
-                self.stat.jump_move_12 += 1;
             } else {
-                self.reg_move.connect(&0);
-                self.stat.jump_move_10 += 1;
+                self.reg_move.connect(&0); // TODO
+                self.consume_worklist();
             }
-        } else if *self.reg_move.value() == 1 && !self.mutator_request() {
-            self.stat.jump_move_11 += 1;
         }
 
         // ========== move-2 logic (push one, read one) ==========
@@ -512,7 +546,8 @@ impl GbgCollector {
             //     // .read_a(get_ptr(&current_app[*self.reg_app_idx.value()]));
             // }  else
             {
-                if read_out.state == CellState::Unmarked {
+                let mark_this = read_out.state == CellState::Unmarked;
+                if mark_this {
                     // push it to worklist
                     self.push_to_worklist(
                         get_ptr(&current_app[*self.reg_app_idx.value()]),
@@ -529,11 +564,37 @@ impl GbgCollector {
                     // self.gc_mem.read_a(get_ptr(&current_app[found]));
                     self.reg_app_idx.connect(&found);
                     self.reg_pre_gc.connect(&true);
-                    self.stat.jump_move_22 += 1;
                 } else {
                     // go back to move-0, handle the next worklist node
-                    self.reg_move.connect(&0);
-                    self.stat.jump_move_20 += 1;
+                    self.reg_move.connect(&0); // TODO
+                    if mark_this {
+                        let w_head = get_ptr(&current_app[*self.reg_app_idx.value()]);
+                        self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
+                        self.gc_mem.input.port_b.is_write = false;
+                        self.gc_cache.push(w_head);
+                        self.reg_work_head
+                            .connect(&self.reg_work_head.value().clone());
+                        self.reg_work_len
+                            .connect(&self.reg_work_len.value().clone());
+                        self.reg_work_on.connect(&w_head);
+                        self.reg_move.connect(&1);
+                        self.reg_app_idx.connect(&0);
+                    } else if *self.reg_work_len.value() == 0 {
+                        // pre read for SWEEP
+                        self.reg_sweeper.connect(&0);
+                        self.gc_mem.read_a(0);
+                        self.reg_pre_gc.connect(&true);
+                        self.reg_collector.connect(&CollectorState::SWEEP);
+                    } else {
+                        let w_head = *self.reg_work_head.value();
+                        self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
+                        self.gc_cache.push(w_head);
+                        self.reg_work_drawed.connect(&true); // next head will be read out by write_a
+                        self.work_len_minus_one();
+                        self.reg_work_on.connect(&w_head);
+                        self.reg_move.connect(&1);
+                        self.reg_app_idx.connect(&0);
+                    }
                 }
             }
         }
