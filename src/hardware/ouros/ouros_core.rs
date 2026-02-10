@@ -300,7 +300,8 @@ impl HwModule for OurosCore {
             // }
             self.gc.input.snapshot_bits = snapshot;
 
-            let need_snapshot = !self.reducer.input.in_app.snapshot_dirty;
+            let need_snapshot = !self.reducer.input.in_app.snapshot_dirty
+                && self.reducer.input.in_app.load.iter().any(|atm| is_ptr(atm));
             self.reducer.input.snapshot_ready = self.buffers_snapshot.in_ready() || !need_snapshot;
             self.buffers_snapshot.input.out_ready = self.gc.snapshot_ready();
             self.buffers_snapshot.input.in_valid = self.reducer.in_fire() && need_snapshot;
