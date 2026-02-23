@@ -75,6 +75,56 @@ impl<T: Clone + Default, const N: usize> HwModule for RArbiter<T, N> {
     }
 }
 
+/// N:1 priority arbiter, always grant access to ports at lower index.
+/// As this is mainly a combinatory circuit, always give the inputs before use its outputs.
+pub struct PArbiter<T: Clone + Default, const N: usize> {
+    pub input: ArbiterInput<T>,
+}
+
+impl<T: Clone + Default, const N: usize> PArbiter<T, N> {
+    pub fn new() -> Self {
+        Self {
+            input: ArbiterInput {
+                in_valid: vec![false; N],
+                in_bits: vec![T::default(); N],
+                out_ready: true,
+            },
+        }
+    }
+
+    pub fn in_ready(&self, n: usize, select: Option<usize>) -> bool {
+        if self.input.out_ready {
+            match select {
+                None => false,
+                Some(p) => p == n,
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn out_bits(&self, select: Option<usize>) -> Option<&T> {
+        match select {
+            None => None,
+            Some(p) => Some(&self.input.in_bits[p]),
+        }
+    }
+
+    pub fn out_valid(&self) -> bool {
+        self.input.in_valid.iter().any(|&x| x)
+    }
+
+    pub fn select(&self) -> Option<usize> {
+        self.input.in_valid.iter().position(|&vld| vld)
+    }
+}
+
+impl<T: Clone + Default, const N: usize> HwModule for PArbiter<T, N> {
+    // no local states to update
+    fn update_local(&mut self) {}
+    fn tick_children(&mut self) {}
+}
+
 #[test]
 fn arbiter_spec() {
     let mut arbiter: RArbiter<u32, 4> = RArbiter::new();

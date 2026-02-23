@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Combinators in this file: 106
+// Combinators in this file: 104
 #[rustfmt::skip]
 pub static SUMPUZ: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
@@ -59,22 +59,22 @@ pub static SUMPUZ: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp1
         vec![ // 10 
-            COM(1,145),
+            COM(1,141),
             PTR(11, false, false),
         ], 
         vec![ // 11 
-            COM(3,130),
-            COM(1,153),
+            COM(3,126),
+            COM(1,149),
         ], 
         // AExp2
         vec![ // 12 
-            COM(1,128),
-            COM(1,99),
+            COM(1,124),
+            COM(1,95),
         ], 
         // AExp3
         vec![ // 13 
             Y,
-            COM(3,40),
+            COM(3,38),
             INT(0),
         ], 
     ],
@@ -185,7 +185,7 @@ pub static SUMPUZ: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp12
         vec![ // 19 
-            COM(3,34),
+            COM(3,32),
             ARG(0, true),
             ARG(1, true),
             ARG(2, true),
@@ -228,240 +228,228 @@ pub static SUMPUZ: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp16
         vec![ // 27 
-            SEQ(false),
-            ARG(2, false),
+            COM(1,0),
+            COM(1,42),
             PTR(0, true, true),
         ], 
         vec![ // 28 
-            COM(4,95),
+            COM(4,91),
             ARG(0, true),
             ARG(1, true),
-            ARG(2, false),
+            ARG(2, true),
             COM(1,26),
         ], 
         // AExp17
         vec![ // 29 
-            COM(1,0),
-            COM(1,44),
+            COM(1,35),
+            PTR(1, true, true),
             PTR(0, true, true),
         ], 
         vec![ // 30 
             COM(3,27),
-            ARG(0, true),
-            ARG(1, true),
-            ARG(2, true),
-        ], 
-        // AExp18
-        vec![ // 31 
-            COM(1,37),
-            PTR(1, true, true),
-            PTR(0, true, true),
-        ], 
-        vec![ // 32 
-            COM(3,29),
             ARG(0, false),
             ARG(1, true),
             ARG(2, false),
         ], 
-        vec![ // 33 
+        vec![ // 31 
             COM(2,23),
             ARG(0, false),
             ARG(2, false),
         ], 
-        // AExp19
-        vec![ // 34 
-            COM(1,37),
+        // AExp18
+        vec![ // 32 
+            COM(1,35),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 35 
-            COM(3,31),
+        vec![ // 33 
+            COM(3,29),
             ARG(0, false),
             ARG(1, false),
             ARG(2, true),
         ], 
-        vec![ // 36 
+        vec![ // 34 
             COM(2,20),
             ARG(0, false),
             ARG(1, false),
         ], 
-        // AExp20
-        vec![ // 37 
+        // AExp19
+        vec![ // 35 
             ARG(0, true),
             COM(2,0),
         ], 
-        // AExp21
-        vec![ // 38 
+        // AExp20
+        vec![ // 36 
             ARG(0, true),
             PTR(0, true, true),
         ], 
-        vec![ // 39 
+        vec![ // 37 
             PRM(ADD,false),
             ARG(1, true),
             INT(1),
         ], 
-        // AExp22
-        vec![ // 40 
+        // AExp21
+        vec![ // 38 
             ARG(2, true),
             ARG(1, false),
             PTR(0, true, true),
         ], 
-        vec![ // 41 
-            COM(3,38),
+        vec![ // 39 
+            COM(3,36),
             ARG(0, true),
             ARG(1, false),
         ], 
-        // AExp23
-        vec![ // 42 
+        // AExp22
+        vec![ // 40 
             COM(2,0),
         ], 
-        // AExp24
-        vec![ // 43 
+        // AExp23
+        vec![ // 41 
             ARG(1, true),
             COM(2,1),
-            COM(2,42),
+            COM(2,40),
         ], 
-        // AExp25
-        vec![ // 44 
+        // AExp24
+        vec![ // 42 
             ARG(0, true),
             COM(2,0),
-            COM(2,43),
+            COM(2,41),
         ], 
-        // AExp26
-        vec![ // 45 
+        // AExp25
+        vec![ // 43 
             COM(4,3),
             PTR(0, true, true),
             COM(2,0),
         ], 
-        vec![ // 46 
-            COM(1,99),
+        vec![ // 44 
+            COM(1,95),
             ARG(0, true),
         ], 
-        // AExp27
-        vec![ // 47 
+        // AExp26
+        vec![ // 45 
             PRM(EQ,false),
             PTR(1, true, true),
             INT(0),
             COM(2,0),
             PTR(0, true, true),
         ], 
+        vec![ // 46 
+            COM(1,43),
+            ARG(0, false),
+        ], 
+        vec![ // 47 
+            COM(1,94),
+            ARG(0, false),
+        ], 
+        // AExp27
         vec![ // 48 
-            COM(1,45),
-            ARG(0, false),
-        ], 
-        vec![ // 49 
-            COM(1,98),
-            ARG(0, false),
-        ], 
-        // AExp28
-        vec![ // 50 
-            COM(3,110),
+            COM(3,106),
             ARG(1, true),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 51 
-            COM(1,99),
+        vec![ // 49 
+            COM(1,95),
             ARG(0, true),
         ], 
-        vec![ // 52 
+        vec![ // 50 
             COM(4,3),
             INT(1),
             COM(2,0),
         ], 
-        // AExp29
-        vec![ // 53 
+        // AExp28
+        vec![ // 51 
             PRM(EQ,false),
             PTR(1, true, true),
             INT(1),
             COM(2,0),
             PTR(0, true, true),
         ], 
-        vec![ // 54 
-            COM(2,50),
+        vec![ // 52 
+            COM(2,48),
             ARG(0, false),
             ARG(1, true),
         ], 
-        vec![ // 55 
-            COM(1,98),
+        vec![ // 53 
+            COM(1,94),
             ARG(0, false),
         ], 
-        // AExp30
-        vec![ // 56 
+        // AExp29
+        vec![ // 54 
             COM(2,0),
         ], 
-        // AExp31
-        vec![ // 57 
+        // AExp30
+        vec![ // 55 
             ARG(2, true),
             PTR(0, true, true),
-            COM(2,56),
+            COM(2,54),
         ], 
-        vec![ // 58 
-            COM(2,53),
+        vec![ // 56 
+            COM(2,51),
             ARG(0, true),
             ARG(1, true),
         ], 
-        // AExp32
-        vec![ // 59 
+        // AExp31
+        vec![ // 57 
             ARG(0, true),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
+        vec![ // 58 
+            COM(3,55),
+            ARG(1, false),
+        ], 
+        vec![ // 59 
+            COM(1,45),
+            ARG(1, false),
+        ], 
+        // AExp32
         vec![ // 60 
-            COM(3,57),
-            ARG(1, false),
-        ], 
-        vec![ // 61 
-            COM(1,47),
-            ARG(1, false),
-        ], 
-        // AExp33
-        vec![ // 62 
             COM(1,0),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 63 
-            COM(1,166),
+        vec![ // 61 
+            COM(1,162),
             ARG(1, true),
             ARG(4, true),
         ], 
-        vec![ // 64 
+        vec![ // 62 
             ARG(0, true),
             ARG(2, true),
             ARG(3, true),
             ARG(5, true),
             ARG(6, true),
         ], 
-        // AExp34
-        vec![ // 65 
-            COM(1,192),
+        // AExp33
+        vec![ // 63 
+            COM(1,188),
             PTR(2, true, true),
             ARG(3, true),
             PTR(1, true, true),
             ARG(5, true),
             PTR(0, true, true),
         ], 
-        vec![ // 66 
+        vec![ // 64 
             ARG(2, true),
             ARG(4, true),
             ARG(6, true),
         ], 
-        vec![ // 67 
-            COM(1,207),
+        vec![ // 65 
+            COM(1,203),
             ARG(1, true),
         ], 
-        vec![ // 68 
-            COM(1,98),
+        vec![ // 66 
+            COM(1,94),
             ARG(0, true),
         ], 
-        // AExp35
-        vec![ // 69 
-            COM(1,166),
+        // AExp34
+        vec![ // 67 
+            COM(1,162),
             PTR(0, true, true),
         ], 
-        vec![ // 70 
-            COM(7,65),
+        vec![ // 68 
+            COM(7,63),
             ARG(2, true),
             ARG(0, true),
             ARG(1, true),
@@ -470,793 +458,781 @@ pub static SUMPUZ: LazyLock<Program> = LazyLock::new(|| { Program {
             ARG(5, true),
             ARG(6, true),
         ], 
-        // AExp36
-        vec![ // 71 
-            COM(7,62),
+        // AExp35
+        vec![ // 69 
+            COM(7,60),
             PTR(1, true, true),
             ARG(1, true),
             ARG(5, false),
             ARG(6, false),
             PTR(0, true, true),
         ], 
-        vec![ // 72 
+        vec![ // 70 
             ARG(2, true),
             ARG(4, false),
             ARG(5, false),
             ARG(6, false),
         ], 
-        vec![ // 73 
-            COM(7,69),
+        vec![ // 71 
+            COM(7,67),
             ARG(3, true),
             ARG(0, true),
             ARG(4, false),
         ], 
+        // AExp36
+        vec![ // 72 
+            COM(4,91),
+            ARG(1, true),
+            PTR(0, true, true),
+        ], 
+        vec![ // 73 
+            COM(1,204),
+            ARG(0, true),
+        ], 
         // AExp37
         vec![ // 74 
-            COM(4,95),
-            ARG(1, true),
+            COM(3,106),
+            PTR(1, true, true),
             PTR(0, true, true),
         ], 
         vec![ // 75 
-            COM(1,208),
-            ARG(0, true),
-        ], 
-        // AExp38
-        vec![ // 76 
-            SEQ(false),
-            ARG(2, false),
-            PTR(0, true, true),
-        ], 
-        vec![ // 77 
-            COM(2,74),
-            ARG(0, true),
-            ARG(1, true),
-            ARG(2, false),
-        ], 
-        // AExp39
-        vec![ // 78 
-            COM(3,110),
-            PTR(1, true, true),
-            PTR(0, true, true),
-        ], 
-        vec![ // 79 
-            COM(2,213),
+            COM(2,209),
             ARG(0, true),
             INT(9),
         ], 
-        vec![ // 80 
-            COM(1,207),
+        vec![ // 76 
+            COM(1,203),
             ARG(1, true),
+        ], 
+        // AExp38
+        vec![ // 77 
+            COM(3,211),
+            PTR(0, true, true),
+            INT(1),
+            INT(0),
+        ], 
+        vec![ // 78 
+            COM(1,204),
+            ARG(0, true),
+        ], 
+        // AExp39
+        vec![ // 79 
+            COM(2,74),
+            PTR(0, true, true),
+            ARG(0, false),
+        ], 
+        vec![ // 80 
+            COM(1,77),
+            ARG(0, false),
         ], 
         // AExp40
         vec![ // 81 
-            COM(3,215),
-            PTR(0, true, true),
-            INT(1),
-            INT(0),
-        ], 
-        vec![ // 82 
-            COM(1,208),
-            ARG(0, true),
-        ], 
-        // AExp41
-        vec![ // 83 
-            COM(2,78),
-            PTR(0, true, true),
-            ARG(0, false),
-        ], 
-        vec![ // 84 
-            COM(1,81),
-            ARG(0, false),
-        ], 
-        // AExp42
-        vec![ // 85 
-            COM(2,213),
+            COM(2,209),
             PTR(0, true, true),
             INT(9),
         ], 
-        vec![ // 86 
-            COM(3,215),
+        vec![ // 82 
+            COM(3,211),
             ARG(0, true),
             INT(1),
             INT(0),
         ], 
-        // AExp43
-        vec![ // 87 
-            COM(3,110),
+        // AExp41
+        vec![ // 83 
+            COM(3,106),
             ARG(1, true),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 88 
-            COM(1,99),
+        vec![ // 84 
+            COM(1,95),
             ARG(0, true),
         ], 
-        vec![ // 89 
-            COM(1,85),
+        vec![ // 85 
+            COM(1,81),
             ARG(2, true),
         ], 
-        // AExp44
-        vec![ // 90 
-            COM(7,71),
+        // AExp42
+        vec![ // 86 
+            COM(7,69),
             PTR(1, true, true),
             PTR(0, true, true),
-            COM(3,87),
+            COM(3,83),
             ARG(0, false),
         ], 
-        vec![ // 91 
-            COM(1,83),
+        vec![ // 87 
+            COM(1,79),
             ARG(0, false),
         ], 
-        vec![ // 92 
-            COM(3,76),
+        vec![ // 88 
+            COM(2,72),
             ARG(0, false),
         ], 
-        // AExp45
-        vec![ // 93 
+        // AExp43
+        vec![ // 89 
             ARG(1, true),
             COM(2,0),
             PTR(0, true, true),
         ], 
-        vec![ // 94 
-            COM(1,90),
+        vec![ // 90 
+            COM(1,86),
             ARG(0, true),
             ARG(2, true),
             ARG(3, true),
             ARG(4, true),
+        ], 
+        // AExp44
+        vec![ // 91 
+            ARG(0, true),
+            PTR(1, true, true),
+            PTR(0, true, true),
+        ], 
+        vec![ // 92 
+            COM(5,89),
+            ARG(1, true),
+            ARG(2, false),
+            ARG(3, false),
+        ], 
+        vec![ // 93 
+            COM(2,57),
+            ARG(2, false),
+            ARG(3, false),
+        ], 
+        // AExp45
+        vec![ // 94 
+            ARG(0, true),
+            COM(2,0),
         ], 
         // AExp46
         vec![ // 95 
             ARG(0, true),
-            PTR(1, true, true),
-            PTR(0, true, true),
-        ], 
-        vec![ // 96 
-            COM(5,93),
-            ARG(1, true),
-            ARG(2, false),
-            ARG(3, false),
-        ], 
-        vec![ // 97 
-            COM(2,59),
-            ARG(2, false),
-            ARG(3, false),
-        ], 
-        // AExp47
-        vec![ // 98 
-            ARG(0, true),
-            COM(2,0),
-        ], 
-        // AExp48
-        vec![ // 99 
-            ARG(0, true),
             COM(2,1),
         ], 
-        // AExp49
-        vec![ // 100 
+        // AExp47
+        vec![ // 96 
             PTR(10, false, false),
             ARG(0, true),
             PTR(0, true, true),
         ], 
-        vec![ // 101 
+        vec![ // 97 
             PTR(12, false, false),
             ARG(1, true),
         ], 
-        // AExp50
-        vec![ // 102 
-            COM(2,137),
+        // AExp48
+        vec![ // 98 
+            COM(2,133),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 103 
-            COM(2,100),
+        vec![ // 99 
+            COM(2,96),
             ARG(1, true),
             ARG(2, true),
         ], 
-        vec![ // 104 
-            COM(1,139),
+        vec![ // 100 
+            COM(1,135),
             ARG(0, true),
         ], 
-        // AExp51
-        vec![ // 105 
-            COM(1,128),
+        // AExp49
+        vec![ // 101 
+            COM(1,124),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 106 
-            COM(3,102),
+        vec![ // 102 
+            COM(3,98),
             ARG(0, true),
             ARG(1, true),
             ARG(2, false),
         ], 
-        vec![ // 107 
-            COM(3,130),
+        vec![ // 103 
+            COM(3,126),
             COM(4,3),
+            ARG(2, false),
+        ], 
+        // AExp50
+        vec![ // 104 
+            COM(1,155),
+            ARG(2, true),
+            ARG(0, true),
+            COM(2,0),
+            PTR(0, true, true),
+        ], 
+        vec![ // 105 
+            COM(4,3),
+            ARG(1, true),
+            COM(2,0),
+        ], 
+        // AExp51
+        vec![ // 106 
+            COM(1,116),
+            ARG(0, false),
+            ARG(2, false),
+            PTR(1, true, true),
+            PTR(0, true, true),
+        ], 
+        vec![ // 107 
+            COM(3,104),
+            ARG(1, false),
+            ARG(2, false),
+        ], 
+        vec![ // 108 
+            COM(3,101),
+            ARG(0, false),
+            ARG(1, false),
             ARG(2, false),
         ], 
         // AExp52
-        vec![ // 108 
-            COM(1,159),
-            ARG(2, true),
-            ARG(0, true),
-            COM(2,0),
-            PTR(0, true, true),
-        ], 
         vec![ // 109 
-            COM(4,3),
-            ARG(1, true),
-            COM(2,0),
-        ], 
-        // AExp53
-        vec![ // 110 
-            COM(1,120),
-            ARG(0, false),
-            ARG(2, false),
-            PTR(1, true, true),
-            PTR(0, true, true),
-        ], 
-        vec![ // 111 
-            COM(3,108),
-            ARG(1, false),
-            ARG(2, false),
-        ], 
-        vec![ // 112 
-            COM(3,105),
-            ARG(0, false),
-            ARG(1, false),
-            ARG(2, false),
-        ], 
-        // AExp54
-        vec![ // 113 
             PRM(EQ,false),
             ARG(0, true),
             ARG(3, true),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 114 
-            COM(3,122),
+        vec![ // 110 
+            COM(3,118),
             ARG(4, true),
         ], 
-        vec![ // 115 
+        vec![ // 111 
             ARG(1, true),
             ARG(2, true),
         ], 
-        // AExp55
-        vec![ // 116 
+        // AExp53
+        vec![ // 112 
             ARG(2, true),
             PTR(0, true, true),
         ], 
-        vec![ // 117 
-            COM(5,113),
+        vec![ // 113 
+            COM(5,109),
             ARG(0, true),
             ARG(1, true),
             ARG(3, true),
+        ], 
+        // AExp54
+        vec![ // 114 
+            ARG(2, true),
+            COM(2,0),
+            PTR(0, true, true),
+        ], 
+        vec![ // 115 
+            COM(4,112),
+            ARG(0, true),
+            ARG(1, true),
+        ], 
+        // AExp55
+        vec![ // 116 
+            Y,
+            PTR(0, true, true),
+        ], 
+        vec![ // 117 
+            COM(3,114),
+            ARG(0, true),
         ], 
         // AExp56
         vec![ // 118 
             ARG(2, true),
-            COM(2,0),
-            PTR(0, true, true),
-        ], 
-        vec![ // 119 
-            COM(4,116),
             ARG(0, true),
-            ARG(1, true),
         ], 
         // AExp57
-        vec![ // 120 
-            Y,
+        vec![ // 119 
+            COM(4,3),
+            PTR(1, true, true),
             PTR(0, true, true),
         ], 
+        vec![ // 120 
+            ARG(1, true),
+            ARG(3, true),
+        ], 
         vec![ // 121 
-            COM(3,118),
             ARG(0, true),
+            ARG(2, true),
         ], 
         // AExp58
         vec![ // 122 
             ARG(2, true),
-            ARG(0, true),
-        ], 
-        // AExp59
-        vec![ // 123 
-            COM(4,3),
-            PTR(1, true, true),
+            COM(2,0),
             PTR(0, true, true),
         ], 
-        vec![ // 124 
+        vec![ // 123 
+            COM(4,119),
+            ARG(0, true),
             ARG(1, true),
-            ARG(3, true),
+        ], 
+        // AExp59
+        vec![ // 124 
+            Y,
+            PTR(0, true, true),
         ], 
         vec![ // 125 
+            COM(3,122),
             ARG(0, true),
-            ARG(2, true),
         ], 
         // AExp60
         vec![ // 126 
-            ARG(2, true),
-            COM(2,0),
-            PTR(0, true, true),
-        ], 
-        vec![ // 127 
-            COM(4,123),
             ARG(0, true),
+            ARG(2, true),
             ARG(1, true),
         ], 
         // AExp61
-        vec![ // 128 
-            Y,
-            PTR(0, true, true),
-        ], 
-        vec![ // 129 
-            COM(3,126),
+        vec![ // 127 
+            ARG(2, true),
             ARG(0, true),
+            ARG(1, true),
         ], 
         // AExp62
-        vec![ // 130 
-            ARG(0, true),
-            ARG(2, true),
-            ARG(1, true),
-        ], 
-        // AExp63
-        vec![ // 131 
-            ARG(2, true),
-            ARG(0, true),
-            ARG(1, true),
-        ], 
-        // AExp64
-        vec![ // 132 
+        vec![ // 128 
             COM(4,3),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 133 
-            COM(2,137),
+        vec![ // 129 
+            COM(2,133),
             ARG(1, true),
             ARG(3, true),
+        ], 
+        vec![ // 130 
+            COM(3,127),
+            ARG(0, true),
+            ARG(2, true),
+        ], 
+        // AExp63
+        vec![ // 131 
+            ARG(0, true),
+            COM(2,0),
+            PTR(0, true, true),
+        ], 
+        vec![ // 132 
+            COM(4,128),
+            ARG(1, true),
+            ARG(2, true),
+        ], 
+        // AExp64
+        vec![ // 133 
+            ARG(0, true),
+            COM(2,0),
+            PTR(0, true, true),
         ], 
         vec![ // 134 
             COM(3,131),
-            ARG(0, true),
-            ARG(2, true),
+            ARG(1, true),
         ], 
         // AExp65
         vec![ // 135 
-            ARG(0, true),
-            COM(2,0),
+            COM(4,3),
+            ARG(0, false),
             PTR(0, true, true),
         ], 
         vec![ // 136 
-            COM(4,132),
-            ARG(1, true),
-            ARG(2, true),
+            COM(1,135),
+            ARG(0, false),
         ], 
         // AExp66
         vec![ // 137 
-            ARG(0, true),
-            COM(2,0),
+            ARG(1, true),
             PTR(0, true, true),
         ], 
         vec![ // 138 
-            COM(3,135),
-            ARG(1, true),
+            ARG(0, true),
+            ARG(2, true),
+            ARG(3, true),
         ], 
         // AExp67
         vec![ // 139 
-            COM(4,3),
-            ARG(0, false),
+            ARG(3, true),
+            ARG(2, false),
             PTR(0, true, true),
         ], 
         vec![ // 140 
-            COM(1,139),
-            ARG(0, false),
+            COM(4,137),
+            ARG(0, true),
+            ARG(1, true),
+            ARG(2, false),
         ], 
         // AExp68
         vec![ // 141 
-            ARG(1, true),
-            PTR(0, true, true),
-        ], 
-        vec![ // 142 
-            ARG(0, true),
-            ARG(2, true),
-            ARG(3, true),
-        ], 
-        // AExp69
-        vec![ // 143 
-            ARG(3, true),
-            ARG(2, false),
-            PTR(0, true, true),
-        ], 
-        vec![ // 144 
-            COM(4,141),
-            ARG(0, true),
-            ARG(1, true),
-            ARG(2, false),
-        ], 
-        // AExp70
-        vec![ // 145 
             Y,
             PTR(0, true, true),
         ], 
-        vec![ // 146 
-            COM(4,143),
+        vec![ // 142 
+            COM(4,139),
             ARG(0, true),
         ], 
-        // AExp71
-        vec![ // 147 
+        // AExp69
+        vec![ // 143 
             COM(4,3),
             ARG(1, true),
             PTR(0, true, true),
         ], 
-        vec![ // 148 
+        vec![ // 144 
             ARG(0, true),
             ARG(2, true),
         ], 
-        // AExp72
-        vec![ // 149 
+        // AExp70
+        vec![ // 145 
             PRM(EQ,false),
             ARG(0, true),
             ARG(2, false),
             PTR(0, true, true),
             ARG(3, false),
         ], 
-        vec![ // 150 
-            COM(3,147),
+        vec![ // 146 
+            COM(3,143),
             ARG(1, true),
             ARG(2, false),
             ARG(3, false),
         ], 
-        // AExp73
-        vec![ // 151 
+        // AExp71
+        vec![ // 147 
             ARG(2, true),
             COM(2,0),
             PTR(0, true, true),
         ], 
-        vec![ // 152 
-            COM(4,149),
+        vec![ // 148 
+            COM(4,145),
             ARG(0, true),
             ARG(1, true),
         ], 
-        // AExp74
-        vec![ // 153 
+        // AExp72
+        vec![ // 149 
             Y,
             PTR(0, true, true),
         ], 
-        vec![ // 154 
-            COM(3,151),
+        vec![ // 150 
+            COM(3,147),
             ARG(0, true),
         ], 
-        // AExp75
-        vec![ // 155 
+        // AExp73
+        vec![ // 151 
             PRM(EQ,false),
             ARG(0, true),
             ARG(2, true),
             PTR(0, true, true),
             COM(2,1),
         ], 
-        vec![ // 156 
+        vec![ // 152 
             ARG(1, true),
             ARG(3, true),
+        ], 
+        // AExp74
+        vec![ // 153 
+            ARG(2, true),
+            COM(2,0),
+            PTR(0, true, true),
+        ], 
+        vec![ // 154 
+            COM(4,151),
+            ARG(0, true),
+            ARG(1, true),
+        ], 
+        // AExp75
+        vec![ // 155 
+            Y,
+            PTR(0, true, true),
+        ], 
+        vec![ // 156 
+            COM(3,153),
+            ARG(0, true),
         ], 
         // AExp76
         vec![ // 157 
-            ARG(2, true),
-            COM(2,0),
-            PTR(0, true, true),
-        ], 
-        vec![ // 158 
-            COM(4,155),
-            ARG(0, true),
-            ARG(1, true),
-        ], 
-        // AExp77
-        vec![ // 159 
-            Y,
-            PTR(0, true, true),
-        ], 
-        vec![ // 160 
-            COM(3,157),
-            ARG(0, true),
-        ], 
-        // AExp78
-        vec![ // 161 
-            COM(2,172),
+            COM(2,168),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 162 
+        vec![ // 158 
             ARG(1, true),
             ARG(3, true),
         ], 
-        vec![ // 163 
+        vec![ // 159 
             ARG(0, true),
             ARG(2, true),
         ], 
-        // AExp79
-        vec![ // 164 
+        // AExp77
+        vec![ // 160 
             ARG(2, true),
             COM(2,0),
             PTR(0, true, true),
         ], 
-        vec![ // 165 
-            COM(4,161),
+        vec![ // 161 
+            COM(4,157),
             ARG(0, true),
             ARG(1, true),
         ], 
-        // AExp80
-        vec![ // 166 
+        // AExp78
+        vec![ // 162 
             Y,
             PTR(0, true, true),
         ], 
-        vec![ // 167 
-            COM(3,164),
+        vec![ // 163 
+            COM(3,160),
             ARG(0, true),
         ], 
-        // AExp81
-        vec![ // 168 
+        // AExp79
+        vec![ // 164 
             COM(4,3),
             ARG(1, true),
             PTR(0, true, true),
         ], 
-        vec![ // 169 
+        vec![ // 165 
             ARG(0, true),
             ARG(2, true),
         ], 
-        // AExp82
-        vec![ // 170 
+        // AExp80
+        vec![ // 166 
             ARG(2, true),
             ARG(0, true),
             PTR(0, true, true),
         ], 
-        vec![ // 171 
-            COM(3,168),
+        vec![ // 167 
+            COM(3,164),
             ARG(1, true),
         ], 
-        // AExp83
-        vec![ // 172 
+        // AExp81
+        vec![ // 168 
             Y,
             PTR(0, true, true),
             ARG(0, true),
         ], 
-        vec![ // 173 
-            COM(3,170),
+        vec![ // 169 
+            COM(3,166),
             ARG(1, true),
         ], 
-        // AExp84
-        vec![ // 174 
+        // AExp82
+        vec![ // 170 
             ARG(0, true),
             ARG(4, true),
             ARG(5, true),
             ARG(6, false),
             PTR(0, true, true),
         ], 
-        vec![ // 175 
+        vec![ // 171 
             ARG(1, true),
             ARG(2, true),
             ARG(3, true),
             ARG(6, false),
         ], 
-        // AExp85
-        vec![ // 176 
-            COM(3,194),
+        // AExp83
+        vec![ // 172 
+            COM(3,190),
             ARG(0, true),
             PTR(0, true, true),
         ], 
-        vec![ // 177 
-            COM(1,98),
+        vec![ // 173 
+            COM(1,94),
             ARG(1, true),
         ], 
-        // AExp86
-        vec![ // 178 
+        // AExp84
+        vec![ // 174 
             COM(4,3),
             PTR(0, true, true),
             COM(2,0),
         ], 
-        vec![ // 179 
-            COM(1,99),
+        vec![ // 175 
+            COM(1,95),
             ARG(0, true),
         ], 
-        // AExp87
-        vec![ // 180 
-            COM(3,110),
+        // AExp85
+        vec![ // 176 
+            COM(3,106),
             ARG(0, true),
             PTR(0, true, true),
             ARG(1, true),
         ], 
-        vec![ // 181 
-            COM(1,178),
+        vec![ // 177 
+            COM(1,174),
             ARG(2, true),
         ], 
-        // AExp88
-        vec![ // 182 
-            COM(1,166),
+        // AExp86
+        vec![ // 178 
+            COM(1,162),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 183 
-            COM(3,180),
+        vec![ // 179 
+            COM(3,176),
             ARG(0, true),
             ARG(2, true),
             ARG(3, false),
         ], 
-        vec![ // 184 
-            COM(2,176),
+        vec![ // 180 
+            COM(2,172),
             ARG(1, true),
             ARG(3, false),
         ], 
-        // AExp89
-        vec![ // 185 
+        // AExp87
+        vec![ // 181 
             PRM(ADD,false),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 186 
-            COM(2,204),
+        vec![ // 182 
+            COM(2,200),
             ARG(2, false),
             ARG(1, true),
         ], 
-        vec![ // 187 
-            COM(2,204),
+        vec![ // 183 
+            COM(2,200),
             ARG(2, false),
             ARG(0, true),
+        ], 
+        // AExp88
+        vec![ // 184 
+            PRM(ADD,false),
+            PTR(0, true, true),
+            ARG(0, true),
+        ], 
+        vec![ // 185 
+            COM(3,181),
+            ARG(1, true),
+            ARG(2, true),
+            ARG(3, true),
+        ], 
+        // AExp89
+        vec![ // 186 
+            COM(1,197),
+            PTR(0, true, true),
+        ], 
+        vec![ // 187 
+            COM(4,184),
+            ARG(0, true),
+            ARG(1, true),
+            ARG(2, true),
+            ARG(3, true),
         ], 
         // AExp90
         vec![ // 188 
-            PRM(ADD,false),
+            COM(7,170),
+            COM(4,178),
             PTR(0, true, true),
-            ARG(0, true),
         ], 
         vec![ // 189 
-            COM(3,185),
-            ARG(1, true),
-            ARG(2, true),
-            ARG(3, true),
+            COM(4,186),
+            ARG(0, true),
         ], 
         // AExp91
         vec![ // 190 
-            COM(1,201),
+            ARG(0, true),
             PTR(0, true, true),
         ], 
         vec![ // 191 
-            COM(4,188),
-            ARG(0, true),
+            COM(3,127),
             ARG(1, true),
             ARG(2, true),
-            ARG(3, true),
         ], 
         // AExp92
         vec![ // 192 
-            COM(7,174),
-            COM(4,182),
+            ARG(2, true),
             PTR(0, true, true),
+            ARG(1, true),
         ], 
         vec![ // 193 
-            COM(4,190),
-            ARG(0, true),
-        ], 
-        // AExp93
-        vec![ // 194 
-            ARG(0, true),
-            PTR(0, true, true),
-        ], 
-        vec![ // 195 
-            COM(3,131),
-            ARG(1, true),
-            ARG(2, true),
-        ], 
-        // AExp94
-        vec![ // 196 
-            ARG(2, true),
-            PTR(0, true, true),
-            ARG(1, true),
-        ], 
-        vec![ // 197 
             PRM(ADD,false),
             ARG(0, true),
             INT(1),
         ], 
-        // AExp95
-        vec![ // 198 
-            COM(1,201),
+        // AExp93
+        vec![ // 194 
+            COM(1,197),
             PTR(0, true, true),
-            COM(3,196),
+            COM(3,192),
         ], 
-        vec![ // 199 
+        vec![ // 195 
             PRM(SUB,false),
             ARG(0, true),
             INT(10),
         ], 
-        // AExp96
-        vec![ // 200 
+        // AExp94
+        vec![ // 196 
             ARG(1, true),
             INT(0),
             ARG(0, true),
         ], 
-        // AExp97
-        vec![ // 201 
+        // AExp95
+        vec![ // 197 
             PRM(LE,false),
             ARG(0, false),
             INT(9),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 202 
-            COM(2,200),
+        vec![ // 198 
+            COM(2,196),
             ARG(0, false),
         ], 
-        vec![ // 203 
-            COM(1,198),
+        vec![ // 199 
+            COM(1,194),
             ARG(0, false),
         ], 
-        // AExp98
-        vec![ // 204 
-            COM(1,206),
+        // AExp96
+        vec![ // 200 
+            COM(1,202),
             PTR(0, true, true),
         ], 
-        vec![ // 205 
-            COM(1,120),
+        vec![ // 201 
+            COM(1,116),
             ARG(1, true),
             ARG(0, true),
         ], 
-        // AExp99
-        vec![ // 206 
+        // AExp97
+        vec![ // 202 
             ARG(0, true),
             ERR(4),
             COM(1,0),
         ], 
-        // AExp100
-        vec![ // 207 
+        // AExp98
+        vec![ // 203 
             ARG(0, true),
             ERR(3),
             COM(2,0),
         ], 
-        // AExp101
-        vec![ // 208 
+        // AExp99
+        vec![ // 204 
             ARG(0, true),
             COM(2,0),
             COM(2,1),
         ], 
-        // AExp102
-        vec![ // 209 
-            COM(2,213),
+        // AExp100
+        vec![ // 205 
+            COM(2,209),
             PTR(0, true, true),
         ], 
-        vec![ // 210 
+        vec![ // 206 
             PRM(ADD,false),
             ARG(0, true),
             INT(1),
         ], 
-        // AExp103
-        vec![ // 211 
+        // AExp101
+        vec![ // 207 
             COM(4,3),
             ARG(0, false),
             PTR(0, true, true),
         ], 
-        vec![ // 212 
-            COM(1,209),
+        vec![ // 208 
+            COM(1,205),
             ARG(0, false),
             ARG(1, true),
         ], 
-        // AExp104
-        vec![ // 213 
+        // AExp102
+        vec![ // 209 
             PRM(LE,false),
             ARG(0, false),
             ARG(1, false),
             COM(2,0),
             PTR(0, true, true),
         ], 
-        vec![ // 214 
-            COM(2,211),
+        vec![ // 210 
+            COM(2,207),
             ARG(0, false),
             ARG(1, false),
         ], 
-        // AExp105
-        vec![ // 215 
+        // AExp103
+        vec![ // 211 
             ARG(0, true),
             ARG(1, true),
             PTR(0, true, true),
         ], 
-        vec![ // 216 
+        vec![ // 212 
             COM(3,0),
             ARG(2, true),
         ], 

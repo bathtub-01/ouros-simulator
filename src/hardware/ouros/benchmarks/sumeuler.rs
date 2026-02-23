@@ -1,8 +1,8 @@
 use crate::hardware::ouros::program::{AluOp, Atom, Program};
 use std::sync::LazyLock;
 use AluOp::*;
-use Atom::*; 
- 
+use Atom::*;
+
 // Combinators in this file: 39
 #[rustfmt::skip]
 pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {

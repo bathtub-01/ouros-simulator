@@ -8,6 +8,7 @@ pub mod fifo;
 pub use fifo::FIFO;
 
 pub mod arbiter;
+pub use arbiter::PArbiter;
 pub use arbiter::RArbiter;
 
 pub mod stack;
