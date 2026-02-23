@@ -12,12 +12,12 @@ impl<T: Clone + Default> HwInput for ArbiterInput<T> {}
 
 /// N:1 round-robin arbiter. As this is mainly a combinatory circuit,
 /// always give the inputs before use its outputs.
-pub struct Arbiter<T: Clone + Default, const N: usize> {
+pub struct RArbiter<T: Clone + Default, const N: usize> {
     pub input: ArbiterInput<T>,
     priority: Register<usize>,
 }
 
-impl<T: Clone + Default, const N: usize> Arbiter<T, N> {
+impl<T: Clone + Default, const N: usize> RArbiter<T, N> {
     pub fn new() -> Self {
         Self {
             input: ArbiterInput {
@@ -62,7 +62,7 @@ impl<T: Clone + Default, const N: usize> Arbiter<T, N> {
     }
 }
 
-impl<T: Clone + Default, const N: usize> HwModule for Arbiter<T, N> {
+impl<T: Clone + Default, const N: usize> HwModule for RArbiter<T, N> {
     fn update_local(&mut self) {
         match self.select() {
             None => {}
@@ -77,7 +77,7 @@ impl<T: Clone + Default, const N: usize> HwModule for Arbiter<T, N> {
 
 #[test]
 fn arbiter_spec() {
-    let mut arbiter: Arbiter<u32, 4> = Arbiter::new();
+    let mut arbiter: RArbiter<u32, 4> = RArbiter::new();
 
     arbiter.tick();
 

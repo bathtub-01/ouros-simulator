@@ -4,7 +4,7 @@ use std::cmp::max;
 
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
-use crate::hardware::common::{Arbiter, Ring, FIFO};
+use crate::hardware::common::{RArbiter, Ring, FIFO};
 use crate::hw_module::{HwInput, HwModule};
 
 use super::addr_box::AddrBox;
@@ -76,11 +76,11 @@ pub struct OurosCore {
     buffers_dheap_a_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_dheap_a_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_dheap_a_3: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    arbiter_dheap_a: Arbiter<ActiveApp, 4>,
+    arbiter_dheap_a: RArbiter<ActiveApp, 4>,
 
     buffers_dheap_b_0: FIFO<FrozenApp, BUFFER_SIZE, true>,
     buffers_dheap_b_1: FIFO<FrozenApp, BUFFER_SIZE, true>,
-    arbiter_dheap_b: Arbiter<FrozenApp, 2>,
+    arbiter_dheap_b: RArbiter<FrozenApp, 2>,
 
     rings_dheap_b_0: Ring<usize, BUFFER_SIZE>,
     rings_dheap_b_1: Ring<usize, BUFFER_SIZE>,
@@ -89,12 +89,12 @@ pub struct OurosCore {
     buffers_reducer_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_reducer_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_reducer_3: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    arbiter_reducer: Arbiter<ActiveApp, 4>,
+    arbiter_reducer: RArbiter<ActiveApp, 4>,
 
     buffers_alu_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_alu_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
     buffers_alu_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    arbiter_alu: Arbiter<ActiveApp, 3>,
+    arbiter_alu: RArbiter<ActiveApp, 3>,
 }
 
 impl OurosCore {
@@ -126,11 +126,11 @@ impl OurosCore {
             buffers_dheap_a_1: FIFO::new().record_stat(buffer_usage),
             buffers_dheap_a_2: FIFO::new().record_stat(buffer_usage),
             buffers_dheap_a_3: FIFO::new().record_stat(buffer_usage),
-            arbiter_dheap_a: Arbiter::new(),
+            arbiter_dheap_a: RArbiter::new(),
 
             buffers_dheap_b_0: FIFO::new().record_stat(buffer_usage),
             buffers_dheap_b_1: FIFO::new().record_stat(buffer_usage),
-            arbiter_dheap_b: Arbiter::new(),
+            arbiter_dheap_b: RArbiter::new(),
 
             rings_dheap_b_0: Ring::new(),
             rings_dheap_b_1: Ring::new(),
@@ -139,12 +139,12 @@ impl OurosCore {
             buffers_reducer_1: FIFO::new().record_stat(buffer_usage),
             buffers_reducer_2: FIFO::new().record_stat(buffer_usage),
             buffers_reducer_3: FIFO::new().record_stat(buffer_usage),
-            arbiter_reducer: Arbiter::new(),
+            arbiter_reducer: RArbiter::new(),
 
             buffers_alu_0: FIFO::new().record_stat(buffer_usage),
             buffers_alu_1: FIFO::new().record_stat(buffer_usage),
             buffers_alu_2: FIFO::new().record_stat(buffer_usage),
-            arbiter_alu: Arbiter::new(),
+            arbiter_alu: RArbiter::new(),
         }
     }
 
@@ -191,7 +191,7 @@ fn assign_some<T: Clone>(sink: &mut T, source: Option<&T>) {
 /// Connect input buffers of the arbiter
 fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: bool>(
     buffers: [&mut FIFO<T, N, P>; A],
-    arbiter: &mut Arbiter<T, A>,
+    arbiter: &mut RArbiter<T, A>,
 ) {
     // first handle arbiter's inputs
     arbiter.input.link(|input| {
