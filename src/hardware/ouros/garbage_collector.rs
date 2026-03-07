@@ -117,7 +117,7 @@ pub struct GbgCollector {
     reg_move: Register<u8>,
     reg_work_on: Register<usize>, // to lock the worklist object for marking
     reg_app_idx: Register<usize>,
-    reg_monitors: Register<[App; MAX_THREADS]>,
+    reg_monitors: Register<[(bool, App); MAX_THREADS]>,
     const_sweep_from: usize,
     const_heap_size: usize,
     const_gc_at: f32,
@@ -400,7 +400,7 @@ impl GbgCollector {
             } else {
                 // go to MARK
                 self.reg_collector.connect(&CollectorState::MARK);
-                self.reg_move.connect(&3);
+                self.reg_move.connect(&0);
                 self.reg_pre_gc.connect(&false);
                 self.gc_cache.flush();
 
@@ -420,58 +420,6 @@ impl GbgCollector {
         self.reg_pre_gc.connect(&false);
         if *self.reg_pre_gc.value() {
             self.reg_bk_reader.connect(self.gc_mem.dout_a());
-        }
-
-        // ========== move-3 logic (pre read for move-4 ) ==========
-        if *self.reg_move.value() == 3 && !self.mutator_request() {
-            // println!("================ NEW GC ====================");
-            let combined: [Atom; MAX_THREADS * APP_LENGTH] =
-                self.reg_monitors.value().concat().try_into().unwrap();
-            if combined.iter().any(|atm| is_ptr(atm)) {
-                self.reg_move.connect(&4);
-                let found = combined.iter().position(|atm| is_ptr(atm)).unwrap();
-                self.mark_read(get_ptr(&combined[found]));
-                // self.gc_mem.read_a(get_ptr(&combined[found]));
-                // self.gc_cache.push(get_ptr(&combined[found]));
-                self.reg_app_idx.connect(&found);
-                self.reg_pre_gc.connect(&true);
-            } else {
-                self.reg_move.connect(&0);
-            }
-        }
-
-        // ========== move-4 logic (put all PTR in monitor regs into worklist) ==========
-        // FIXME might be rings! should do read one push one..
-        if *self.reg_move.value() == 4 && !self.mutator_request() {
-            let combined: [Atom; MAX_THREADS * APP_LENGTH] =
-                self.reg_monitors.value().concat().try_into().unwrap();
-            let read_out = if *self.reg_pre_gc.value() {
-                self.gc_mem.dout_a()
-            } else {
-                self.reg_bk_reader.value()
-            };
-            if read_out.state == CellState::Unmarked {
-                // push it to worklist
-                let to_push = get_ptr(&combined[*self.reg_app_idx.value()]);
-                self.push_to_worklist(to_push, *self.reg_work_head.value());
-                self.work_len_plus_one();
-                // println!(
-                //     "monitor pushed: {} into worklist; sweep from: {}",
-                //     to_push, self.const_sweep_from,
-                // );
-                assert!(to_push >= self.const_sweep_from);
-            }
-            // assert!(read_out.state != CellState::WorkList);
-
-            if self.more_ptr(&combined) {
-                let found = self.find_ptr(&combined);
-                self.mark_read(get_ptr(&combined[found]));
-                // self.gc_mem.read_a(get_ptr(&combined[found]));
-                self.reg_app_idx.connect(&found);
-                self.reg_pre_gc.connect(&true);
-            } else {
-                self.reg_move.connect(&0);
-            }
         }
 
         // ========== move-0 logic (pop a node from worklist) ==========
@@ -520,7 +468,6 @@ impl GbgCollector {
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
             } else {
-                self.reg_move.connect(&0); // TODO
                 self.consume_worklist();
             }
         }
@@ -533,68 +480,63 @@ impl GbgCollector {
                 self.reg_bk_reader.value()
             };
             let current_app = self.reg_heap_reader.value();
-            // NOTE For snapshot version, should also allow FreeList here, as feedback might not arrived yet
-            // NO, in snapshot version we can simply let feedback Mark it
-            // if read_out.state == CellState::FreeList {
-            //     println!(
-            //         "*************** cell {} occur in FreeList, should wait here**************",
-            //         get_ptr(&current_app[*self.reg_app_idx.value()]),
-            //     );
-            //     // for safety, GC needs to wait here, until feedback arrives
-            //     // self.reg_pre_gc.connect(&true);
-            //     // self.gc_mem
-            //     // .read_a(get_ptr(&current_app[*self.reg_app_idx.value()]));
-            // }  else
-            {
-                let mark_this = read_out.state == CellState::Unmarked;
-                if mark_this {
-                    // push it to worklist
-                    self.push_to_worklist(
-                        get_ptr(&current_app[*self.reg_app_idx.value()]),
-                        *self.reg_work_head.value(),
-                    );
-                    self.work_len_plus_one();
-                }
+            let mark_this = read_out.state == CellState::Unmarked;
+            if mark_this {
+                // push it to worklist
+                self.push_to_worklist(
+                    get_ptr(&current_app[*self.reg_app_idx.value()]),
+                    *self.reg_work_head.value(),
+                );
+                self.work_len_plus_one();
+            }
 
-                let current_app = self.reg_heap_reader.value();
-                if self.more_ptr(current_app) {
-                    // read the next PTR
-                    let found = self.find_ptr(current_app);
-                    self.mark_read(get_ptr(&current_app[found]));
-                    // self.gc_mem.read_a(get_ptr(&current_app[found]));
-                    self.reg_app_idx.connect(&found);
+            let current_app = self.reg_heap_reader.value();
+            if self.more_ptr(current_app) {
+                // read the next PTR
+                let found = self.find_ptr(current_app);
+                self.mark_read(get_ptr(&current_app[found]));
+                // self.gc_mem.read_a(get_ptr(&current_app[found]));
+                self.reg_app_idx.connect(&found);
+                self.reg_pre_gc.connect(&true);
+            } else if self.reg_monitors.value().iter().any(|r| r.0) {
+                // if there is a monitor yet to be handled, put it in reader and use move-2 logic
+                let pick_monitor = self.reg_monitors.value().iter().position(|r| r.0).unwrap();
+                self.reg_monitors.input[pick_monitor].0 = false;
+                let monitor_app = &self.reg_monitors.input[pick_monitor].1;
+                self.reg_pre_gc.connect(&false);
+                self.reg_bk_reader.connect(&no_ptr_cell(CellState::Marked));
+                self.reg_heap_reader.connect(monitor_app);
+                self.reg_app_idx.connect(&0);
+                self.reg_move.connect(&2);
+            } else {
+                // go back to move-0, handle the next worklist node
+                if mark_this {
+                    let w_head = get_ptr(&current_app[*self.reg_app_idx.value()]);
+                    self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
+                    self.gc_mem.input.port_b.is_write = false;
+                    self.gc_cache.push(w_head);
+                    self.reg_work_head
+                        .connect(&self.reg_work_head.value().clone());
+                    self.reg_work_len
+                        .connect(&self.reg_work_len.value().clone());
+                    self.reg_work_on.connect(&w_head);
+                    self.reg_move.connect(&1);
+                    self.reg_app_idx.connect(&0);
+                } else if *self.reg_work_len.value() == 0 {
+                    // pre read for SWEEP
+                    self.reg_sweeper.connect(&0);
+                    self.gc_mem.read_a(0);
                     self.reg_pre_gc.connect(&true);
+                    self.reg_collector.connect(&CollectorState::SWEEP);
                 } else {
-                    // go back to move-0, handle the next worklist node
-                    self.reg_move.connect(&0); // TODO
-                    if mark_this {
-                        let w_head = get_ptr(&current_app[*self.reg_app_idx.value()]);
-                        self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
-                        self.gc_mem.input.port_b.is_write = false;
-                        self.gc_cache.push(w_head);
-                        self.reg_work_head
-                            .connect(&self.reg_work_head.value().clone());
-                        self.reg_work_len
-                            .connect(&self.reg_work_len.value().clone());
-                        self.reg_work_on.connect(&w_head);
-                        self.reg_move.connect(&1);
-                        self.reg_app_idx.connect(&0);
-                    } else if *self.reg_work_len.value() == 0 {
-                        // pre read for SWEEP
-                        self.reg_sweeper.connect(&0);
-                        self.gc_mem.read_a(0);
-                        self.reg_pre_gc.connect(&true);
-                        self.reg_collector.connect(&CollectorState::SWEEP);
-                    } else {
-                        let w_head = *self.reg_work_head.value();
-                        self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
-                        self.gc_cache.push(w_head);
-                        self.reg_work_drawed.connect(&true); // next head will be read out by write_a
-                        self.work_len_minus_one();
-                        self.reg_work_on.connect(&w_head);
-                        self.reg_move.connect(&1);
-                        self.reg_app_idx.connect(&0);
-                    }
+                    let w_head = *self.reg_work_head.value();
+                    self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
+                    self.gc_cache.push(w_head);
+                    self.reg_work_drawed.connect(&true); // next head will be read out by write_a
+                    self.work_len_minus_one();
+                    self.reg_work_on.connect(&w_head);
+                    self.reg_move.connect(&1);
+                    self.reg_app_idx.connect(&0);
                 }
             }
         }
@@ -667,7 +609,7 @@ impl HwModule for GbgCollector {
     fn update_local(&mut self) {
         if *self.reg_collector.value() != CollectorState::MARK && self.input.monitor_valid {
             self.reg_monitors.input[self.input.monitor_bits.stack_idx as usize] =
-                self.input.monitor_bits.load.clone();
+                (true, self.input.monitor_bits.load.clone());
         }
 
         let real_freelist_head: usize = if *self.reg_free_drawed.value() {
