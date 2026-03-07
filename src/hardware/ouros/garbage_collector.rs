@@ -74,7 +74,7 @@ pub struct GbgCollectorInput {
     pub addr_out_ready: bool,
     pub heap_read_bits: App,
     pub heap_read_valid: bool,
-    pub monitor_valid: bool,
+    pub monitor_valid: bool, // FIXME should clear monitors when a thread ends
     pub monitor_bits: ActiveApp,
 }
 

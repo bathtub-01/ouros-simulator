@@ -43,8 +43,7 @@ impl AddrBox {
             .iter()
             .take(CONSUMERS_REDUCER)
             .zip(self.input.addr_consume)
-            .map(|(reg, csm)| reg.value().0 && csm)
-            .any(|b| b)
+            .any(|(reg, csm)| reg.value().0 && csm)
     }
 
     /// whether a slot can consume the free addr from upper stream in this cycle
