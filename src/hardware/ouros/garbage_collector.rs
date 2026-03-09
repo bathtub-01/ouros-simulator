@@ -74,7 +74,7 @@ pub struct GbgCollectorInput {
     pub addr_out_ready: bool,
     pub heap_read_bits: App,
     pub heap_read_valid: bool,
-    pub monitor_valid: bool, // FIXME should clear monitors when a thread ends
+    pub monitor_valid: bool,
     pub monitor_bits: ActiveApp,
 }
 
@@ -248,9 +248,6 @@ impl GbgCollector {
 
     pub fn read_heap_req_valid(&self) -> bool {
         *self.reg_collector.value() == CollectorState::MARK
-            && (*self.reg_move.value() == 0
-                || *self.reg_move.value() == 1
-                || *self.reg_move.value() == 2)
     }
 
     pub fn read_heap_req_addr(&self) -> usize {
@@ -428,6 +425,7 @@ impl GbgCollector {
         }
 
         // ========== move-1 logic (wait until main heap read success) ==========
+        // TODO heap read does not have to sync with no-mutator-req
         if *self.reg_move.value() == 1 && self.input.heap_read_valid && !self.mutator_request() {
             // println!(
             //     // useful MARK log
@@ -640,42 +638,25 @@ impl HwModule for GbgCollector {
         self.reg_work_drawed.connect(&false);
         self.reg_work_head.connect(&real_worklist_head);
 
-        match (self.deallocate_fire(), self.addr_out_fire()) {
-            (true, false)
-                if *self.reg_collector.value() != CollectorState::MARK
-                    && self.input.deallocate_bits != *self.reg_sweeper.value() =>
-            {
-                // if self.input.deallocate_bits == 16 {
-                //     println!(
-                //         "deallocate: put {} into FreeList, state: {:?}",
-                //         self.input.deallocate_bits,
-                //         *self.reg_collector.value()
-                //     );
-                // }
+        let can_dealloc = *self.reg_collector.value() != CollectorState::MARK
+            && self.input.deallocate_bits != *self.reg_sweeper.value();
+
+        if self.deallocate_fire() && can_dealloc {
+            if self.addr_out_fire() {
+                self.gc_mem
+                    .write_a(self.input.deallocate_bits, no_ptr_cell(CellState::FreeList));
+            } else {
                 self.push_to_freelist(self.input.deallocate_bits, real_freelist_head, true);
                 self.free_len_plus_one();
             }
-            (false, true) => {
+        } else {
+            if self.addr_out_fire() {
                 self.reg_free_drawed.connect(&true);
                 self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
-                self.free_len_minus_one(); // a bit strange..
+                self.free_len_minus_one();
+            } else {
+                /* nothing to do */
             }
-            (true, true)
-                if *self.reg_collector.value() == CollectorState::MARK
-                    || self.input.deallocate_bits == *self.reg_sweeper.value() =>
-            {
-                self.reg_free_drawed.connect(&true);
-                self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
-                self.free_len_minus_one(); // a bit strange..
-            }
-            (true, true)
-                if *self.reg_collector.value() != CollectorState::MARK
-                    && self.input.deallocate_bits != *self.reg_sweeper.value() =>
-            {
-                self.gc_mem
-                    .write_a(self.input.deallocate_bits, no_ptr_cell(CellState::FreeList));
-            }
-            _ => { /* do nothing as addr-out can take deallocated addrs*/ }
         }
 
         if self.feedback_fire() {
