@@ -268,7 +268,7 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
         (vec_to_app(res_v), None)
     } else {
         let mut wb_app = res_v[APP_LENGTH..res_v.len()].to_vec();
-        wb_app.insert(0, Atom::PTR(free_addr, unique, false)); // FIXME unique should be true
+        wb_app.insert(0, Atom::PTR(free_addr, true, false));
         (
             vec_to_app(wb_app),
             Some(vec_to_app(res_v[0..APP_LENGTH].to_vec())),

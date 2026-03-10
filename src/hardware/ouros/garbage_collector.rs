@@ -92,6 +92,8 @@ pub struct GbgCollectorStat {
     pub mark_cycles_move: [u32; 5],
     pub cache_hit: u32,
     pub cache_miss: u32,
+    pub free_len: Vec<usize>,
+    pub work_len: Vec<usize>,
     pub jump_move_01: u32,
     pub jump_move_10: u32,
     pub jump_move_11: u32,
@@ -341,7 +343,7 @@ impl GbgCollector {
             }
         }
         self.gc_mem.read_a(addr);
-        self.gc_cache.push(addr);
+        // self.gc_cache.push(addr);
     }
 
     fn consume_worklist(&mut self) {
@@ -360,7 +362,7 @@ impl GbgCollector {
             };
             // println!("marking: {}", w_head);
             self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
-            self.gc_cache.push(w_head);
+            // self.gc_cache.push(w_head);
             self.reg_work_drawed.connect(&true); // next head will be read out by write_a
             self.work_len_minus_one();
             self.reg_work_on.connect(&w_head);
@@ -512,7 +514,7 @@ impl GbgCollector {
                     let w_head = get_ptr(&current_app[*self.reg_app_idx.value()]);
                     self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
                     self.gc_mem.input.port_b.is_write = false;
-                    self.gc_cache.push(w_head);
+                    // self.gc_cache.push(w_head);
                     self.reg_work_head
                         .connect(&self.reg_work_head.value().clone());
                     self.reg_work_len
@@ -529,7 +531,7 @@ impl GbgCollector {
                 } else {
                     let w_head = *self.reg_work_head.value();
                     self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
-                    self.gc_cache.push(w_head);
+                    // self.gc_cache.push(w_head);
                     self.reg_work_drawed.connect(&true); // next head will be read out by write_a
                     self.work_len_minus_one();
                     self.reg_work_on.connect(&w_head);
@@ -559,6 +561,7 @@ impl GbgCollector {
             //     println!("sweep on 156: {:?}", self.gc_mem.ram[156]);
             // }
 
+            // NOTE all cells below const_mark_from will be marked due to ROOT
             if read_out.state == CellState::Marked {
                 // recover as Unmarked
                 // self.gc_mem
@@ -568,9 +571,7 @@ impl GbgCollector {
                 // if *self.reg_sweeper.value() == 156 {
                 //     println!("recover 156 as Unmarked");
                 // }
-            } else if read_out.state == CellState::Unmarked
-                && *self.reg_sweeper.value() >= self.const_sweep_from
-            {
+            } else if read_out.state == CellState::Unmarked {
                 // push it to freelist
                 let old_head: usize = if *self.reg_free_drawed.value() {
                     self.gc_mem.dout_a().ptr
@@ -773,6 +774,9 @@ impl HwModule for GbgCollector {
             }
 
             self.stat.m_request_per_cycle.push(self.mutator_request());
+
+            self.stat.free_len.push(*self.reg_free_len.value());
+            self.stat.work_len.push(*self.reg_work_len.value());
         }
     }
 

@@ -238,13 +238,14 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     {
         writeln!(
             log,
-            "{} dheap[{}-{}]: {} reducer: {} alu: {}",
+            "{} dheap[{}-{}]: {} reducer: {} alu: {} | freelist len: {}",
             i,
             s.3,
             s.4,
             compress(s.0),
             compress(s.1),
-            compress(s.2)
+            compress(s.2),
+            stats.gc_stat.free_len[i]
         )?;
     }
 
@@ -422,7 +423,7 @@ fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let progs = benchmarks!(
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
+        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, /*TREEPARI, TREESUM,*/ TRIBELIE, WHILEX,
     ); // ignoring TREESUM as it does not have much garbage..
 
     if args.len() == 1 {
