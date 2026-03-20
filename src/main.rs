@@ -31,8 +31,10 @@ fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (Our
     ouros.input.start = false;
 
     loop {
-        assert!(cycle < 1_000_000);
-        if ouros.done() || cycle == 1_000_000 {
+        assert!(cycle < 4_000_000_000);
+        if ouros.done()
+        // || cycle == 1_000_000
+        {
             break;
         }
         ouros.tick();
@@ -115,6 +117,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let threads_path = Path::new(DIR_SIMU_OUT).join("threads.csv");
     let red_rate_path = Path::new(DIR_SIMU_OUT).join("red-rate.csv");
     let alu_rate_path = Path::new(DIR_SIMU_OUT).join("alu-rate.csv");
+    let dhp_rate_path = Path::new(DIR_SIMU_OUT).join("dhp-rate.csv");
     let gc_mreq_rate_path = Path::new(DIR_SIMU_OUT).join("gc-mutator-requst-rate.csv");
     let buffer_util_path = Path::new(DIR_SIMU_OUT).join("buffer-util.csv");
     let stm_dist_path = Path::new(DIR_SIMU_OUT).join("stm-dist.csv");
@@ -125,11 +128,12 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut threads = File::create(threads_path)?;
     let mut red_rate = File::create(red_rate_path)?;
     let mut alu_rate = File::create(alu_rate_path)?;
+    let mut dhp_rate = File::create(dhp_rate_path)?;
     let mut gc_mreq_rate = File::create(gc_mreq_rate_path)?;
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), HEAP_SIZE, GC_AT);
+    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), BIG_HEAP, GC_AT);
     let stats = ouros.get_stat();
 
     println!(
@@ -141,8 +145,14 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     writeln!(log, "==================== SUMMARY =====================")?;
     writeln!(
         log,
-        "     Simulation done! Cycles consumed: {}",
-        runtime_cycles
+        "     Simulation done! Cycles consumed: {}, Avg. threads: {}",
+        runtime_cycles,
+        stats
+            .dheap_stat
+            .work_threads
+            .iter()
+            .fold(0 as f64, |acc, e| acc + e.1 as f64)
+            / stats.dheap_stat.work_threads.len() as f64
     )?;
     writeln!(
         log,
@@ -207,22 +217,6 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         stats.gc_stat.cache_hit, percent_of(stats.gc_stat.cache_hit, gc_mark_reads),
         stats.gc_stat.cache_miss, percent_of(stats.gc_stat.cache_miss, gc_mark_reads),
     )?;
-    let jump_move_sum = stats.gc_stat.jump_move_01
-        + stats.gc_stat.jump_move_10
-        + stats.gc_stat.jump_move_11
-        + stats.gc_stat.jump_move_12
-        + stats.gc_stat.jump_move_22
-        + stats.gc_stat.jump_move_20;
-    writeln!(
-        log,
-        "mark moves | 01: {} ({:.2}%) | 10: {} ({:.2}%) | 11: {} ({:.2}%) | 12: {} ({:.2}%) | 22: {} ({:.2}%) | 20: {} ({:.2}%)",
-        stats.gc_stat.jump_move_01, percent_of(stats.gc_stat.jump_move_01, jump_move_sum),
-        stats.gc_stat.jump_move_10, percent_of(stats.gc_stat.jump_move_10, jump_move_sum),
-        stats.gc_stat.jump_move_11, percent_of(stats.gc_stat.jump_move_11, jump_move_sum),
-        stats.gc_stat.jump_move_12, percent_of(stats.gc_stat.jump_move_12, jump_move_sum),
-        stats.gc_stat.jump_move_22, percent_of(stats.gc_stat.jump_move_22, jump_move_sum),
-        stats.gc_stat.jump_move_20, percent_of(stats.gc_stat.jump_move_20, jump_move_sum),
-    )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 
     for (i, s) in stats
@@ -270,6 +264,9 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
 
     let alu_rate_data: Vec<f32> = chunk_rate(&stats.alu_stat.busy_per_cycle, chunk_size);
     write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)?;
+
+    let dhp_rate_data: Vec<f32> = chunk_rate(&stats.dheap_stat.busy_per_cycle, chunk_size);
+    write_busy_rate(&mut dhp_rate, &dhp_rate_data, chunk_size)?;
 
     let gc_mreq_rate_data: Vec<f32> = chunk_rate(&stats.gc_stat.m_request_per_cycle, chunk_size);
     write_busy_rate(&mut gc_mreq_rate, &gc_mreq_rate_data, chunk_size)?;
@@ -321,20 +318,51 @@ macro_rules! benchmarks {
     }};
 }
 
+const DIR_SIMU_OUT_ALL: &str = "simu-out/all/";
+
 /// run the benchmark suite with less stat details
-fn run_benchmarks(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
+fn run_benchmarks(
+    progs: HashMap<&str, &LazyLock<Program>>,
+    is_big_prog: bool,
+) -> std::io::Result<()> {
+    let cycle_path = Path::new(DIR_SIMU_OUT_ALL).join("cycles.csv");
+    fs::create_dir_all(DIR_SIMU_OUT_ALL)?;
+    let mut cycle_file = File::create(cycle_path)?;
+
     let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
     vec.sort_by_key(|(n, _)| *n);
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
     let results = benchmarks.iter().map(|p| {
-        let res = simulate(&p, 0, HEAP_SIZE, GC_AT);
+        let res = simulate(&p, 0, BIG_HEAP, GC_AT);
         res
     });
 
-    results
-        .zip(names)
-        .for_each(|((_, cycles), n)| println!("{:<12} {:>8} cycles", n, cycles));
+    results.zip(names).for_each(|((core, cycles), n)| {
+        let stat = core.get_stat();
+        println!(
+            "{:<12} {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
+            n,
+            cycles,
+            stat.reducer_stat.reductions + stat.alu_stat.reductions,
+            stat.gc_stat.allocations,
+            stat.peak_workset_size
+        );
+        writeln!(cycle_file, "{},{}", n, cycles).unwrap();
+    });
 
+    Ok(())
+}
+
+fn run_big_prog(prog: &Program) -> std::io::Result<()> {
+    let (core, cycles) = simulate(&prog, 0, HEAP_SIZE, GC_AT);
+    let stat = core.get_stat();
+    println!(
+        "finished: {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
+        cycles,
+        stat.reducer_stat.reductions + stat.alu_stat.reductions,
+        stat.gc_stat.allocations,
+        stat.peak_workset_size
+    );
     Ok(())
 }
 
@@ -423,7 +451,7 @@ fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let progs = benchmarks!(
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, /*TREEPARI, TREESUM,*/ TRIBELIE, WHILEX,
+        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
     ); // ignoring TREESUM as it does not have much garbage..
 
     if args.len() == 1 {
@@ -431,9 +459,10 @@ fn main() -> std::io::Result<()> {
         Ok(())
     } else {
         match args[1].as_str() {
-            "@ALL" => run_benchmarks(progs),
+            "@ALL" => run_benchmarks(progs, false),
             "@GC" => eval_gc(progs),
-            prog => inspect_prog(progs.get(prog).unwrap()),
+            prog => run_big_prog(progs.get(prog).unwrap()),
+            // prog => inspect_prog(progs.get(prog).unwrap()),
         }
     }
 }

@@ -55,6 +55,7 @@ pub fn compute(op: &AluOp, rev: bool, l: i32, r: i32) -> Atom {
 pub struct AluStat {
     pub busy_cycles: u32,
     pub busy_per_cycle: Vec<bool>,
+    pub reductions: u32,
     pub holder_contents: Vec<Option<ActiveApp>>,
 }
 
@@ -164,6 +165,10 @@ impl HwModule for Alu {
     }
 
     fn update_stat(&mut self) {
+        if self.input_fire() {
+            self.stat.reductions += 1;
+        }
+
         if self.stat_detail_lv >= DLV_BUSY_RATE {
             if fire(self.input.input_valid, self.input_ready()) {
                 self.stat.busy_cycles += 1;

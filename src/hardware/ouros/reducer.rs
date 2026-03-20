@@ -49,6 +49,7 @@ pub struct ReducerStat {
     pub busy_cycles: u32,
     pub busy_per_cycle: Vec<bool>,
     pub holder_contents: Vec<Option<ActiveApp>>,
+    pub reductions: u32,
     pub blocked_cycles: u32,
     pub gc_stall_cycles: u32,  // gc stall in total
     pub gc_current_stall: u32, // current contiguous stall
@@ -457,6 +458,10 @@ impl HwModule for Reducer {
     }
 
     fn update_stat(&mut self) {
+        if self.in_fire() {
+            self.stat.reductions += 1;
+        }
+
         if self.stat_detail_lv >= DLV_GC {
             if fire(self.input.app_ready, self.app_valid()) {
                 if self.app_bits().load.iter().any(|atm| is_ptr(atm)) {
@@ -468,8 +473,7 @@ impl HwModule for Reducer {
         }
 
         if self.stat_detail_lv >= DLV_BUSY_RATE {
-            if *self.reg_stm.value() != Stm::IDLE && self.input.app_ready && self.input.spine_ready
-            {
+            if *self.reg_stm.value() != Stm::IDLE && self.input.app_ready {
                 self.stat.busy_cycles += 1;
                 self.stat.busy_per_cycle.push(true);
                 // if self.input.in_valid {

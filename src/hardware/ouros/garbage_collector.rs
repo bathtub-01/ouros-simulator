@@ -76,6 +76,9 @@ pub struct GbgCollectorInput {
     pub heap_read_valid: bool,
     pub monitor_valid: bool,
     pub monitor_bits: ActiveApp,
+    pub monitor_big_drf_valid: bool,
+    pub monitor_big_drf_bits: Atom,
+    pub monitor_big_drf_stk: usize,
 }
 
 impl HwInput for GbgCollectorInput {}
@@ -94,12 +97,6 @@ pub struct GbgCollectorStat {
     pub cache_miss: u32,
     pub free_len: Vec<usize>,
     pub work_len: Vec<usize>,
-    pub jump_move_01: u32,
-    pub jump_move_10: u32,
-    pub jump_move_11: u32,
-    pub jump_move_12: u32,
-    pub jump_move_22: u32,
-    pub jump_move_20: u32,
 }
 
 pub struct GbgCollector {
@@ -495,7 +492,6 @@ impl GbgCollector {
                 // read the next PTR
                 let found = self.find_ptr(current_app);
                 self.mark_read(get_ptr(&current_app[found]));
-                // self.gc_mem.read_a(get_ptr(&current_app[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
             } else if self.reg_monitors.value().iter().any(|r| r.0) {
@@ -503,8 +499,13 @@ impl GbgCollector {
                 let pick_monitor = self.reg_monitors.value().iter().position(|r| r.0).unwrap();
                 self.reg_monitors.input[pick_monitor].0 = false;
                 let monitor_app = &self.reg_monitors.input[pick_monitor].1;
-                self.reg_pre_gc.connect(&false);
-                self.reg_bk_reader.connect(&no_ptr_cell(CellState::Marked));
+                if is_ptr(&monitor_app[0]) {
+                    self.reg_pre_gc.connect(&true);
+                    self.gc_mem.read_a(get_ptr(&monitor_app[0]));
+                } else {
+                    self.reg_pre_gc.connect(&false);
+                    self.reg_bk_reader.connect(&no_ptr_cell(CellState::Marked));
+                }
                 self.reg_heap_reader.connect(monitor_app);
                 self.reg_app_idx.connect(&0);
                 self.reg_move.connect(&2);
@@ -606,9 +607,18 @@ impl GbgCollector {
 
 impl HwModule for GbgCollector {
     fn update_local(&mut self) {
-        if *self.reg_collector.value() != CollectorState::MARK && self.input.monitor_valid {
-            self.reg_monitors.input[self.input.monitor_bits.stack_idx as usize] =
-                (true, self.input.monitor_bits.load.clone());
+        if *self.reg_collector.value() != CollectorState::MARK {
+            if self.input.monitor_big_drf_valid {
+                self.reg_monitors.input[self.input.monitor_big_drf_stk] = {
+                    let mut app: [Atom; APP_LENGTH] = Default::default();
+                    app[0] = self.input.monitor_big_drf_bits.clone();
+                    (true, app)
+                }
+            }
+            if self.input.monitor_valid {
+                self.reg_monitors.input[self.input.monitor_bits.stack_idx as usize] =
+                    (true, self.input.monitor_bits.load.clone());
+            }
         }
 
         let real_freelist_head: usize = if *self.reg_free_drawed.value() {
@@ -757,6 +767,10 @@ impl HwModule for GbgCollector {
         //     self.reg_free_head.input
         // );
 
+        if self.addr_out_fire() {
+            self.stat.allocations += 1;
+        }
+
         if self.stat_detail_lv >= DLV_GC {
             if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::MARK {
                 self.stat.immediate_reuse += 1;
@@ -767,10 +781,6 @@ impl HwModule for GbgCollector {
                 if self.deallocate_fire() || self.addr_out_fire() {
                     self.stat.feedbacks_shadowed += 1;
                 }
-            }
-
-            if self.addr_out_fire() {
-                self.stat.allocations += 1;
             }
 
             self.stat.m_request_per_cycle.push(self.mutator_request());

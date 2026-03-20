@@ -277,6 +277,9 @@ impl HwModule for OurosCore {
 
             self.gc.input.monitor_valid = self.reducer.spine_valid();
             self.gc.input.monitor_bits = self.reducer.spine_bits();
+            self.gc.input.monitor_big_drf_valid = self.dheap.out_big_drf_valid();
+            self.gc.input.monitor_big_drf_stk = self.dheap.out_main_bits().stack_idx as usize;
+            self.gc.input.monitor_big_drf_bits = self.dheap.out_main_bits().load[0].clone();
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();

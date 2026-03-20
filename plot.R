@@ -66,14 +66,15 @@ ggsave("simu-out/working-threads.pdf", width = 10, height = 5, units = "cm")
 # =========== PLOT BUSY RATES =============
 data1 <- read.csv("simu-out/red-rate.csv", header = TRUE)
 data2 <- read.csv("simu-out/alu-rate.csv", header = TRUE)
+data3 <- read.csv("simu-out/dhp-rate.csv", header = TRUE)
 data1$source <- "Reducer"  # Label for the first dataset
 data2$source <- "ALU"  # Label for the second dataset
-combined_data <- rbind(data1, data2)  # Stack them vertically
-
+data3$source <- "DHP"  # Label for the third dataset
+combined_data <- rbind(data1, data2, data3)  # Stack them vertically
 plot <- ggplot(combined_data, aes(x = time, y = rate, color = source)) +
   geom_line(linewidth = 0.5) +
   labs(x = "Cycles", y = "Busy Rate (%)", title = "Components Busy Rate Over Time") +
-  scale_color_manual(values = c("Reducer" = "#5e81ac", "ALU" = "#bf616a")) +
+  scale_color_manual(values = c("Reducer" = "#5e81ac", "ALU" = "#bf616a", "DHP" = "#ebcb8b")) +
   guides(color = guide_legend(position = "inside"))+
   theme(
     plot.title = element_text(size = 12, hjust = 0.5),  # Smaller & centered title
@@ -97,7 +98,6 @@ plot <- ggplot(combined_data, aes(x = time, y = rate, color = source)) +
       fill = alpha("white", 0.6),   # White background
       linewidth = 0.3,   # Border thickness
     ),
-
     legend.margin = margin(1, 2, 1, 2),  # Tight internal padding (top,right,bottom,left)
     
     # Remove legend title

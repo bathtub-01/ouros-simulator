@@ -9,209 +9,189 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
         // AExp0
         vec![ // 0 
-            COM(2,15),
-            PTR(4, false, false),
-            PTR(2, false, false),
-        ], 
-        vec![ // 1 
-            COM(4,2),
-            INT(5),
+            COM(2,14),
             COM(2,0),
-        ], 
-        vec![ // 2 
-            COM(4,2),
-            INT(2),
-            PTR(1, false, false),
-        ], 
-        vec![ // 3 
-            COM(4,2),
-            INT(4),
             COM(2,0),
-        ], 
-        vec![ // 4 
-            COM(4,2),
-            INT(1),
-            PTR(3, false, false),
         ], 
         // AExp1
-        vec![ // 5 
+        vec![ // 1 
             Y,
-            COM(3,26),
+            COM(3,25),
             INT(0),
         ], 
         // AExp2
-        vec![ // 6 
-            COM(3,28),
-            PTR(36, false, false),
-            PTR(33, false, false),
+        vec![ // 2 
+            COM(3,27),
+            PTR(32, false, false),
+            PTR(29, false, false),
         ], 
-        vec![ // 7 
-            COM(4,2),
+        vec![ // 3 
+            COM(4,30),
             INT(7),
             COM(2,0),
         ], 
-        vec![ // 8 
-            COM(4,2),
+        vec![ // 4 
+            COM(4,30),
             INT(5),
+            PTR(3, false, false),
+        ], 
+        vec![ // 5 
+            COM(1,63),
+            PTR(4, false, false),
+        ], 
+        vec![ // 6 
+            COM(4,30),
+            INT(9),
+            COM(2,0),
+        ], 
+        vec![ // 7 
+            COM(4,30),
+            INT(5),
+            PTR(6, false, false),
+        ], 
+        vec![ // 8 
+            COM(1,61),
             PTR(7, false, false),
         ], 
         vec![ // 9 
-            COM(1,63),
+            COM(3,58),
             PTR(8, false, false),
+            PTR(5, false, false),
         ], 
         vec![ // 10 
-            COM(4,2),
+            COM(4,30),
             INT(9),
             COM(2,0),
         ], 
         vec![ // 11 
-            COM(4,2),
-            INT(5),
+            COM(4,30),
+            INT(6),
             PTR(10, false, false),
         ], 
         vec![ // 12 
-            COM(1,61),
+            COM(1,56),
             PTR(11, false, false),
         ], 
         vec![ // 13 
-            COM(3,58),
+            COM(3,53),
             PTR(12, false, false),
             PTR(9, false, false),
         ], 
         vec![ // 14 
-            COM(4,2),
-            INT(9),
+            COM(4,30),
+            INT(8),
             COM(2,0),
         ], 
         vec![ // 15 
-            COM(4,2),
-            INT(6),
+            COM(4,30),
+            INT(5),
             PTR(14, false, false),
         ], 
         vec![ // 16 
-            COM(1,56),
+            COM(1,51),
             PTR(15, false, false),
         ], 
         vec![ // 17 
-            COM(3,53),
+            COM(3,48),
             PTR(16, false, false),
             PTR(13, false, false),
         ], 
         vec![ // 18 
-            COM(4,2),
-            INT(8),
+            COM(4,30),
+            INT(7),
             COM(2,0),
         ], 
         vec![ // 19 
-            COM(4,2),
-            INT(5),
+            COM(4,30),
+            INT(4),
             PTR(18, false, false),
         ], 
         vec![ // 20 
-            COM(1,51),
+            COM(1,46),
             PTR(19, false, false),
         ], 
         vec![ // 21 
-            COM(3,48),
+            COM(3,43),
             PTR(20, false, false),
             PTR(17, false, false),
         ], 
         vec![ // 22 
-            COM(4,2),
-            INT(7),
+            COM(4,30),
+            INT(9),
             COM(2,0),
         ], 
         vec![ // 23 
-            COM(4,2),
-            INT(4),
+            COM(4,30),
+            INT(8),
             PTR(22, false, false),
         ], 
         vec![ // 24 
-            COM(1,46),
+            COM(1,41),
             PTR(23, false, false),
         ], 
         vec![ // 25 
-            COM(3,43),
+            COM(3,38),
             PTR(24, false, false),
             PTR(21, false, false),
         ], 
         vec![ // 26 
-            COM(4,2),
-            INT(9),
+            COM(4,30),
+            INT(6),
             COM(2,0),
         ], 
         vec![ // 27 
-            COM(4,2),
-            INT(8),
+            COM(4,30),
+            INT(5),
             PTR(26, false, false),
         ], 
         vec![ // 28 
-            COM(1,41),
+            COM(1,36),
             PTR(27, false, false),
         ], 
         vec![ // 29 
-            COM(3,38),
+            COM(3,33),
             PTR(28, false, false),
             PTR(25, false, false),
         ], 
         vec![ // 30 
-            COM(4,2),
-            INT(6),
-            COM(2,0),
-        ], 
-        vec![ // 31 
-            COM(4,2),
-            INT(5),
-            PTR(30, false, false),
-        ], 
-        vec![ // 32 
-            COM(1,36),
-            PTR(31, false, false),
-        ], 
-        vec![ // 33 
-            COM(3,33),
-            PTR(32, false, false),
-            PTR(29, false, false),
-        ], 
-        vec![ // 34 
-            COM(4,2),
+            COM(4,30),
             INT(3),
             COM(2,0),
         ], 
-        vec![ // 35 
-            COM(4,2),
+        vec![ // 31 
+            COM(4,30),
             INT(2),
-            PTR(34, false, false),
+            PTR(30, false, false),
         ], 
-        vec![ // 36 
+        vec![ // 32 
             COM(1,31),
-            PTR(35, false, false),
+            PTR(31, false, false),
         ], 
         // AExp3
-        vec![ // 37 
+        vec![ // 33 
             COM(3,92),
-            PTR(42, false, false),
+            PTR(38, false, false),
         ], 
-        vec![ // 38 
+        vec![ // 34 
             COM(2,146),
             INT(1),
             INT(9),
         ], 
-        vec![ // 39 
+        vec![ // 35 
             COM(2,83),
-            PTR(38, false, false),
+            PTR(34, false, false),
         ], 
-        vec![ // 40 
+        vec![ // 36 
             COM(2,101),
-            PTR(39, false, false),
+            PTR(35, false, false),
         ], 
-        vec![ // 41 
+        vec![ // 37 
             COM(3,96),
-            PTR(40, false, false),
+            PTR(36, false, false),
         ], 
-        vec![ // 42 
+        vec![ // 38 
             COM(3,94),
-            PTR(41, false, false),
+            PTR(37, false, false),
         ], 
     ],
     comb_img: vec![
@@ -225,162 +205,162 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp2
         vec![ // 2 
-            ARG(3, true),
-            ARG(0, true),
+            COM(2,87),
+            PTR(0, true, true),
+            COM(2,1),
+        ], 
+        vec![ // 3 
+            PTR(33, false, false),
             ARG(1, true),
+            ARG(0, true),
         ], 
         // AExp3
-        vec![ // 3 
-            COM(2,87),
-            PTR(0, true, true),
-            COM(2,1),
-        ], 
         vec![ // 4 
-            PTR(37, false, false),
-            ARG(1, true),
-            ARG(0, true),
-        ], 
-        // AExp4
-        vec![ // 5 
-            PTR(6, false, false),
+            PTR(2, false, false),
             ARG(0, false),
             PTR(1, true, true),
             PTR(0, true, true),
+        ], 
+        vec![ // 5 
+            COM(2,87),
+            COM(3,22),
+            COM(2,0),
         ], 
         vec![ // 6 
-            COM(2,87),
-            COM(3,23),
-            COM(2,0),
-        ], 
-        vec![ // 7 
-            COM(2,3),
+            COM(2,2),
             ARG(0, false),
             ARG(1, true),
         ], 
-        // AExp5
-        vec![ // 8 
-            PTR(6, false, false),
+        // AExp4
+        vec![ // 7 
+            PTR(2, false, false),
             ARG(1, false),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 9 
+        vec![ // 8 
             COM(2,87),
-            COM(3,23),
+            COM(3,22),
             COM(2,1),
         ], 
-        vec![ // 10 
-            COM(2,5),
+        vec![ // 9 
+            COM(2,4),
             ARG(0, true),
             ARG(1, false),
         ], 
-        // AExp6
-        vec![ // 11 
+        // AExp5
+        vec![ // 10 
             COM(2,87),
             PTR(0, true, true),
             COM(2,0),
         ], 
-        vec![ // 12 
-            PTR(37, false, false),
+        vec![ // 11 
+            PTR(33, false, false),
             ARG(0, true),
             ARG(1, true),
         ], 
-        // AExp7
-        vec![ // 13 
+        // AExp6
+        vec![ // 12 
             COM(2,87),
             PTR(0, true, true),
             COM(2,1),
         ], 
-        vec![ // 14 
-            PTR(37, false, false),
+        vec![ // 13 
+            PTR(33, false, false),
             ARG(1, true),
             ARG(0, true),
         ], 
-        // AExp8
-        vec![ // 15 
-            COM(2,21),
+        // AExp7
+        vec![ // 14 
+            COM(2,20),
             PTR(4, true, true),
             PTR(3, true, true),
             PTR(2, true, true),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
+        vec![ // 15 
+            COM(2,12),
+            ARG(0, false),
+            ARG(1, false),
+        ], 
         vec![ // 16 
-            COM(2,13),
+            COM(2,10),
             ARG(0, false),
             ARG(1, false),
         ], 
         vec![ // 17 
-            COM(2,11),
+            COM(2,7),
             ARG(0, false),
             ARG(1, false),
         ], 
         vec![ // 18 
-            COM(2,8),
-            ARG(0, false),
+            PTR(1, false, false),
             ARG(1, false),
         ], 
         vec![ // 19 
-            PTR(5, false, false),
-            ARG(1, false),
-        ], 
-        vec![ // 20 
-            PTR(5, false, false),
+            PTR(1, false, false),
             ARG(0, false),
         ], 
-        // AExp9
-        vec![ // 21 
+        // AExp8
+        vec![ // 20 
             PRM(EQ,false),
             ARG(0, false),
             ARG(1, false),
             PTR(0, true, true),
             COM(3,0),
         ], 
-        vec![ // 22 
+        vec![ // 21 
             PRM(LE,false),
             ARG(0, false),
             ARG(1, false),
-            COM(3,23),
+            COM(3,22),
             COM(3,1),
+        ], 
+        // AExp9
+        vec![ // 22 
+            ARG(2, true),
         ], 
         // AExp10
         vec![ // 23 
-            ARG(2, true),
-        ], 
-        // AExp11
-        vec![ // 24 
             ARG(0, true),
             PTR(0, true, true),
         ], 
-        vec![ // 25 
+        vec![ // 24 
             PRM(ADD,false),
             ARG(1, true),
             INT(1),
         ], 
-        // AExp12
-        vec![ // 26 
+        // AExp11
+        vec![ // 25 
             ARG(2, true),
             ARG(1, false),
             PTR(0, true, true),
         ], 
-        vec![ // 27 
-            COM(3,24),
+        vec![ // 26 
+            COM(3,23),
             ARG(0, true),
             ARG(1, false),
         ], 
-        // AExp13
-        vec![ // 28 
+        // AExp12
+        vec![ // 27 
             COM(2,65),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
-        vec![ // 29 
+        vec![ // 28 
             ARG(1, true),
             ARG(2, false),
         ], 
-        vec![ // 30 
+        vec![ // 29 
             ARG(0, true),
             ARG(2, false),
+        ], 
+        // AExp13
+        vec![ // 30 
+            ARG(3, true),
+            ARG(0, true),
+            ARG(1, true),
         ], 
         // AExp14
         vec![ // 31 
@@ -388,7 +368,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 32 
-            COM(4,2),
+            COM(4,30),
             INT(1),
             ARG(0, true),
         ], 
@@ -412,7 +392,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 37 
-            COM(4,2),
+            COM(4,30),
             INT(4),
             ARG(0, true),
         ], 
@@ -436,7 +416,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 42 
-            COM(4,2),
+            COM(4,30),
             INT(7),
             ARG(0, true),
         ], 
@@ -460,7 +440,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 47 
-            COM(4,2),
+            COM(4,30),
             INT(1),
             ARG(0, true),
         ], 
@@ -484,7 +464,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 52 
-            COM(4,2),
+            COM(4,30),
             INT(2),
             ARG(0, true),
         ], 
@@ -508,7 +488,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 57 
-            COM(4,2),
+            COM(4,30),
             INT(3),
             ARG(0, true),
         ], 
@@ -532,7 +512,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 62 
-            COM(4,2),
+            COM(4,30),
             INT(1),
             ARG(0, true),
         ], 
@@ -542,7 +522,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 64 
-            COM(4,2),
+            COM(4,30),
             INT(3),
             ARG(0, true),
         ], 
@@ -579,13 +559,13 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 71 
-            COM(4,2),
+            COM(4,30),
             ARG(1, true),
             ARG(2, true),
         ], 
         // AExp33
         vec![ // 72 
-            COM(4,2),
+            COM(4,30),
             ARG(0, true),
             PTR(0, true, true),
         ], 
@@ -601,13 +581,13 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 75 
-            COM(4,2),
+            COM(4,30),
             ARG(0, true),
             ARG(1, true),
         ], 
         // AExp35
         vec![ // 76 
-            COM(2,21),
+            COM(2,20),
             ARG(0, false),
             ARG(2, false),
             PTR(2, true, true),
@@ -644,7 +624,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             ARG(2, false),
         ], 
         vec![ // 82 
-            COM(4,2),
+            COM(4,30),
             ARG(1, false),
             ARG(2, false),
         ], 
@@ -696,7 +676,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp42
         vec![ // 92 
-            PTR(6, false, false),
+            PTR(2, false, false),
             ARG(2, false),
             PTR(0, true, true),
             COM(3,1),
@@ -763,11 +743,11 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             PTR(0, true, true),
         ], 
         vec![ // 104 
-            PTR(5, false, false),
+            PTR(1, false, false),
             ARG(1, true),
         ], 
         vec![ // 105 
-            PTR(5, false, false),
+            PTR(1, false, false),
             ARG(0, true),
         ], 
         // AExp48
@@ -829,17 +809,17 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             ARG(0, true),
             PTR(0, true, true),
             ARG(1, false),
-            COM(3,23),
+            COM(3,22),
         ], 
         vec![ // 117 
             ARG(1, false),
             COM(3,0),
             COM(3,0),
-            COM(3,23),
+            COM(3,22),
         ], 
         // AExp54
         vec![ // 118 
-            COM(4,2),
+            COM(4,30),
             PTR(1, true, true),
             PTR(0, true, true),
         ], 
@@ -873,7 +853,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp57
         vec![ // 125 
-            PTR(37, false, false),
+            PTR(33, false, false),
             ARG(1, true),
             PTR(0, true, true),
         ], 
@@ -897,12 +877,12 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
         vec![ // 129 
             ARG(0, true),
             COM(3,0),
-            COM(3,23),
+            COM(3,22),
             COM(3,1),
         ], 
         // AExp60
         vec![ // 130 
-            COM(4,2),
+            COM(4,30),
             ARG(1, true),
             PTR(0, true, true),
         ], 
@@ -912,12 +892,12 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp61
         vec![ // 132 
-            COM(4,2),
+            COM(4,30),
             ARG(0, true),
             PTR(0, true, true),
         ], 
         vec![ // 133 
-            COM(4,2),
+            COM(4,30),
             ARG(1, true),
             ARG(2, true),
         ], 
@@ -953,7 +933,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
             ARG(1, true),
         ], 
         vec![ // 139 
-            COM(4,2),
+            COM(4,30),
             ARG(0, false),
             COM(2,0),
         ], 
@@ -978,7 +958,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp66
         vec![ // 144 
-            COM(4,2),
+            COM(4,30),
             ARG(0, false),
             PTR(0, true, true),
         ], 

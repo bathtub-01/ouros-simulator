@@ -15,7 +15,7 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {
         vec![ // 1 
             COM(2,12),
             INT(1),
-            INT(30),
+            INT(300),
         ], 
         // AExp1
         vec![ // 2 

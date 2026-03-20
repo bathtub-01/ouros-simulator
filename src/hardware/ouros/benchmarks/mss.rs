@@ -9,21 +9,78 @@ pub static MSS: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
         // AExp0
         vec![ // 0 
-            COM(1,4),
-            PTR(2, false, false),
+            PRM(ADD,false),
+            PTR(14, false, false),
+            PTR(7, false, false),
         ], 
         vec![ // 1 
             PRM(SUB,false),
             INT(0),
-            INT(20),
+            INT(151),
         ], 
         vec![ // 2 
             COM(2,58),
             PTR(1, false, false),
-            INT(20),
+            INT(151),
+        ], 
+        vec![ // 3 
+            COM(1,4),
+            PTR(2, false, false),
+        ], 
+        vec![ // 4 
+            PRM(SUB,false),
+            INT(0),
+            INT(161),
+        ], 
+        vec![ // 5 
+            COM(2,58),
+            PTR(4, false, false),
+            INT(161),
+        ], 
+        vec![ // 6 
+            COM(1,4),
+            PTR(5, false, false),
+        ], 
+        vec![ // 7 
+            PRM(SUB,false),
+            PTR(6, false, false),
+            PTR(3, false, false),
+        ], 
+        vec![ // 8 
+            PRM(SUB,false),
+            INT(0),
+            INT(150),
+        ], 
+        vec![ // 9 
+            COM(2,58),
+            PTR(8, false, false),
+            INT(150),
+        ], 
+        vec![ // 10 
+            COM(1,4),
+            PTR(9, false, false),
+        ], 
+        vec![ // 11 
+            PRM(SUB,false),
+            INT(0),
+            INT(160),
+        ], 
+        vec![ // 12 
+            COM(2,58),
+            PTR(11, false, false),
+            INT(160),
+        ], 
+        vec![ // 13 
+            COM(1,4),
+            PTR(12, false, false),
+        ], 
+        vec![ // 14 
+            PRM(SUB,false),
+            PTR(13, false, false),
+            PTR(10, false, false),
         ], 
         // AExp1
-        vec![ // 3 
+        vec![ // 15 
             COM(2,13),
             PRM(ADD,false),
             INT(0),
@@ -41,7 +98,7 @@ pub static MSS: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp2
         vec![ // 2 
             COM(1,20),
-            PTR(3, false, false),
+            PTR(15, false, false),
             PTR(0, true, true),
         ], 
         vec![ // 3 

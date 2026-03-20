@@ -116,6 +116,7 @@ pub enum Stm {
 pub struct DrfHeapStat {
     active_threads: u8,
     pub work_threads: Vec<(u8, u8)>, // (occupied resources, active threads)
+    pub busy_per_cycle: Vec<bool>,
     pub holder_contents: Vec<Option<ActiveApp>>,
     pub heap_stm: Vec<Stm>,
     pub serving_id: Vec<u8>,
@@ -1091,8 +1092,10 @@ impl DrfHeap {
                 }
 
                 /*
-                FIXME problem here: upon WHNF's return, we don't update the demander on heap.
-                  If we deallocate the WHNF, a pointer to that WHNF is still on heap..
+                NOTE problem here: upon WHNF's return, we don't update the demander on heap.
+                If we deallocate the WHNF, a pointer to that WHNF is still on heap..
+
+                This should be fine, as free cells in marking will be ignored..
                  */
                 if self.can_avoid_update() {
                     /* update avoided */
@@ -1348,6 +1351,14 @@ impl HwModule for DrfHeap {
                 occupied as u8,
                 self.stat.active_threads + if *self.stm.value() != Stm::IDLE { 1 } else { 0 },
             ));
+        }
+
+        if self.stat_detail_lv >= DLV_BUSY_RATE {
+            if *self.stm.value() != Stm::IDLE {
+                self.stat.busy_per_cycle.push(true);
+            } else {
+                self.stat.busy_per_cycle.push(false);
+            }
         }
 
         if self.stat_detail_lv >= DLV_STM_DIST {
