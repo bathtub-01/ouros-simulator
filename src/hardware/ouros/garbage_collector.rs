@@ -79,6 +79,8 @@ pub struct GbgCollectorInput {
     pub monitor_big_drf_valid: bool,
     pub monitor_big_drf_bits: Atom,
     pub monitor_big_drf_stk: usize,
+    pub monitor_unset_valid: bool,
+    pub monitor_unset: usize,
 }
 
 impl HwInput for GbgCollectorInput {}
@@ -116,7 +118,8 @@ pub struct GbgCollector {
     reg_move: Register<u8>,
     reg_work_on: Register<usize>, // to lock the worklist object for marking
     reg_app_idx: Register<usize>,
-    reg_monitors: Register<[(bool, App); MAX_THREADS]>,
+    pub reg_monitors: Register<[(bool, App); MAX_THREADS]>,
+    reg_monitor_idx: Register<usize>,
     const_sweep_from: usize,
     const_heap_size: usize,
     const_gc_at: f32,
@@ -146,6 +149,7 @@ impl GbgCollector {
             reg_work_on: Default::default(),
             reg_app_idx: Default::default(),
             reg_monitors: Default::default(),
+            reg_monitor_idx: Default::default(),
             const_sweep_from: free_from,
             const_heap_size: heap_size,
             const_gc_at: gc_at,
@@ -382,6 +386,7 @@ impl GbgCollector {
                 },
             );
             self.reg_sweeper.connect(&0);
+            self.reg_monitor_idx.connect(&0);
         }
     }
 
@@ -399,6 +404,7 @@ impl GbgCollector {
                 self.reg_move.connect(&0);
                 self.reg_pre_gc.connect(&false);
                 self.gc_cache.flush();
+                // println!("================== MARK START =====================");
 
                 // for i in 0..100 {
                 //     println!("brefore MARK, addr-{} is in {:?}", i, self.gc_mem.ram[i]);
@@ -433,7 +439,7 @@ impl GbgCollector {
             //     self.input.heap_read_bits,
             //     self.reg_work_len.value()
             // );
-            ///////////////////////////////////////////////
+
             // let real_worklist_head: usize = if *self.reg_work_drawed.value() {
             //     self.gc_mem.dout_a().ptr
             // } else {
@@ -494,10 +500,24 @@ impl GbgCollector {
                 self.mark_read(get_ptr(&current_app[found]));
                 self.reg_app_idx.connect(&found);
                 self.reg_pre_gc.connect(&true);
-            } else if self.reg_monitors.value().iter().any(|r| r.0) {
+            } else if self
+                .reg_monitors
+                .value()
+                .iter()
+                .skip(*self.reg_monitor_idx.value())
+                .any(|r| r.0)
+            {
                 // if there is a monitor yet to be handled, put it in reader and use move-2 logic
-                let pick_monitor = self.reg_monitors.value().iter().position(|r| r.0).unwrap();
-                self.reg_monitors.input[pick_monitor].0 = false;
+                let pick_monitor = self
+                    .reg_monitors
+                    .value()
+                    .iter()
+                    .skip(*self.reg_monitor_idx.value())
+                    .position(|r| r.0)
+                    .unwrap()
+                    + *self.reg_monitor_idx.value();
+                // self.reg_monitors.input[pick_monitor].0 = false;
+                self.reg_monitor_idx.connect(&(pick_monitor + 1));
                 let monitor_app = &self.reg_monitors.input[pick_monitor].1;
                 if is_ptr(&monitor_app[0]) {
                     self.reg_pre_gc.connect(&true);
@@ -608,9 +628,15 @@ impl GbgCollector {
 impl HwModule for GbgCollector {
     fn update_local(&mut self) {
         if *self.reg_collector.value() != CollectorState::MARK {
+            // if self.input.monitor_unset_valid {
+            //     self.reg_monitors.input[self.input.monitor_unset] = (false, Default::default());
+            // }
             if self.input.monitor_big_drf_valid {
                 self.reg_monitors.input[self.input.monitor_big_drf_stk] = {
-                    let mut app: [Atom; APP_LENGTH] = Default::default();
+                    let mut app: [Atom; APP_LENGTH] = self.reg_monitors.value()
+                        [self.input.monitor_big_drf_stk]
+                        .1
+                        .clone();
                     app[0] = self.input.monitor_big_drf_bits.clone();
                     (true, app)
                 }
@@ -671,12 +697,12 @@ impl HwModule for GbgCollector {
         }
 
         if self.feedback_fire() {
-            // if self.input.feedback_bits == 1 {
-            // println!(
-            //     "feedback {} arrived GC, state: {:?}",
-            //     self.input.feedback_bits,
-            //     self.reg_collector.value()
-            // );
+            // if self.input.feedback_bits == 175 {
+            //     println!(
+            //         "feedback {} arrived GC, state: {:?}",
+            //         self.input.feedback_bits,
+            //         self.reg_collector.value()
+            //     );
             // }
             let cell_state = match self.reg_collector.value() {
                 CollectorState::IDLE | CollectorState::ROOT => CellState::Unmarked,
@@ -733,10 +759,12 @@ impl HwModule for GbgCollector {
         }
 
         // print!("collector: {:?}", self.reg_collector.value());
-        // if self.addr_out_fire() && self.addr_out_bits() == 433 {
+        // let look_at = 175;
+        // if self.addr_out_fire() && self.addr_out_bits() == look_at {
         //     println!(
-        //         "emit 433 as free addr!, 0: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
-        //         self.gc_mem.ram[433],
+        //         "emit {} as free addr!, {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
+        //         look_at,
+        //         self.gc_mem.ram[look_at],
         //         self.reg_collector.value(),
         //         self.gc_mem.dout_a().ptr,
         //         self.reg_free_head.value(),
@@ -759,12 +787,13 @@ impl HwModule for GbgCollector {
 
     fn update_stat(&mut self) {
         // println!(
-        //     "collector state: {:?}, worklist len: {}, worklist head: {}, freelist len: {}, freelist head: {}",
+        //     "collector state: {:?}, worklist len: {}, worklist head: {}, freelist len: {}, freelist head: {}, monitor idx: {}",
         //     self.reg_collector.value(),
         //     self.reg_work_len.value(),
         //     self.reg_work_head.input,
         //     self.reg_free_len.value(),
-        //     self.reg_free_head.input
+        //     self.reg_free_head.input,
+        //     self.reg_monitor_idx.value()
         // );
 
         if self.addr_out_fire() {
@@ -807,6 +836,7 @@ impl HwModule for GbgCollector {
         self.reg_work_on.tick();
         self.reg_app_idx.tick();
         self.reg_monitors.tick();
+        self.reg_monitor_idx.tick();
     }
 }
 

@@ -135,8 +135,8 @@ impl HwModule for AddrBox {
         }
 
         // for i in 0..CONSUMERS {
-        //     if self.addr_fire(i) && self.consume_addr_bits()[i] == 85 {
-        //         println!("addr box emit 85 as free addr!");
+        //     if self.addr_fire(i) && self.consume_addr_bits()[i] == 175 {
+        //         println!("addr box emit 175 as free addr from {}!", i);
         //     }
         // }
 

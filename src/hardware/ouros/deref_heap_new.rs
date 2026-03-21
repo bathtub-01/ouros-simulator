@@ -421,19 +421,19 @@ impl DrfHeap {
         self
     }
 
-    fn port_a_fire(&self) -> bool {
+    pub fn port_a_fire(&self) -> bool {
         fire(self.input.port_a_valid, self.port_a_ready())
     }
 
-    fn port_b_fire(&self) -> bool {
+    pub fn port_b_fire(&self) -> bool {
         fire(self.input.port_b_valid, self.port_b_ready())
     }
 
-    fn output_fire(&self) -> bool {
+    pub fn output_fire(&self) -> bool {
         fire(self.out_main_valid(), self.input.out_main_ready)
     }
 
-    fn out_sub_fire(&self) -> bool {
+    pub fn out_sub_fire(&self) -> bool {
         fire(self.out_sub_valid(), self.input.out_sub_ready)
     }
 
@@ -715,6 +715,14 @@ impl DrfHeap {
     fn getIAs2(&self, s1: &IAs1) -> IAs2 {
         let ia = &self.holder_in.value().load;
         let target_in_whnf = !*self.non_exist.value() && is_whnf(self.heap_mem.dout_a());
+        // if let None = self.frame_stack[self.holder_in.value().stack_idx as usize].top() {
+        //     println!(
+        //         "Sick. holder_in: {:?}, \n stack: {:?} \n frame_stk: {:?}",
+        //         self.holder_in.value(),
+        //         self.thread_stack[self.holder_in.value().stack_idx as usize].mem,
+        //         self.frame_stack[self.holder_in.value().stack_idx as usize].mem
+        //     );
+        // }
         let frame_record = self.frame_stack[self.holder_in.value().stack_idx as usize]
             .top()
             .unwrap();
@@ -723,7 +731,7 @@ impl DrfHeap {
             .iter()
             .enumerate()
             .any(|(idx, s)| find_free_stack(s, frame_record[idx]));
-        let local_stack: bool = *s1 == IAs1::ExistWHNF || *s1 == IAs1::ExistIAWorkingAtNewFrame;
+        let local_stack: bool = *s1 == IAs1::ExistWHNF || *s1 == IAs1::ExistIAWorkingAtNewFrame; // NOTE
         let more_strict_args: bool = {
             match ia[0] {
                 Atom::PTR(_, _, _) => false,
@@ -844,9 +852,12 @@ impl DrfHeap {
             .find(|(_, s)| p(*s))
         {
             stack.pop();
-            if pop_frame {
-                self.frame_stack[stk_id].pop();
-            }
+            // if pop_frame {
+            //     self.frame_stack[stk_id].pop();
+            //     if stk_id == 3 {
+            //         println!("frame stk 3 popped. P1");
+            //     }
+            // }
             self.heap_mem.read_a(stack.second().unwrap().1);
             self.holder_in.input.stack_idx = stk_id as u8;
         } else {
@@ -873,6 +884,9 @@ impl DrfHeap {
         let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
         self.working_heap.write_b(*self.addr_holder.value(), true);
         current_stk.push((new_frame, *self.addr_holder.value()));
+        // if self.holder_in.value().stack_idx == 3 && new_frame {
+        //     println!("push new_frame tag");
+        // }
     }
 
     /// ''sensitive'' cases:
@@ -929,8 +943,17 @@ impl DrfHeap {
             IAs1::ExistWHNF | IAs1::ExistIAWorkingAtNewFrame => {
                 let stk_idx = self.holder_in.value().stack_idx as usize;
                 let stk = &self.thread_stack[stk_idx];
+                // problem 1: this empty stack should also be cancelled
                 if stack_cell_with(stk.top(), |(flag, _)| *flag) {
                     self.frame_stack[stk_idx].pop();
+                    // if stk_idx == 3 {
+                    //     println!(
+                    //         "ias1: {:?} holder: {:?} frame stk 3 popped. P2, stack-top: {:?}",
+                    //         s1,
+                    //         self.holder_in.value(),
+                    //         self.thread_stack[stk_idx].top()
+                    //     );
+                    // }
                 }
             }
             _ => {}
@@ -1055,10 +1078,16 @@ impl DrfHeap {
                 self.heap_mem.read_a(current_stk.second().unwrap().1);
                 self.addr_holder.connect(&current_top);
                 self.frame_stack[self.input.port_a_bits.stack_idx as usize].pop();
+                // if self.input.port_a_bits.stack_idx as usize == 3 {
+                //     println!("frame stk 3 popped. P3");
+                // }
                 self.stm.connect(&Stm::RESUME);
             }
             CONSUMEs::InputWHNFNoDmderNoFrame => {
                 self.frame_stack[self.input.port_a_bits.stack_idx as usize].pop();
+                // if self.input.port_a_bits.stack_idx as usize == 3 {
+                //     println!("frame stk 3 popped. P4");
+                // }
                 self.write_incoming(HeapPort::A);
                 self.stm.connect(&Stm::IDLE);
             }
@@ -1089,6 +1118,9 @@ impl DrfHeap {
                     // pop when the whnf is the last item on that stack
                     stack.pop();
                     self.frame_stack[stk_id].pop();
+                    // if stk_id == 3 {
+                    //     println!("frame stk 3 popped. P5");
+                    // }
                 }
 
                 /*
@@ -1130,6 +1162,13 @@ impl DrfHeap {
             IAs1::ExistIAWorkingNormal => {
                 // change this to `self.push_target(false);` will disable stack riding
                 self.push_target(true);
+                // if self.holder_in.value().stack_idx == 3 {
+                //     println!(
+                //         "push new_frame when ias2: {:?}, holder: {:?}",
+                //         self.getIAs2(&ias1),
+                //         self.holder_in.value()
+                //     );
+                // }
             }
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
@@ -1154,6 +1193,9 @@ impl DrfHeap {
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                     self.frame_stack[stk_id].push(self.gen_frame_record());
+                    // if stk_id == 3 {
+                    //     println!("frame stk 3 pushed. P1");
+                    // }
                     // !NEW! update current frame record, too (not good, hurts SUMEULER)
                     // self.frame_stack[current_idx].modify({
                     //     let mut record = self.frame_stack[current_idx].top().unwrap().clone();
@@ -1214,6 +1256,12 @@ impl DrfHeap {
             let addr = self.input.port_b_bits.heap_addr;
             let app = extend_to_app(&self.input.port_b_bits.load);
             self.heap_mem.write_b(addr, app);
+
+            // if addr == 4060 {
+            //     if let Some(3) = self.waited_by() {
+            //         println!("4060 from sub emit: {:?}", self.input.port_b_bits);
+            //     }
+            // }
         }
     }
 }
@@ -1307,12 +1355,16 @@ impl HwModule for DrfHeap {
         //     );
         // }
 
+        // let look_at_1 = 175;
+        // let look_at_2 = 523;
         // println!(
-        //     "addr-642 | working: {} | {:?} | addr-15 | working: {} | {:?}",
-        //     self.working_heap.ram[642],
-        //     self.heap_mem.ram[642],
-        //     self.working_heap.ram[15],
-        //     self.heap_mem.ram[15]
+        //     "addr-{} | working: {} | {:?} | addr-{} | working: {} | {:?}",
+        //     look_at_1,
+        //     self.working_heap.ram[look_at_1],
+        //     self.heap_mem.ram[look_at_1],
+        //     look_at_2,
+        //     self.working_heap.ram[look_at_2],
+        //     self.heap_mem.ram[look_at_2]
         // );
 
         // println!("stack: {:?}", self.thread_stack[0].mem);

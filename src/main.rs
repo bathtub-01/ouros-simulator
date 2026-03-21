@@ -31,10 +31,8 @@ fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (Our
     ouros.input.start = false;
 
     loop {
-        assert!(cycle < 4_000_000_000);
-        if ouros.done()
-        // || cycle == 1_000_000
-        {
+        assert!(cycle < 1000_000_000);
+        if ouros.done() || cycle == 1_000_000 {
             break;
         }
         ouros.tick();
@@ -133,7 +131,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), BIG_HEAP, GC_AT);
+    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), HEAP_SIZE, GC_AT);
     let stats = ouros.get_stat();
 
     println!(
@@ -333,7 +331,7 @@ fn run_benchmarks(
     vec.sort_by_key(|(n, _)| *n);
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
     let results = benchmarks.iter().map(|p| {
-        let res = simulate(&p, 0, BIG_HEAP, GC_AT);
+        let res = simulate(&p, 0, HEAP_SIZE, GC_AT);
         res
     });
 
@@ -354,7 +352,7 @@ fn run_benchmarks(
 }
 
 fn run_big_prog(prog: &Program) -> std::io::Result<()> {
-    let (core, cycles) = simulate(&prog, 0, HEAP_SIZE, GC_AT);
+    let (core, cycles) = simulate(&prog, 0, BIG_HEAP, GC_AT);
     let stat = core.get_stat();
     println!(
         "finished: {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
@@ -450,8 +448,9 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let progs = benchmarks!(
-        ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
+        // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
+        // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
+        ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
     ); // ignoring TREESUM as it does not have much garbage..
 
     if args.len() == 1 {
@@ -461,8 +460,8 @@ fn main() -> std::io::Result<()> {
         match args[1].as_str() {
             "@ALL" => run_benchmarks(progs, false),
             "@GC" => eval_gc(progs),
-            prog => run_big_prog(progs.get(prog).unwrap()),
-            // prog => inspect_prog(progs.get(prog).unwrap()),
+            // prog => run_big_prog(progs.get(prog).unwrap()),
+            prog => inspect_prog(progs.get(prog).unwrap()),
         }
     }
 }

@@ -280,6 +280,8 @@ impl HwModule for OurosCore {
             self.gc.input.monitor_big_drf_valid = self.dheap.out_big_drf_valid();
             self.gc.input.monitor_big_drf_stk = self.dheap.out_main_bits().stack_idx as usize;
             self.gc.input.monitor_big_drf_bits = self.dheap.out_main_bits().load[0].clone();
+            self.gc.input.monitor_unset_valid = self.dheap.port_a_fire();
+            self.gc.input.monitor_unset = self.dheap.input.port_a_bits.stack_idx as usize;
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
@@ -454,7 +456,12 @@ impl HwModule for OurosCore {
 
         self.cycle_ctr += 1;
         if self.cycle_ctr == 500 {
-            let work_set = traverse(&self.dheap.heap_mem.ram, self.heap_size, self.free_from);
+            let work_set = traverse(
+                &self.dheap.heap_mem.ram,
+                self.heap_size,
+                self.free_from,
+                self.gc.reg_monitors.value(),
+            );
             self.peak_workset_size = max(work_set.len(), self.peak_workset_size);
             self.cycle_ctr = 0;
         }
@@ -499,7 +506,12 @@ impl HwModule for OurosCore {
 
 ///////////////////// helper function for heap graph traversal /////////////////////
 /// traverse the heap and return all reachable addrs from the roots
-fn traverse(ram: &Vec<App>, size: usize, free_from: usize) -> Vec<usize> {
+fn traverse(
+    ram: &Vec<App>,
+    size: usize,
+    free_from: usize,
+    monitors: &[(bool, App); MAX_THREADS],
+) -> Vec<usize> {
     let mut visited: Vec<bool> = vec![false; size];
     let mut traverse_stk: Vec<usize> = Vec::new();
     let mut res: Vec<usize> = Vec::new();
@@ -507,6 +519,18 @@ fn traverse(ram: &Vec<App>, size: usize, free_from: usize) -> Vec<usize> {
     // push all roots
     for i in 0..free_from {
         traverse_stk.push(i);
+        visited[i] = true;
+    }
+
+    for m in monitors {
+        if m.0 {
+            for atm in &m.1 {
+                if is_ptr(atm) && !visited[get_ptr(atm)] {
+                    traverse_stk.push(get_ptr(atm));
+                    visited[get_ptr(atm)] = true;
+                }
+            }
+        }
     }
 
     while !traverse_stk.is_empty() {
@@ -515,8 +539,8 @@ fn traverse(ram: &Vec<App>, size: usize, free_from: usize) -> Vec<usize> {
         res.push(work_on);
         for atm in app {
             if is_ptr(atm) && !visited[get_ptr(atm)] {
-                // if get_ptr(atm) == 806 {
-                // println!("{} reachable from {}", get_ptr(atm), work_on);
+                // if get_ptr(atm) == 175 {
+                //     println!("{} reachable from {}", get_ptr(atm), work_on);
                 // }
                 traverse_stk.push(get_ptr(atm));
                 visited[get_ptr(atm)] = true;
