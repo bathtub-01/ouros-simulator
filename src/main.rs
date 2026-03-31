@@ -32,7 +32,7 @@ fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (Our
 
     loop {
         assert!(cycle < 1000_000_000);
-        if ouros.done() || cycle == 1_000_000 {
+        if ouros.done() || cycle == 900_000_000 {
             break;
         }
         ouros.tick();
@@ -330,12 +330,15 @@ fn run_benchmarks(
     let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
     vec.sort_by_key(|(n, _)| *n);
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
-    let results = benchmarks.iter().map(|p| {
-        let res = simulate(&p, 0, HEAP_SIZE, GC_AT);
-        res
-    });
+    let results: Vec<_> = benchmarks
+        .par_iter()
+        .map(|p| {
+            let res = simulate(&p, 0, HEAP_SIZE, GC_AT);
+            res
+        })
+        .collect();
 
-    results.zip(names).for_each(|((core, cycles), n)| {
+    results.iter().zip(names).for_each(|((core, cycles), n)| {
         let stat = core.get_stat();
         println!(
             "{:<12} {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
@@ -375,17 +378,21 @@ fn vec_to_string<T: std::fmt::Display>(vec: &Vec<T>) -> String {
 
 /// evaluate the GC behabiour of the benchmarks
 fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
+    let cycle_path = Path::new(DIR_SIMU_OUT_GC).join("cycle.csv");
     let gc_percent_path = Path::new(DIR_SIMU_OUT_GC).join("gc_percent.csv");
     let max_pause_path = Path::new(DIR_SIMU_OUT_GC).join("max_pause.csv");
     let heap_peak_path = Path::new(DIR_SIMU_OUT_GC).join("heap_peak.csv");
     let peak_workset_path = Path::new(DIR_SIMU_OUT_GC).join("peak_workset.csv");
+    let gc_rounds_path = Path::new(DIR_SIMU_OUT_GC).join("gc_rounds.csv");
 
     fs::create_dir_all(DIR_SIMU_OUT_GC)?;
 
+    let mut cycle_file = File::create(cycle_path)?;
     let mut gc_percent_file = File::create(gc_percent_path)?;
     let mut max_pause_file = File::create(max_pause_path)?;
     let mut heap_peak_file = File::create(heap_peak_path)?;
     let mut peak_workset_file = File::create(peak_workset_path)?;
+    let mut gc_rounds_file = File::create(gc_rounds_path)?;
 
     let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
     vec.sort_by_key(|(n, _)| *n);
@@ -395,10 +402,14 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
         .progress_count(benchmarks.len() as u64)
         .map(|p| {
             // run a test to get gc free runtime and an approximate peak work set size
-            let (c, gc_free_runtime) = simulate(&p, 0, BIG_HEAP, 0.0);
+            let (c, _) = simulate(&p, 0, BIG_HEAP, GC_AT);
             let peak_workset = c.get_stat().peak_workset_size;
             // run several more rounds with different heap size
-            let points = [2.5, 5.0, 10.0, 20.0];
+            let points = if peak_workset > 1000 {
+                [2.5, 4.0, 5.0, 6.0]
+            } else {
+                [2.5, 5.0, 10.0, 20.0]
+            };
             let res = points.map(|pt| {
                 // println!(
                 //     "PEAK: {}; HEAP SIZE: {}",
@@ -407,9 +418,17 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
                 // );
                 simulate(&p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
             });
+            let res_cycle: Vec<u32> = res.iter().map(|(_, cycles)| *cycles).collect();
             let res_gc_percent: Vec<f32> = res
                 .iter()
-                .map(|(_, time)| percent_of(time - gc_free_runtime, *time))
+                .map(|(c, time)| {
+                    let stat = c.get_stat();
+                    let gc_overhead = max(
+                        stat.dheap_stat.gc_stall_cycles,
+                        stat.reducer_stat.gc_stall_cycles,
+                    );
+                    percent_of(gc_overhead, *time)
+                })
                 .collect();
             let res_max_pause: Vec<u32> = res
                 .iter()
@@ -420,25 +439,38 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
                     )
                 })
                 .collect();
+            let res_gc_rounds: Vec<u32> = res
+                .iter()
+                .map(|(c, _)| c.get_stat().gc_stat.gc_rounds)
+                .collect();
             let res_points: Vec<f32> = res
                 .iter()
                 .map(|(core, _)| core.heap_size as f32 / (core.get_stat().peak_workset_size as f32))
                 .collect();
-            (res_gc_percent, res_max_pause, res_points, peak_workset)
+            (
+                res_cycle,
+                res_gc_percent,
+                res_max_pause,
+                res_points,
+                peak_workset,
+                res_gc_rounds,
+            )
         })
         .collect();
 
     results
         .into_iter()
         .zip(names)
-        .for_each(|((percent, max_pause, points, peak), n)| {
+        .for_each(|((cycle,percent, max_pause, points, peak, rounds), n)| {
             println!(
-                "{:<10} | Peak work set {} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
-                n, peak, percent, max_pause, points
+                "{:<10} | Peak work set {} | GC rounds {:?} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
+                n, peak, rounds, percent, max_pause, points
             );
+            writeln!(cycle_file, "{},{}", n, vec_to_string(&cycle)).unwrap();
             writeln!(gc_percent_file, "{},{}", n, vec_to_string(&percent)).unwrap();
             writeln!(max_pause_file, "{},{}", n, vec_to_string(&max_pause)).unwrap();
             writeln!(heap_peak_file, "{},{}", n, vec_to_string(&points)).unwrap();
+            writeln!(gc_rounds_file, "{},{}", n, vec_to_string(&rounds)).unwrap();
             writeln!(peak_workset_file, "{},{}", n, peak).unwrap();
         });
 
@@ -446,6 +478,10 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build_global()
+        .unwrap();
     let args: Vec<String> = env::args().collect();
     let progs = benchmarks!(
         // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
@@ -460,8 +496,8 @@ fn main() -> std::io::Result<()> {
         match args[1].as_str() {
             "@ALL" => run_benchmarks(progs, false),
             "@GC" => eval_gc(progs),
-            // prog => run_big_prog(progs.get(prog).unwrap()),
-            prog => inspect_prog(progs.get(prog).unwrap()),
+            prog => run_big_prog(progs.get(prog).unwrap()),
+            // prog => inspect_prog(progs.get(prog).unwrap()),
         }
     }
 }

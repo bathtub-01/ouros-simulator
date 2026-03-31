@@ -3,7 +3,7 @@ use std::cmp::max;
 use crate::hardware::common::{DualPortMem, Register};
 use crate::hw_module::{HwInput, HwModule};
 
-use super::config::{APP_LENGTH, CACHE_SIZE, DLV_GC, MAX_THREADS};
+use super::config::{APP_LENGTH, CACHE_SIZE, DLV_GC, DLV_GC1, MAX_THREADS};
 use super::program::{get_ptr, is_ptr, ActiveApp, App, Atom};
 use std::collections::VecDeque;
 
@@ -800,7 +800,7 @@ impl HwModule for GbgCollector {
             self.stat.allocations += 1;
         }
 
-        if self.stat_detail_lv >= DLV_GC {
+        if self.stat_detail_lv >= DLV_GC1 {
             if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::MARK {
                 self.stat.immediate_reuse += 1;
             }
