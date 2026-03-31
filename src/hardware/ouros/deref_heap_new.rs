@@ -601,10 +601,6 @@ impl DrfHeap {
     pub fn search(&self) -> usize {
         if self.port_a_fire() && self.getCONSUMEs() == CONSUMEs::InputIA {
             let in_app = mask_seq(&self.input.port_a_bits.load);
-            // println!(
-            //     "addr: {:?}",
-            //     self.thread_stack[self.input.port_a_bits.stack_idx as usize].top()
-            // );
             let (_, p) = select_1st_arg(&in_app);
             p
         } else if *self.stm.value() == Stm::IA {
@@ -715,14 +711,6 @@ impl DrfHeap {
     fn getIAs2(&self, s1: &IAs1) -> IAs2 {
         let ia = &self.holder_in.value().load;
         let target_in_whnf = !*self.non_exist.value() && is_whnf(self.heap_mem.dout_a());
-        // if let None = self.frame_stack[self.holder_in.value().stack_idx as usize].top() {
-        //     println!(
-        //         "Sick. holder_in: {:?}, \n stack: {:?} \n frame_stk: {:?}",
-        //         self.holder_in.value(),
-        //         self.thread_stack[self.holder_in.value().stack_idx as usize].mem,
-        //         self.frame_stack[self.holder_in.value().stack_idx as usize].mem
-        //     );
-        // }
         let frame_record = self.frame_stack[self.holder_in.value().stack_idx as usize]
             .top()
             .unwrap();
@@ -852,12 +840,6 @@ impl DrfHeap {
             .find(|(_, s)| p(*s))
         {
             stack.pop();
-            // if pop_frame {
-            //     self.frame_stack[stk_id].pop();
-            //     if stk_id == 3 {
-            //         println!("frame stk 3 popped. P1");
-            //     }
-            // }
             self.heap_mem.read_a(stack.second().unwrap().1);
             self.holder_in.input.stack_idx = stk_id as u8;
         } else {
@@ -884,9 +866,6 @@ impl DrfHeap {
         let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
         self.working_heap.write_b(*self.addr_holder.value(), true);
         current_stk.push((new_frame, *self.addr_holder.value()));
-        // if self.holder_in.value().stack_idx == 3 && new_frame {
-        //     println!("push new_frame tag");
-        // }
     }
 
     /// ''sensitive'' cases:
@@ -917,9 +896,7 @@ impl DrfHeap {
     fn gen_output_whnf(&self) -> (App, Option<App>) {
         let dmder = self.heap_mem.dout_a();
         let target = &self.holder_in.value().load;
-        // println!("addr: {}", self.heap_mem.input.port_a.addr); // use this for GC debugging
         let (arg_id, _) = select_1st_arg(dmder);
-        // deref(dmder, arg_id, target, self.input.free_addr)
         deref(dmder, arg_id, target, self.reg_free_addr.value().1)
     }
 
@@ -943,17 +920,8 @@ impl DrfHeap {
             IAs1::ExistWHNF | IAs1::ExistIAWorkingAtNewFrame => {
                 let stk_idx = self.holder_in.value().stack_idx as usize;
                 let stk = &self.thread_stack[stk_idx];
-                // problem 1: this empty stack should also be cancelled
                 if stack_cell_with(stk.top(), |(flag, _)| *flag) {
                     self.frame_stack[stk_idx].pop();
-                    // if stk_idx == 3 {
-                    //     println!(
-                    //         "ias1: {:?} holder: {:?} frame stk 3 popped. P2, stack-top: {:?}",
-                    //         s1,
-                    //         self.holder_in.value(),
-                    //         self.thread_stack[stk_idx].top()
-                    //     );
-                    // }
                 }
             }
             _ => {}
@@ -1078,16 +1046,10 @@ impl DrfHeap {
                 self.heap_mem.read_a(current_stk.second().unwrap().1);
                 self.addr_holder.connect(&current_top);
                 self.frame_stack[self.input.port_a_bits.stack_idx as usize].pop();
-                // if self.input.port_a_bits.stack_idx as usize == 3 {
-                //     println!("frame stk 3 popped. P3");
-                // }
                 self.stm.connect(&Stm::RESUME);
             }
             CONSUMEs::InputWHNFNoDmderNoFrame => {
                 self.frame_stack[self.input.port_a_bits.stack_idx as usize].pop();
-                // if self.input.port_a_bits.stack_idx as usize == 3 {
-                //     println!("frame stk 3 popped. P4");
-                // }
                 self.write_incoming(HeapPort::A);
                 self.stm.connect(&Stm::IDLE);
             }
@@ -1162,13 +1124,6 @@ impl DrfHeap {
             IAs1::ExistIAWorkingNormal => {
                 // change this to `self.push_target(false);` will disable stack riding
                 self.push_target(true);
-                // if self.holder_in.value().stack_idx == 3 {
-                //     println!(
-                //         "push new_frame when ias2: {:?}, holder: {:?}",
-                //         self.getIAs2(&ias1),
-                //         self.holder_in.value()
-                //     );
-                // }
             }
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
@@ -1193,15 +1148,6 @@ impl DrfHeap {
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                     self.frame_stack[stk_id].push(self.gen_frame_record());
-                    // if stk_id == 3 {
-                    //     println!("frame stk 3 pushed. P1");
-                    // }
-                    // !NEW! update current frame record, too (not good, hurts SUMEULER)
-                    // self.frame_stack[current_idx].modify({
-                    //     let mut record = self.frame_stack[current_idx].top().unwrap().clone();
-                    //     record[stk_id] = *self.addr_holder.value(); // next top of current stk
-                    //     record
-                    // });
                 };
             }
             IAs2::NextStrictArgLocal => {
@@ -1256,12 +1202,6 @@ impl DrfHeap {
             let addr = self.input.port_b_bits.heap_addr;
             let app = extend_to_app(&self.input.port_b_bits.load);
             self.heap_mem.write_b(addr, app);
-
-            // if addr == 4060 {
-            //     if let Some(3) = self.waited_by() {
-            //         println!("4060 from sub emit: {:?}", self.input.port_b_bits);
-            //     }
-            // }
         }
     }
 }
@@ -1309,24 +1249,13 @@ impl HwModule for DrfHeap {
         if self.port_b_ready() && !self.input.port_b_valid && self.input.read_heap_req_valid {
             self.gc_read_granted.connect(&true);
             self.heap_mem.read_b(self.input.read_heap_req_addr);
-            // println!("read {} for GC", self.input.read_heap_req_addr);
         }
-
-        // if self.heap_read_valid() {
-        //     println!("readout {:?} for GC", self.heap_read_bits());
-        // }
 
         if !self.reg_free_addr.value().0 || self.need_split() {
             self.reg_free_addr
                 .connect(&(self.input.free_addr_valid, self.input.free_addr));
         }
 
-        // if self.out_big_drf_valid() && self.out_big_drg_bits().heap_addr == 0 {
-        //     println!(
-        //         "DHeap emit big drf app with addr 0!, in free addr: {}, valid: {}",
-        //         self.input.free_addr, self.input.free_addr_valid
-        //     );
-        // }
         if self.stat_detail_lv >= DLV_GC {
             if self.stalled() {
                 self.stat.gc_stall_cycles += 1;
@@ -1340,35 +1269,6 @@ impl HwModule for DrfHeap {
     }
 
     fn update_stat(&mut self) {
-        // if self.dealloc_valid() && self.dealloc_bits() == 4077 {
-        //     println!("deallocate 65!");
-        // }
-        // if self.heap_mem.input.port_a.addr == 0 && self.heap_mem.input.port_a.is_write {
-        //     println!("a write 0: {:?}", self.heap_mem.input.port_a.din);
-        // }
-        // if self.heap_mem.input.port_b.addr == 0 && self.heap_mem.input.port_b.is_write {
-        //     println!(
-        //         "b write 0: {:?}, port_b ready: {}, port_b in: {:?}",
-        //         self.heap_mem.input.port_b.din,
-        //         self.port_b_ready(),
-        //         self.input.port_b_bits.load
-        //     );
-        // }
-
-        // let look_at_1 = 175;
-        // let look_at_2 = 523;
-        // println!(
-        //     "addr-{} | working: {} | {:?} | addr-{} | working: {} | {:?}",
-        //     look_at_1,
-        //     self.working_heap.ram[look_at_1],
-        //     self.heap_mem.ram[look_at_1],
-        //     look_at_2,
-        //     self.working_heap.ram[look_at_2],
-        //     self.heap_mem.ram[look_at_2]
-        // );
-
-        // println!("stack: {:?}", self.thread_stack[0].mem);
-
         if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.holder_out.0 {
                 self.stat

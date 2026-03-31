@@ -539,9 +539,6 @@ fn traverse(
         res.push(work_on);
         for atm in app {
             if is_ptr(atm) && !visited[get_ptr(atm)] {
-                // if get_ptr(atm) == 175 {
-                //     println!("{} reachable from {}", get_ptr(atm), work_on);
-                // }
                 traverse_stk.push(get_ptr(atm));
                 visited[get_ptr(atm)] = true;
             }

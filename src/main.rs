@@ -484,10 +484,8 @@ fn main() -> std::io::Result<()> {
         .unwrap();
     let args: Vec<String> = env::args().collect();
     let progs = benchmarks!(
-        // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
-    ); // ignoring TREESUM as it does not have much garbage..
+    );
 
     if args.len() == 1 {
         println!("usage: cargo run --release @ALL/@GC/<prog>");
@@ -496,8 +494,7 @@ fn main() -> std::io::Result<()> {
         match args[1].as_str() {
             "@ALL" => run_benchmarks(progs, false),
             "@GC" => eval_gc(progs),
-            prog => run_big_prog(progs.get(prog).unwrap()),
-            // prog => inspect_prog(progs.get(prog).unwrap()),
+            prog => inspect_prog(progs.get(prog).unwrap()),
         }
     }
 }

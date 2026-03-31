@@ -361,7 +361,6 @@ impl GbgCollector {
             } else {
                 *self.reg_work_head.value()
             };
-            // println!("marking: {}", w_head);
             self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
             // self.gc_cache.push(w_head);
             self.reg_work_drawed.connect(&true); // next head will be read out by write_a
@@ -404,11 +403,6 @@ impl GbgCollector {
                 self.reg_move.connect(&0);
                 self.reg_pre_gc.connect(&false);
                 self.gc_cache.flush();
-                // println!("================== MARK START =====================");
-
-                // for i in 0..100 {
-                //     println!("brefore MARK, addr-{} is in {:?}", i, self.gc_mem.ram[i]);
-                // }
             }
         }
     }
@@ -432,32 +426,6 @@ impl GbgCollector {
         // ========== move-1 logic (wait until main heap read success) ==========
         // TODO heap read does not have to sync with no-mutator-req
         if *self.reg_move.value() == 1 && self.input.heap_read_valid && !self.mutator_request() {
-            // println!(
-            //     // useful MARK log
-            //     "work on: {} | app: {:?} | worklist len: {}",
-            //     self.reg_work_on.value(),
-            //     self.input.heap_read_bits,
-            //     self.reg_work_len.value()
-            // );
-
-            // let real_worklist_head: usize = if *self.reg_work_drawed.value() {
-            //     self.gc_mem.dout_a().ptr
-            // } else {
-            //     *self.reg_work_head.value()
-            // };
-            // let mut fl: Vec<usize> = Vec::new();
-
-            // for i in 0..*self.reg_work_len.value() {
-            //     if i == 0 {
-            //         fl.push(real_worklist_head);
-            //     } else {
-            //         let fst = fl.last().unwrap();
-            //         assert!(self.gc_mem.ram[*fst].state == CellState::WorkList);
-            //         fl.push(self.gc_mem.ram[*fst].ptr);
-            //     }
-            // }
-            // println!("worklist at this point: {:?}", fl);
-            ///////////////////////////////////////////////
             let in_app = &self.input.heap_read_bits;
             // splition of move-0 and move-1 is needed because mutator requests can modify worklist
             if in_app.iter().any(|atm| is_ptr(atm)) {
@@ -465,7 +433,6 @@ impl GbgCollector {
                 self.reg_move.connect(&2);
                 // pre read for move-2
                 let found = in_app.iter().position(|atm| is_ptr(atm)).unwrap();
-                // println!("go to move-2, read on: {}", get_ptr(&in_app[found]));
                 self.mark_read(get_ptr(&in_app[found]));
                 // self.gc_mem.read_a(get_ptr(&in_app[found]));
                 self.reg_app_idx.connect(&found);
@@ -578,10 +545,6 @@ impl GbgCollector {
                 self.reg_bk_reader.value()
             };
 
-            // if *self.reg_sweeper.value() == 156 {
-            //     println!("sweep on 156: {:?}", self.gc_mem.ram[156]);
-            // }
-
             // NOTE all cells below const_mark_from will be marked due to ROOT
             if read_out.state == CellState::Marked {
                 // recover as Unmarked
@@ -589,9 +552,6 @@ impl GbgCollector {
                 // .write_b(*self.reg_sweeper.value(), no_ptr_cell(CellState::Unmarked));
                 self.gc_mem
                     .write_b(*self.reg_sweeper.value(), no_ptr_cell(CellState::Unmarked));
-                // if *self.reg_sweeper.value() == 156 {
-                //     println!("recover 156 as Unmarked");
-                // }
             } else if read_out.state == CellState::Unmarked {
                 // push it to freelist
                 let old_head: usize = if *self.reg_free_drawed.value() {
@@ -601,9 +561,6 @@ impl GbgCollector {
                 };
                 self.push_to_freelist(*self.reg_sweeper.value(), old_head, false);
                 self.free_len_plus_one();
-                // if *self.reg_sweeper.value() == 433 {
-                //     println!("pushing 433 to freelist!, old head: {}", old_head);
-                // }
                 if old_head == 0 {
                     println!("old head is 0 when pushing to freelist!");
                 }
@@ -657,17 +614,7 @@ impl HwModule for GbgCollector {
         } else {
             *self.reg_work_head.value()
         };
-        // if real_freelist_head == 16 {
-        //     println!(
-        //         "real_freelist_head == 16-{:?}, read from: {}-{:?}, state: {:?}, len: {}, sweep: {}",
-        //         self.gc_mem.ram[16],
-        //         self.gc_mem.input.port_a.addr,
-        //         self.gc_mem.ram[self.gc_mem.input.port_a.addr],
-        //         self.reg_collector.value(),
-        //         self.reg_free_len.value(),
-        //         self.reg_sweeper.value(),
-        //     );
-        // }
+
         self.gc_mem.input.default_input();
 
         self.reg_free_drawed.connect(&false);
@@ -697,13 +644,6 @@ impl HwModule for GbgCollector {
         }
 
         if self.feedback_fire() {
-            // if self.input.feedback_bits == 175 {
-            //     println!(
-            //         "feedback {} arrived GC, state: {:?}",
-            //         self.input.feedback_bits,
-            //         self.reg_collector.value()
-            //     );
-            // }
             let cell_state = match self.reg_collector.value() {
                 CollectorState::IDLE | CollectorState::ROOT => CellState::Unmarked,
                 CollectorState::MARK => CellState::WorkList,
@@ -716,20 +656,6 @@ impl HwModule for GbgCollector {
                 }
             };
             if cell_state == CellState::WorkList {
-                // if self.input.feedback_bits == 156 {
-                //     println!(
-                //         "feedback: add {} to worklist, 156: {:?}",
-                //         self.input.feedback_bits, self.gc_mem.ram[156]
-                //     );
-                //     let mut fl: Vec<usize> = Vec::new();
-                //     fl.push(real_freelist_head);
-                //     for _ in 0..*self.reg_free_len.value() {
-                //         let fst = fl.last().unwrap();
-                //         assert!(self.gc_mem.ram[*fst].state == CellState::FreeList);
-                //         fl.push(self.gc_mem.ram[*fst].ptr);
-                //     }
-                //     println!("freelist at this point: {:?}", fl);
-                // }
                 self.reg_work_head.connect(&self.input.feedback_bits);
                 self.work_len_plus_one();
             }
@@ -758,20 +684,6 @@ impl HwModule for GbgCollector {
             }
         }
 
-        // print!("collector: {:?}", self.reg_collector.value());
-        // let look_at = 175;
-        // if self.addr_out_fire() && self.addr_out_bits() == look_at {
-        //     println!(
-        //         "emit {} as free addr!, {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
-        //         look_at,
-        //         self.gc_mem.ram[look_at],
-        //         self.reg_collector.value(),
-        //         self.gc_mem.dout_a().ptr,
-        //         self.reg_free_head.value(),
-        //         self.input.deallocate_bits,
-        //         self.reg_sweeper.value()
-        //     );
-        // }
         if self.addr_out_fire() && self.addr_out_bits() == 0 {
             println!(
                 "emit 0 as free addr!, 0: {:?}, state: {:?}, dout: {}, reg_head: {}, dealloc: {}, sweep {}",
@@ -786,16 +698,6 @@ impl HwModule for GbgCollector {
     }
 
     fn update_stat(&mut self) {
-        // println!(
-        //     "collector state: {:?}, worklist len: {}, worklist head: {}, freelist len: {}, freelist head: {}, monitor idx: {}",
-        //     self.reg_collector.value(),
-        //     self.reg_work_len.value(),
-        //     self.reg_work_head.input,
-        //     self.reg_free_len.value(),
-        //     self.reg_free_head.input,
-        //     self.reg_monitor_idx.value()
-        // );
-
         if self.addr_out_fire() {
             self.stat.allocations += 1;
         }
