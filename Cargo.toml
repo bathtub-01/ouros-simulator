@@ -3,6 +3,10 @@ name = "ouros-simulator"
 version = "0.1.0"
 edition = "2024"
 
+[lints.clippy]
+# pedantic="warn", will add afterwards
+# nursery="forbid" #, will add afterwards
+
 [dependencies]
 rand = "0.9.2"
 vstd = "=0.0.0-2026-01-11-0057"
