@@ -482,18 +482,21 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
     Ok(())
 }
 
+const NUMBER_ACTIVE_THREADS: usize = 4;
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
+#[command(next_line_help = true)]
 struct Args {
     mode: Mode,
 
     prog_name: Option<String>,
 
-    #[arg(short, long, default_value_t = 4)]
+    #[arg(short, long, default_value_t = NUMBER_ACTIVE_THREADS)]
     num_threads: usize,
 }
 
-#[derive(Parser, ValueEnum, Clone, Debug, Default)]
+#[derive(ValueEnum, Clone, Debug, Default)]
 enum Mode {
     #[default]
     All,
@@ -501,14 +504,15 @@ enum Mode {
 }
 
 // FIX: move rest of code above into lib.rs
-fn main() -> std::io::Result<()> {
-    // FIX: remove unwraps
-    let ref parsed_args @ Args { num_threads, .. } = Args::try_parse().unwrap();
+// FIX: add thisError or anyhow
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    print!("example of command to run");
+    print!("cargo run -- all");
+    let ref parsed_args @ Args { num_threads, .. } = Args::parse();
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
-        .build_global()
-        .unwrap();
+        .build_global()?;
 
     let progs = benchmarks!(
         // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
@@ -520,10 +524,17 @@ fn main() -> std::io::Result<()> {
         Args {
             prog_name: Some(program_name),
             ..
-        } => run_big_prog(progs.get(program_name.as_str()).unwrap()),
+        } => run_big_prog(
+            progs
+                .get(program_name.as_str())
+                .ok_or(format!("could not find program named: {}", program_name))?,
+        ),
         Args {
             mode: Mode::All, ..
         } => run_benchmarks(progs, false),
         Args { mode: Mode::Gc, .. } => eval_gc(progs),
-    }
+    }?;
+
+    // FIX: remove this Ok return
+    Ok(())
 }

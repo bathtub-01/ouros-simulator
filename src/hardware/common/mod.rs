@@ -5,7 +5,7 @@ pub mod memory;
 pub use memory::{DualPortMem, SinglePortMem};
 
 pub mod fifo;
-pub use fifo::FIFO;
+pub use fifo::Fifo;
 
 pub mod arbiter;
 pub use arbiter::PArbiter;

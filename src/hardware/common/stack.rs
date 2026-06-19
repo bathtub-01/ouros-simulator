@@ -3,13 +3,12 @@ use vstd::prelude::*;
 
 verus! {
 #[derive(Default, Debug, PartialEq)]
-// FIX: should we fix capitalisation of variant names?
 pub enum StackOp {
     #[default]
-    NOP, // non-op
-    PUSH, // push one
-    POP,  // pop one
-    MOD,  // modify top
+    Nop, // non-op
+    Push, // push one
+    Pop,  // pop one
+    Mod,  // modify top
 }
 
 #[derive(Default, Debug)]
@@ -20,7 +19,7 @@ pub struct StackInput<T: Clone + Default> {
 
 impl<T: Clone + Default> HwInput for StackInput<T> {
     fn default_input(&mut self) {
-        self.op = StackOp::NOP;
+        self.op = StackOp::Nop;
     }
 }
 
@@ -63,16 +62,16 @@ impl<T: Clone + Default, const N: usize> Stack<T, N> {
     }
 
     pub fn push(&mut self, din: T) {
-        self.input.op = StackOp::PUSH;
+        self.input.op = StackOp::Push;
         self.input.din = din;
     }
 
     pub fn pop(&mut self) {
-        self.input.op = StackOp::POP;
+        self.input.op = StackOp::Pop;
     }
 
     pub fn modify(&mut self, din: T) {
-        self.input.op = StackOp::MOD;
+        self.input.op = StackOp::Mod;
         self.input.din = din;
     }
 }
@@ -86,14 +85,14 @@ impl<T: Clone + Default, const N: usize> HwModule for Stack<T, N> {
     self.input.op is MOD && old(self).mem@.len() > 0 ==> self.mem@.len() == old(self).mem@.len(),
     {
         match self.input.op {
-            StackOp::NOP => {}
-            StackOp::PUSH => {
+            StackOp::Nop => {}
+            StackOp::Push => {
                 self.mem.push(self.input.din.clone());
             }
-            StackOp::POP => {
+            StackOp::Pop => {
                 self.mem.pop();
             }
-            StackOp::MOD => {
+            StackOp::Mod => {
                 self.mem.pop();
                 self.mem.push(self.input.din.clone());
             }
@@ -116,7 +115,7 @@ fn stack_spec() {
 
     for i in 0..64 {
         stack.input.link(|input| {
-            input.op = StackOp::PUSH;
+            input.op = StackOp::Push;
             input.din = i;
         });
         stack.tick();
@@ -126,14 +125,14 @@ fn stack_spec() {
         assert_eq!(stack.top(), Some(&(63 - i)));
 
         stack.input.link(|input| {
-            input.op = StackOp::MOD;
+            input.op = StackOp::Mod;
             input.din = i;
         });
         stack.tick();
         assert_eq!(stack.top(), Some(&i));
 
         stack.input.link(|input| {
-            input.op = StackOp::POP;
+            input.op = StackOp::Pop;
         });
         stack.tick();
     }

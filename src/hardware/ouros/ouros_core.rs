@@ -4,7 +4,7 @@ use std::cmp::max;
 
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
-use crate::hardware::common::{PArbiter, RArbiter, Ring, FIFO};
+use crate::hardware::common::{PArbiter, RArbiter, Ring, Fifo};
 use crate::hw_module::{HwInput, HwModule};
 
 use super::addr_box::AddrBox;
@@ -23,7 +23,7 @@ enum DESTs {
 
 fn is_lit_seq(app: &App) -> bool {
     match app[0] {
-        Atom::SEQ(true) => is_lit_atom(&app[2]),
+        Atom::Seq(true) => is_lit_atom(&app[2]),
         _ => false,
     }
 }
@@ -68,32 +68,32 @@ pub struct OurosCore {
     reducer: Reducer,
     alu: Alu,
 
-    buffers_dealloc: FIFO<usize, 2, false>,
-    buffers_free_addr: FIFO<usize, 2, false>,
-    buffers_feedback: FIFO<usize, 2, false>,
+    buffers_dealloc: Fifo<usize, 2, false>,
+    buffers_free_addr: Fifo<usize, 2, false>,
+    buffers_feedback: Fifo<usize, 2, false>,
 
-    buffers_dheap_a_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    buffers_dheap_a_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    buffers_dheap_a_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    buffers_dheap_a_3: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_dheap_a_0: Fifo<ActiveApp, BUFFER_SIZE, false>,
+    buffers_dheap_a_1: Fifo<ActiveApp, BUFFER_SIZE, false>,
+    buffers_dheap_a_2: Fifo<ActiveApp, BUFFER_SIZE, false>,
+    buffers_dheap_a_3: Fifo<ActiveApp, BUFFER_SIZE, false>,
     arbiter_dheap_a: PArbiter<ActiveApp, 4>,
 
-    buffers_dheap_b_0: FIFO<FrozenApp, BUFFER_SIZE, false>,
-    buffers_dheap_b_1: FIFO<FrozenApp, BUFFER_SIZE, false>,
+    buffers_dheap_b_0: Fifo<FrozenApp, BUFFER_SIZE, false>,
+    buffers_dheap_b_1: Fifo<FrozenApp, BUFFER_SIZE, false>,
     arbiter_dheap_b: PArbiter<FrozenApp, 2>,
 
     rings_dheap_b_0: Ring<usize, BUFFER_SIZE>,
     rings_dheap_b_1: Ring<usize, BUFFER_SIZE>,
 
-    buffers_reducer_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    buffers_reducer_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    buffers_reducer_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    buffers_reducer_3: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_reducer_0: Fifo<ActiveApp, BUFFER_SIZE, false>,
+    buffers_reducer_1: Fifo<ActiveApp, BUFFER_SIZE, false>,
+    buffers_reducer_2: Fifo<ActiveApp, BUFFER_SIZE, false>,
+    buffers_reducer_3: Fifo<ActiveApp, BUFFER_SIZE, false>,
     arbiter_reducer: PArbiter<ActiveApp, 4>,
 
-    buffers_alu_0: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    buffers_alu_1: FIFO<ActiveApp, BUFFER_SIZE, false>,
-    buffers_alu_2: FIFO<ActiveApp, BUFFER_SIZE, false>,
+    buffers_alu_0: Fifo<ActiveApp, BUFFER_SIZE, false>,
+    buffers_alu_1: Fifo<ActiveApp, BUFFER_SIZE, false>,
+    buffers_alu_2: Fifo<ActiveApp, BUFFER_SIZE, false>,
     arbiter_alu: PArbiter<ActiveApp, 3>,
 }
 
@@ -118,32 +118,32 @@ impl OurosCore {
                 .detail(detail_lv),
             alu: Alu::new().detail(detail_lv),
 
-            buffers_dealloc: FIFO::new(),
-            buffers_free_addr: FIFO::new(),
-            buffers_feedback: FIFO::new(),
+            buffers_dealloc: Fifo::new(),
+            buffers_free_addr: Fifo::new(),
+            buffers_feedback: Fifo::new(),
 
-            buffers_dheap_a_0: FIFO::new().record_stat(buffer_usage),
-            buffers_dheap_a_1: FIFO::new().record_stat(buffer_usage),
-            buffers_dheap_a_2: FIFO::new().record_stat(buffer_usage),
-            buffers_dheap_a_3: FIFO::new().record_stat(buffer_usage),
+            buffers_dheap_a_0: Fifo::new().record_stat(buffer_usage),
+            buffers_dheap_a_1: Fifo::new().record_stat(buffer_usage),
+            buffers_dheap_a_2: Fifo::new().record_stat(buffer_usage),
+            buffers_dheap_a_3: Fifo::new().record_stat(buffer_usage),
             arbiter_dheap_a: PArbiter::new(),
 
-            buffers_dheap_b_0: FIFO::new().record_stat(buffer_usage),
-            buffers_dheap_b_1: FIFO::new().record_stat(buffer_usage),
+            buffers_dheap_b_0: Fifo::new().record_stat(buffer_usage),
+            buffers_dheap_b_1: Fifo::new().record_stat(buffer_usage),
             arbiter_dheap_b: PArbiter::new(),
 
             rings_dheap_b_0: Ring::new(),
             rings_dheap_b_1: Ring::new(),
 
-            buffers_reducer_0: FIFO::new().record_stat(buffer_usage),
-            buffers_reducer_1: FIFO::new().record_stat(buffer_usage),
-            buffers_reducer_2: FIFO::new().record_stat(buffer_usage),
-            buffers_reducer_3: FIFO::new().record_stat(buffer_usage),
+            buffers_reducer_0: Fifo::new().record_stat(buffer_usage),
+            buffers_reducer_1: Fifo::new().record_stat(buffer_usage),
+            buffers_reducer_2: Fifo::new().record_stat(buffer_usage),
+            buffers_reducer_3: Fifo::new().record_stat(buffer_usage),
             arbiter_reducer: PArbiter::new(),
 
-            buffers_alu_0: FIFO::new().record_stat(buffer_usage),
-            buffers_alu_1: FIFO::new().record_stat(buffer_usage),
-            buffers_alu_2: FIFO::new().record_stat(buffer_usage),
+            buffers_alu_0: Fifo::new().record_stat(buffer_usage),
+            buffers_alu_1: Fifo::new().record_stat(buffer_usage),
+            buffers_alu_2: Fifo::new().record_stat(buffer_usage),
             arbiter_alu: PArbiter::new(),
         }
     }
@@ -190,7 +190,7 @@ fn assign_some<T: Clone>(sink: &mut T, source: Option<&T>) {
 
 /// Connect input buffers of the arbiter
 fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: bool>(
-    buffers: [&mut FIFO<T, N, P>; A],
+    buffers: [&mut Fifo<T, N, P>; A],
     arbiter: &mut PArbiter<T, A>,
 ) {
     // first handle arbiter's inputs

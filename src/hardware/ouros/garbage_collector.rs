@@ -40,10 +40,10 @@ impl<T: PartialEq> FixedFifo<T> {
 // FIX: should we fix capitalisation of variant names?
 enum CollectorState {
     #[default]
-    IDLE,
-    ROOT,
-    MARK,
-    SWEEP,
+    Idle,
+    Root,
+    Mark,
+    Sweep,
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -209,7 +209,7 @@ impl GbgCollector {
     /// draw an address from the freelist
     pub fn addr_out_bits(&self) -> usize {
         if self.deallocate_fire()
-            && *self.reg_collector.value() != CollectorState::MARK
+            && *self.reg_collector.value() != CollectorState::Mark
             && self.input.deallocate_bits != *self.reg_sweeper.value()
         {
             self.input.deallocate_bits
@@ -252,7 +252,7 @@ impl GbgCollector {
     }
 
     pub fn read_heap_req_valid(&self) -> bool {
-        *self.reg_collector.value() == CollectorState::MARK
+        *self.reg_collector.value() == CollectorState::Mark
     }
 
     pub fn read_heap_req_addr(&self) -> usize {
@@ -298,7 +298,7 @@ impl GbgCollector {
     fn mutator_request(&self) -> bool {
         match self.reg_collector.value() {
             // MARK state ignores deallocate requests
-            CollectorState::MARK => self.addr_out_fire() || self.feedback_fire(),
+            CollectorState::Mark => self.addr_out_fire() || self.feedback_fire(),
             _ => self.addr_out_fire() || self.deallocate_fire() || self.feedback_fire(),
         }
     }
@@ -355,7 +355,7 @@ impl GbgCollector {
             self.reg_sweeper.connect(&0);
             self.gc_mem.read_a(0);
             self.reg_pre_gc.connect(&true);
-            self.reg_collector.connect(&CollectorState::SWEEP);
+            self.reg_collector.connect(&CollectorState::Sweep);
         } else {
             // this is the ONLY operation to reduce worklist length
             let w_head: usize = if *self.reg_work_drawed.value() {
@@ -376,7 +376,7 @@ impl GbgCollector {
 
     fn step_idle(&mut self) {
         if !self.mutator_request() && *self.reg_free_len.value() <= self.const_gc_threshold {
-            self.reg_collector.connect(&CollectorState::ROOT);
+            self.reg_collector.connect(&CollectorState::Root);
             // put `main` into worklist
             self.reg_work_head.connect(&0);
             self.reg_work_len.connect(&1);
@@ -402,7 +402,7 @@ impl GbgCollector {
                 self.work_len_plus_one();
             } else {
                 // go to MARK
-                self.reg_collector.connect(&CollectorState::MARK);
+                self.reg_collector.connect(&CollectorState::Mark);
                 self.reg_move.connect(&0);
                 self.reg_pre_gc.connect(&false);
                 self.gc_cache.flush();
@@ -550,7 +550,7 @@ impl GbgCollector {
                     self.reg_sweeper.connect(&0);
                     self.gc_mem.read_a(0);
                     self.reg_pre_gc.connect(&true);
-                    self.reg_collector.connect(&CollectorState::SWEEP);
+                    self.reg_collector.connect(&CollectorState::Sweep);
                 } else {
                     let w_head = *self.reg_work_head.value();
                     self.gc_mem.write_a(w_head, no_ptr_cell(CellState::Marked));
@@ -621,7 +621,7 @@ impl GbgCollector {
                 self.reg_pre_gc.connect(&true);
             } else {
                 // go back to IDLE
-                self.reg_collector.connect(&CollectorState::IDLE);
+                self.reg_collector.connect(&CollectorState::Idle);
             }
         }
     }
@@ -629,7 +629,7 @@ impl GbgCollector {
 
 impl HwModule for GbgCollector {
     fn update_local(&mut self) {
-        if *self.reg_collector.value() != CollectorState::MARK {
+        if *self.reg_collector.value() != CollectorState::Mark {
             // if self.input.monitor_unset_valid {
             //     self.reg_monitors.input[self.input.monitor_unset] = (false, Default::default());
             // }
@@ -677,7 +677,7 @@ impl HwModule for GbgCollector {
         self.reg_work_drawed.connect(&false);
         self.reg_work_head.connect(&real_worklist_head);
 
-        let can_dealloc = *self.reg_collector.value() != CollectorState::MARK
+        let can_dealloc = *self.reg_collector.value() != CollectorState::Mark
             && self.input.deallocate_bits != *self.reg_sweeper.value();
 
         if self.deallocate_fire() && can_dealloc {
@@ -707,9 +707,9 @@ impl HwModule for GbgCollector {
             //     );
             // }
             let cell_state = match self.reg_collector.value() {
-                CollectorState::IDLE | CollectorState::ROOT => CellState::Unmarked,
-                CollectorState::MARK => CellState::WorkList,
-                CollectorState::SWEEP => {
+                CollectorState::Idle | CollectorState::Root => CellState::Unmarked,
+                CollectorState::Mark => CellState::WorkList,
+                CollectorState::Sweep => {
                     if self.input.feedback_bits <= *self.reg_sweeper.value() {
                         CellState::Unmarked
                     } else {
@@ -746,15 +746,15 @@ impl HwModule for GbgCollector {
 
         // background GC work
         match self.reg_collector.value() {
-            CollectorState::IDLE => self.step_idle(),
-            CollectorState::ROOT => self.step_root(),
-            CollectorState::MARK => self.step_mark(),
-            CollectorState::SWEEP => self.step_sweep(),
+            CollectorState::Idle => self.step_idle(),
+            CollectorState::Root => self.step_root(),
+            CollectorState::Mark => self.step_mark(),
+            CollectorState::Sweep => self.step_sweep(),
         }
 
         if self.stat_detail_lv >= DLV_GC {
-            if *self.reg_collector.value() == CollectorState::IDLE
-                && self.reg_collector.input == CollectorState::ROOT
+            if *self.reg_collector.value() == CollectorState::Idle
+                && self.reg_collector.input == CollectorState::Root
             {
                 self.stat.gc_rounds += 1;
             }
@@ -803,7 +803,7 @@ impl HwModule for GbgCollector {
         }
 
         if self.stat_detail_lv >= DLV_GC1 {
-            if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::MARK {
+            if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::Mark {
                 self.stat.immediate_reuse += 1;
             }
 

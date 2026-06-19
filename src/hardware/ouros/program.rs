@@ -8,9 +8,9 @@ pub enum AluOp {
     EQ,
     LE,
     LT,
-    ADD,
-    SUB,
-    MUL,
+    Add,
+    Sub,
+    Mul,
 }
 
 type Unique = bool;
@@ -23,46 +23,46 @@ type FreeVars = u8;
 #[derive(Clone, PartialEq, Debug)]
 // FIX: should we fix capitalisation of variant names?
 pub enum SpeCell {
-    ARG(usize),
-    LIT(i32),
+    Arg(usize),
+    Lit(i32),
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
 // FIX: should we fix capitalisation of variant names?
 pub enum Atom {
     #[default]
-    NOP,
-    PTR(usize, Unique, NewCell),
-    COM(Arity, usize),
-    CON(Arity, Fields, Index),
-    TAB(usize, FreeVars),
-    INT(i32),
-    PRM(AluOp, RevCond),
+    Nop,
+    Ptr(usize, Unique, NewCell),
+    Com(Arity, usize),
+    Con(Arity, Fields, Index),
+    Tab(usize, FreeVars),
+    Int(i32),
+    Prm(AluOp, RevCond),
     Y,
-    SEQ(bool),
-    ARG(usize, Unique),
-    TRY,
-    SPE(AluOp, RevCond, SpeCell, SpeCell, usize),
-    ERR(u8),
+    Seq(bool),
+    Arg(usize, Unique),
+    Try,
+    Spe(AluOp, RevCond, SpeCell, SpeCell, usize),
+    Err(u8),
 }
 
 
 impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Atom::NOP => write!(f, "NOP"),
-            Atom::PTR(p, unique, _) => write!(f, "PTR({},{})", p, unique),
-            Atom::COM(arity, ptr) => write!(f, "COM({}, {})", arity, ptr),
-            Atom::INT(n) => write!(f, "INT({})", n),
-            Atom::PRM(p, inv) => write!(f, "PRM({:?}, {})", p, inv),
+            Atom::Nop => write!(f, "NOP"),
+            Atom::Ptr(p, unique, _) => write!(f, "PTR({},{})", p, unique),
+            Atom::Com(arity, ptr) => write!(f, "COM({}, {})", arity, ptr),
+            Atom::Int(n) => write!(f, "INT({})", n),
+            Atom::Prm(p, inv) => write!(f, "PRM({:?}, {})", p, inv),
             Atom::Y => write!(f, "Y"),
-            Atom::SEQ(evaluated) => write!(f, "SEQ({})", evaluated),
-            Atom::ARG(arg, _) => write!(f, "ARG({})", arg),
-            Atom::ERR(e) => write!(f, "ERR({})", e),
-            Atom::TRY => write!(f, "TRY"),
-            Atom::SPE(alu_op, _, spe_cell, spe_cell1, _) => write!(f, "SPE"),
-            Atom::CON(a, fields, i) => write!(f, "CON({}, {}, {})", a, fields, i),
-            Atom::TAB(base, fv) => write!(f, "TAB({}, {})", base, fv),
+            Atom::Seq(evaluated) => write!(f, "SEQ({})", evaluated),
+            Atom::Arg(arg, _) => write!(f, "ARG({})", arg),
+            Atom::Err(e) => write!(f, "ERR({})", e),
+            Atom::Try => write!(f, "TRY"),
+            Atom::Spe(alu_op, _, spe_cell, spe_cell1, _) => write!(f, "SPE"),
+            Atom::Con(a, fields, i) => write!(f, "CON({}, {}, {})", a, fields, i),
+            Atom::Tab(base, fv) => write!(f, "TAB({}, {})", base, fv),
         }
     }
 }
@@ -92,20 +92,20 @@ pub struct Program {
 pub fn arity_of(atom: &Atom) -> u8 {
     use Atom::*;
     match atom {
-        COM(a, _) => *a,
-        CON(a, _, _) => *a,
-        PRM(_, _) => 2,
-        INT(_) => 1,
+        Com(a, _) => *a,
+        Con(a, _, _) => *a,
+        Prm(_, _) => 2,
+        Int(_) => 1,
         Y => 1,
-        SEQ(_) => 2,
-        TRY => 2,
+        Seq(_) => 2,
+        Try => 2,
         _ => 0,
     }
 }
 
 /// The length of an application, stripping off NOPs.
 pub fn app_length(app: &App) -> usize {
-    let found = app.iter().enumerate().find(|&(_, atom)| *atom == Atom::NOP);
+    let found = app.iter().enumerate().find(|&(_, atom)| *atom == Atom::Nop);
     match found {
         Some((idx, _)) => idx,
         None => APP_LENGTH,
@@ -116,14 +116,14 @@ pub fn app_length(app: &App) -> usize {
 fn app_length_spec() {
     use Atom::*;
     let a: App = [
-        PTR(0, false, false),
-        INT(1),
-        INT(2),
-        INT(3),
-        NOP,
-        NOP,
-        NOP,
-        NOP,
+        Ptr(0, false, false),
+        Int(1),
+        Int(2),
+        Int(3),
+        Nop,
+        Nop,
+        Nop,
+        Nop,
     ];
     let b: App = [Y, Y, Y, Y, Y, Y, Y, Y];
     assert_eq!(app_length(&a), 4);
@@ -138,87 +138,66 @@ pub fn is_whnf(app: &App) -> bool {
 }
 
 pub fn is_seq(atom: &Atom) -> bool {
-    match atom {
-        Atom::SEQ(_) => true,
-        _ => false,
-    }
+    matches!(atom, Atom::Seq(_))
 }
 
 pub fn is_seq_evaluated(atom: &Atom) -> bool {
     match atom {
-        Atom::SEQ(evaluated) => *evaluated,
+        Atom::Seq(evaluated) => *evaluated,
         _ => false,
     }
 }
 
 pub fn is_nop(atom: &Atom) -> bool {
-    match atom {
-        Atom::NOP => true,
-        _ => false,
-    }
+    matches!(atom, Atom::Nop)
 }
 
 pub fn is_ptr(atom: &Atom) -> bool {
-    match atom {
-        Atom::PTR(_, _, _) => true,
-        _ => false,
-    }
+    matches!(atom, Atom::Ptr(_, _, _))
 }
 
 /// take pointer value out from a PTR or SPE
 pub fn get_ptr(atom: &Atom) -> usize {
     match atom {
-        Atom::PTR(pt, _, _) => *pt,
-        Atom::SPE(_, _, _, _, pt) => *pt,
+        Atom::Ptr(pt, _, _) => *pt,
+        Atom::Spe(_, _, _, _, pt) => *pt,
         _ => unimplemented!(),
     }
 }
 
 pub fn is_unique_ptr(a: &Atom) -> bool {
-    match a {
-        Atom::PTR(_, true, _) => true,
-        _ => false,
-    }
+    matches!(a, Atom::Ptr(_, true, _))
 }
 
 pub fn is_new(atom: &Atom) -> bool {
     match atom {
-        Atom::PTR(_, _, new) => *new,
+        Atom::Ptr(_, _, new) => *new,
         _ => false,
     }
 }
 
 pub fn is_lit_atom(atom: &Atom) -> bool {
-    match atom {
-        Atom::NOP | Atom::PTR(_, _, _) => false,
-        _ => true,
-    }
+    !matches!(atom, Atom::Nop | Atom::Ptr(_, _, _))
 }
 
 pub fn is_comb(atom: &Atom) -> bool {
-    match atom {
-        Atom::COM(_, _) | Atom::Y => true,
-        _ => false,
-    }
+    matches!(atom, Atom::Com(_, _) | Atom::Y)
 }
 
 pub fn get_comb_addr(atom: &Atom) -> usize {
     match atom {
-        Atom::COM(_, addr) => *addr,
+        Atom::Com(_, addr) => *addr,
         _ => unimplemented!(),
     }
 }
 
 pub fn is_int(atom: &Atom) -> bool {
-    match atom {
-        Atom::INT(_) => true,
-        _ => false,
-    }
+    matches!(atom, Atom::Int(_))
 }
 
 pub fn take_int(atom: &Atom) -> i32 {
     match *atom {
-        Atom::INT(i) => i,
+        Atom::Int(i) => i,
         _ => {
             panic!("atom not an INT: {:?}", atom);
         }
@@ -226,22 +205,13 @@ pub fn take_int(atom: &Atom) -> i32 {
 }
 
 pub fn is_prm(atom: &Atom) -> bool {
-    match atom {
-        Atom::PRM(_, _) => true,
-        _ => false,
-    }
+    matches!(atom, Atom::Prm(_, _))
 }
 
 pub fn is_try(atom: &Atom) -> bool {
-    match atom {
-        Atom::TRY => true,
-        _ => false,
-    }
+    matches!(atom, Atom::Try)
 }
 
 pub fn is_con(atom: &Atom) -> bool {
-    match atom {
-        Atom::CON(_, _, _) => true,
-        _ => false,
-    }
+    matches!(atom, Atom::Con(_, _, _))
 }

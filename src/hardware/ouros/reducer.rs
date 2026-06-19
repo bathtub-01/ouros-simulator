@@ -17,7 +17,7 @@ use crate::hw_module::{HwInput, HwModule};
 
 fn dash_atom(atom: &Atom) -> Atom {
     match atom {
-        Atom::PTR(p, _, false) => Atom::PTR(*p, false, false),
+        Atom::Ptr(p, _, false) => Atom::Ptr(*p, false, false),
         _ => atom.clone(),
     }
 }
@@ -26,10 +26,10 @@ fn dash_atom(atom: &Atom) -> Atom {
 // FIX: should we fix capitalisation of variant names?
 enum Stm {
     #[default]
-    IDLE,
-    SPINE,
-    APP,
-    SPECIAL,
+    Idle,
+    Spine,
+    App,
+    Special,
 }
 
 #[derive(Default)]
@@ -93,7 +93,7 @@ impl Reducer {
     pub fn program(mut self, prog: &Vec<Vec<Atom>>) -> Self {
         fn convert(atms: &Vec<Atom>) -> App {
             assert!(atms.len() <= APP_LENGTH);
-            let mut app: App = std::array::from_fn(|_| Atom::NOP);
+            let mut app: App = std::array::from_fn(|_| Atom::Nop);
             for (i, atm) in atms.iter().enumerate() {
                 app[i] = atm.clone();
             }
@@ -110,19 +110,19 @@ impl Reducer {
     }
 
     pub fn spine_valid(&self) -> bool {
-        *self.reg_stm.value() == Stm::SPINE
-            || (*self.reg_stm.value() == Stm::SPECIAL && *self.reg_app_mask.value())
+        *self.reg_stm.value() == Stm::Spine
+            || (*self.reg_stm.value() == Stm::Special && *self.reg_app_mask.value())
     }
 
     pub fn spine_bits(&self) -> ActiveApp {
         ActiveApp {
             stack_idx: self.reg_in.value().stack_idx,
             load: {
-                if *self.reg_stm.value() == Stm::SPECIAL {
+                if *self.reg_stm.value() == Stm::Special {
                     // Y case
                     let mut res: App = self.reg_in.value().load.clone();
                     res[0] = dash_atom(&self.reg_in.value().load[1]);
-                    res[1] = Atom::PTR(self.input.free_addrs[0], false, false);
+                    res[1] = Atom::Ptr(self.input.free_addrs[0], false, false);
                     res
                 } else {
                     let old_spn = &self.reg_in.value().load;
@@ -145,18 +145,18 @@ impl Reducer {
     }
 
     pub fn app_valid(&self) -> bool {
-        *self.reg_stm.value() == Stm::APP || *self.reg_stm.value() == Stm::SPECIAL
+        *self.reg_stm.value() == Stm::App || *self.reg_stm.value() == Stm::Special
     }
 
     pub fn app_bits(&self) -> FrozenApp {
         FrozenApp {
             heap_addr: {
                 let r = match self.reg_stm.value() {
-                    Stm::SPINE | Stm::IDLE => 0,
-                    Stm::APP => {
-                        if let Atom::PTR(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
+                    Stm::Spine | Stm::Idle => 0,
+                    Stm::App => {
+                        if let Atom::Ptr(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
                             *self.addr_regs[p].value()
-                        } else if let Atom::SPE(_, _, _, _, p) =
+                        } else if let Atom::Spe(_, _, _, _, p) =
                             self.reg_spine.value()[*self.reg_idx.value()]
                         {
                             *self.addr_regs[p].value()
@@ -164,20 +164,20 @@ impl Reducer {
                             unreachable!()
                         }
                     }
-                    Stm::SPECIAL => self.input.free_addrs[0],
+                    Stm::Special => self.input.free_addrs[0],
                 };
                 if r == 0
-                    && (*self.reg_stm.value() == Stm::APP || *self.reg_stm.value() == Stm::SPECIAL)
+                    && (*self.reg_stm.value() == Stm::App || *self.reg_stm.value() == Stm::Special)
                 {
                     println!("reducer emit nested app with addr 0!");
                 }
                 r
             },
             load: {
-                if *self.reg_stm.value() == Stm::SPECIAL {
+                if *self.reg_stm.value() == Stm::Special {
                     let mut res: App = Default::default();
                     res[0] = dash_atom(&self.reg_in.value().load[1]);
-                    res[1] = Atom::PTR(self.input.free_addrs[0], false, false);
+                    res[1] = Atom::Ptr(self.input.free_addrs[0], false, false);
                     res
                 } else {
                     self.inst(self.comb_table.dout())
@@ -188,13 +188,13 @@ impl Reducer {
 
     pub fn in_ready(&self) -> bool {
         let state_correct = match *self.reg_stm.value() {
-            Stm::IDLE => true,
-            Stm::SPINE => !self.more_app(self.comb_table.dout()),
-            Stm::APP => {
+            Stm::Idle => true,
+            Stm::Spine => !self.more_app(self.comb_table.dout()),
+            Stm::App => {
                 fire(self.input.app_ready, self.app_valid())
                     && !self.more_app(self.reg_spine.value())
             }
-            Stm::SPECIAL => fire(self.input.app_ready, self.app_valid()), // Y case
+            Stm::Special => fire(self.input.app_ready, self.app_valid()), // Y case
         };
         // demand all input free addrs are valid
         state_correct && self.input.free_addrs_valid.iter().all(|&vld| vld)
@@ -203,13 +203,13 @@ impl Reducer {
     /// for GC stats
     fn stalled(&self) -> bool {
         let state_correct = match *self.reg_stm.value() {
-            Stm::IDLE => true,
-            Stm::SPINE => !self.more_app(self.comb_table.dout()),
-            Stm::APP => {
+            Stm::Idle => true,
+            Stm::Spine => !self.more_app(self.comb_table.dout()),
+            Stm::App => {
                 fire(self.input.app_ready, self.app_valid())
                     && !self.more_app(self.reg_spine.value())
             }
-            Stm::SPECIAL => fire(self.input.app_ready, self.app_valid()),
+            Stm::Special => fire(self.input.app_ready, self.app_valid()),
         };
 
         state_correct && !self.input.free_addrs_valid.iter().all(|&vld| vld)
@@ -217,13 +217,13 @@ impl Reducer {
 
     /// The number of heap cells that will be consumed in this cycle
     pub fn addr_consumed(&self) -> usize {
-        if *self.reg_stm.value() == Stm::SPINE {
+        if *self.reg_stm.value() == Stm::Spine {
             self.comb_table
                 .dout()
                 .iter()
                 .filter(|a| self.is_nested(a))
                 .count()
-        } else if *self.reg_stm.value() == Stm::SPECIAL && self.input.app_ready {
+        } else if *self.reg_stm.value() == Stm::Special && self.input.app_ready {
             1
         } else {
             0
@@ -238,15 +238,15 @@ impl Reducer {
     /// whether an app is not emitted yet
     pub fn found(&self) -> bool {
         match *self.reg_stm.value() {
-            Stm::APP => {
+            Stm::App => {
                 for atm in self.reg_spine.value().iter().skip(*self.reg_idx.value()) {
                     match atm {
-                        Atom::PTR(p, _, true) => {
+                        Atom::Ptr(p, _, true) => {
                             if self.input.search == *self.addr_regs[*p].value() {
                                 return true;
                             }
                         }
-                        Atom::SPE(_, _, _, _, p) if self.is_nested(atm) => {
+                        Atom::Spe(_, _, _, _, p) if self.is_nested(atm) => {
                             if self.input.search == *self.addr_regs[*p].value() {
                                 return true;
                             }
@@ -256,7 +256,7 @@ impl Reducer {
                 }
                 false
             }
-            Stm::SPECIAL => self.input.search == self.input.free_addrs[0],
+            Stm::Special => self.input.search == self.input.free_addrs[0],
             _ => false,
         }
     }
@@ -272,23 +272,23 @@ impl Reducer {
     fn get_instant(&self, c: &SpeCell) -> i32 {
         let in_app = &self.reg_in.value().load;
         match c {
-            SpeCell::ARG(arg) => take_int(&in_app[arg + 1]),
-            SpeCell::LIT(i) => *i,
+            SpeCell::Arg(arg) => take_int(&in_app[arg + 1]),
+            SpeCell::Lit(i) => *i,
         }
     }
 
     fn is_instant(&self, c: &SpeCell) -> bool {
         let in_app = &self.reg_in.value().load;
         match c {
-            SpeCell::ARG(arg) => is_int(&in_app[arg + 1]),
-            SpeCell::LIT(_) => true,
+            SpeCell::Arg(arg) => is_int(&in_app[arg + 1]),
+            SpeCell::Lit(_) => true,
         }
     }
 
     fn is_nested(&self, a: &Atom) -> bool {
         match a {
-            Atom::PTR(_, _, new) => *new,
-            Atom::SPE(_, _, l, r, _) => !(self.is_instant(l) && self.is_instant(r)),
+            Atom::Ptr(_, _, new) => *new,
+            Atom::Spe(_, _, l, r, _) => !(self.is_instant(l) && self.is_instant(r)),
             _ => false,
         }
     }
@@ -315,13 +315,13 @@ impl Reducer {
         let mut hole = 0;
         for a in &mut res {
             match a {
-                Atom::PTR(p, _, new) => {
+                Atom::Ptr(p, _, new) => {
                     if *new {
                         // assert_eq!(*self.reg_stm.value(), Stm::SPINE);
-                        *a = Atom::PTR(self.input.free_addrs[*p - hole], true, false);
+                        *a = Atom::Ptr(self.input.free_addrs[*p - hole], true, false);
                     }
                 }
-                Atom::SPE(op, rev, l, r, p) => {
+                Atom::Spe(op, rev, l, r, p) => {
                     if self.is_instant(l) && self.is_instant(r) {
                         // speculation success
                         let op1 = self.get_instant(l);
@@ -330,14 +330,14 @@ impl Reducer {
                         *a = compute(op, *rev, op1, op2);
                     } else {
                         // speculation fails
-                        *a = Atom::PTR(self.input.free_addrs[*p - hole], true, false);
+                        *a = Atom::Ptr(self.input.free_addrs[*p - hole], true, false);
                     }
                 }
-                Atom::ARG(arg, unq) => {
+                Atom::Arg(arg, unq) => {
                     *a = {
                         let mut r = self.reg_in.value().load[*arg + 1].clone();
-                        if let Atom::PTR(p, unq_, false) = r {
-                            r = Atom::PTR(p, *unq && unq_, false);
+                        if let Atom::Ptr(p, unq_, false) = r {
+                            r = Atom::Ptr(p, *unq && unq_, false);
                         }
                         r
                     }
@@ -354,15 +354,15 @@ impl Reducer {
             self.reg_idx.connect(&0);
 
             match self.input.in_app.load[0] {
-                Atom::COM(arity, addr) => {
-                    self.reg_stm.connect(&Stm::SPINE);
+                Atom::Com(arity, addr) => {
+                    self.reg_stm.connect(&Stm::Spine);
                     self.reg_arity.connect(&arity);
                     self.comb_table.read(addr)
                 }
-                Atom::CON(_, fields, idx) => {
-                    self.reg_stm.connect(&Stm::SPINE);
-                    if let Atom::TAB(base, free_vars) = self.input.in_app.load[fields + 1] {
-                        self.reg_in.input.load[0] = Atom::COM(0, base + idx);
+                Atom::Con(_, fields, idx) => {
+                    self.reg_stm.connect(&Stm::Spine);
+                    if let Atom::Tab(base, free_vars) = self.input.in_app.load[fields + 1] {
+                        self.reg_in.input.load[0] = Atom::Com(0, base + idx);
                         self.reg_arity.connect(&(fields as u8 + free_vars + 1));
                         self.comb_table.read(base + idx);
                     } else {
@@ -371,12 +371,12 @@ impl Reducer {
                 }
                 Atom::Y => {
                     self.reg_app_mask.connect(&true);
-                    self.reg_stm.connect(&Stm::SPECIAL);
+                    self.reg_stm.connect(&Stm::Special);
                 }
                 _ => todo!(),
             };
         } else {
-            self.reg_stm.connect(&Stm::IDLE);
+            self.reg_stm.connect(&Stm::Idle);
         }
     }
 }
@@ -385,16 +385,16 @@ impl HwModule for Reducer {
     fn update_local(&mut self) {
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
-            Stm::IDLE => {
+            Stm::Idle => {
                 self.step_next();
             }
-            Stm::SPINE => {
+            Stm::Spine => {
                 // !NOTE! We are assuming this state won't be blocked.
                 let template = self.comb_table.dout();
                 if self.more_app(template) {
                     let founded = self.find_app(template);
                     self.reg_spine.connect(template);
-                    self.reg_stm.connect(&Stm::APP);
+                    self.reg_stm.connect(&Stm::App);
                     self.reg_idx.connect(&founded);
                     self.comb_table.read(
                         get_comb_addr(&self.reg_in.value().load[0])
@@ -411,7 +411,7 @@ impl HwModule for Reducer {
                     self.step_next();
                 }
             }
-            Stm::APP => {
+            Stm::App => {
                 let template = self.reg_spine.value();
                 if fire(self.input.app_ready, self.app_valid()) {
                     if self.more_app(template) {
@@ -434,7 +434,7 @@ impl HwModule for Reducer {
                     );
                 }
             }
-            Stm::SPECIAL => {
+            Stm::Special => {
                 self.reg_app_mask.connect(&false);
                 if fire(self.input.app_ready, self.app_valid()) {
                     self.step_next();
@@ -474,7 +474,7 @@ impl HwModule for Reducer {
         }
 
         if self.stat_detail_lv >= DLV_BUSY_RATE {
-            if *self.reg_stm.value() != Stm::IDLE && self.input.app_ready {
+            if *self.reg_stm.value() != Stm::Idle && self.input.app_ready {
                 self.stat.busy_cycles += 1;
                 self.stat.busy_per_cycle.push(true);
                 // if self.input.in_valid {

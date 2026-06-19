@@ -23,7 +23,7 @@ pub struct FIFOStat {
 
 /// FIFO, with size N. Optionally support pipelining (P).
 // FIX: should rename to Fifo?
-pub struct FIFO<T, const N: usize, const P: bool>
+pub struct Fifo<T, const N: usize, const P: bool>
 where
     T: Clone + Default,
 {
@@ -33,7 +33,7 @@ where
     record_stat: bool,
 }
 
-impl<T, const N: usize, const P: bool> FIFO<T, N, P>
+impl<T, const N: usize, const P: bool> Fifo<T, N, P>
 where
     T: Clone + Default,
 {
@@ -79,7 +79,7 @@ where
     }
 }
 
-impl<T, const N: usize, const P: bool> HwModule for FIFO<T, N, P>
+impl<T, const N: usize, const P: bool> HwModule for Fifo<T, N, P>
 where
     T: Clone + Default,
 {
@@ -107,7 +107,7 @@ where
 
 #[test]
 fn fifo_spec() {
-    let mut fifo: FIFO<u32, 4, true> = FIFO::new();
+    let mut fifo: Fifo<u32, 4, true> = Fifo::new();
 
     fifo.tick();
 
