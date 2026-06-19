@@ -3,6 +3,7 @@ use vstd::prelude::*;
 
 verus! {
 #[derive(Default, Debug, PartialEq)]
+// FIX: should we fix capitalisation of variant names?
 pub enum StackOp {
     #[default]
     NOP, // non-op

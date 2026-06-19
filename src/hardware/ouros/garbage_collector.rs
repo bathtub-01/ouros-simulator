@@ -37,6 +37,7 @@ impl<T: PartialEq> FixedFifo<T> {
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
+// FIX: should we fix capitalisation of variant names?
 enum CollectorState {
     #[default]
     IDLE,

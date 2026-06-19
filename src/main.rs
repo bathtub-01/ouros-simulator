@@ -31,7 +31,7 @@ fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (Our
     ouros.input.start = false;
 
     loop {
-        assert!(cycle < 1000_000_000);
+        assert!(cycle < 1_000_000_000);
         if ouros.done() || cycle == 900_000_000 {
             break;
         }
@@ -63,7 +63,7 @@ fn chunk_threads(threads: &Vec<(u8, u8)>, chunk_size: usize) -> Vec<(f32, f32)> 
         .chunks(chunk_size)
         .map(|chunk| {
             let occupied = chunk.iter().fold((0, 0), |(a, b), (c, d)| {
-                (a as u32 + *c as u32, b as u32 + *d as u32)
+                (a + *c as u32, b + *d as u32)
             });
             (
                 occupied.0 as f32 / chunk.len() as f32,
@@ -402,7 +402,7 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
         .progress_count(benchmarks.len() as u64)
         .map(|p| {
             // run a test to get gc free runtime and an approximate peak work set size
-            let (c, _) = simulate(&p, 0, BIG_HEAP, GC_AT);
+            let (c, _) = simulate(p, 0, BIG_HEAP, GC_AT);
             let peak_workset = c.get_stat().peak_workset_size;
             // run several more rounds with different heap size
             let points = if peak_workset > 1000 {
@@ -416,7 +416,7 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
                 //     peak_workset,
                 //     (peak_workset as f32 * pt) as usize
                 // );
-                simulate(&p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
+                simulate(p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
             });
             let res_cycle: Vec<u32> = res.iter().map(|(_, cycles)| *cycles).collect();
             let res_gc_percent: Vec<f32> = res
@@ -483,6 +483,7 @@ fn main() -> std::io::Result<()> {
         .build_global()
         .unwrap();
     let args: Vec<String> = env::args().collect();
+    dbg!(&args);
     let progs = benchmarks!(
         // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
         // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,

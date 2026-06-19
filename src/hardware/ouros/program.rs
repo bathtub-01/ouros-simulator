@@ -3,6 +3,7 @@ use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
 use std::fmt;
 
 #[derive(Clone, PartialEq, Debug)]
+// FIX: should we fix capitalisation of variant names?
 pub enum AluOp {
     EQ,
     LE,
@@ -20,12 +21,14 @@ type Fields = usize;
 type FreeVars = u8;
 
 #[derive(Clone, PartialEq, Debug)]
+// FIX: should we fix capitalisation of variant names?
 pub enum SpeCell {
     ARG(usize),
     LIT(i32),
 }
 
 #[derive(Clone, PartialEq, Debug)]
+// FIX: should we fix capitalisation of variant names?
 pub enum Atom {
     NOP,
     PTR(usize, Unique, NewCell),

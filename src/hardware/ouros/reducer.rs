@@ -23,6 +23,7 @@ fn dash_atom(atom: &Atom) -> Atom {
 }
 
 #[derive(Default, Clone, PartialEq, Debug)]
+// FIX: should we fix capitalisation of variant names?
 enum Stm {
     #[default]
     IDLE,
