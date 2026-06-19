@@ -3,7 +3,7 @@ name = "ouros-simulator"
 version = "0.1.0"
 edition = "2024"
 
-[lints.clippy]
+# [lints.clippy]
 # pedantic="warn", will add afterwards
 # nursery="forbid" #, will add afterwards
 
