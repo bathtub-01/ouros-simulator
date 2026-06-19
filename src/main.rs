@@ -522,14 +522,8 @@ fn main() -> std::io::Result<()> {
             ..
         } => run_big_prog(progs.get(program_name.as_str()).unwrap()),
         Args {
-            prog_name: None,
-            mode: Mode::All,
-            ..
+            mode: Mode::All, ..
         } => run_benchmarks(progs, false),
-        Args {
-            prog_name: None,
-            mode: Mode::Gc,
-            ..
-        } => eval_gc(progs),
+        Args { mode: Mode::Gc, .. } => eval_gc(progs),
     }
 }
