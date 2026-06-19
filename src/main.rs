@@ -1,6 +1,7 @@
 mod hardware;
 mod hw_module;
 
+use clap::{Parser, ValueEnum};
 use indicatif::ParallelProgressIterator;
 use rayon::prelude::*;
 use std::cmp::max;
@@ -8,13 +9,13 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
-use std::io::Write;
+use std::io::{Error, Write};
 use std::path::Path;
 use std::sync::LazyLock;
 
 use hardware::ouros::config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE};
 use hardware::ouros::ouros_core::OurosCore;
-use hardware::ouros::program::{app_length, ActiveApp, App, Program};
+use hardware::ouros::program::{ActiveApp, App, Program, app_length};
 
 use hardware::ouros::benchmarks::{self, *};
 use hw_module::HwModule;
@@ -58,13 +59,13 @@ fn compress(oapp: &Option<ActiveApp>) -> String {
     }
 }
 
-fn chunk_threads(threads: &Vec<(u8, u8)>, chunk_size: usize) -> Vec<(f32, f32)> {
+fn chunk_threads(threads: &[(u8, u8)], chunk_size: usize) -> Vec<(f32, f32)> {
     threads
         .chunks(chunk_size)
         .map(|chunk| {
-            let occupied = chunk.iter().fold((0, 0), |(a, b), (c, d)| {
-                (a + *c as u32, b + *d as u32)
-            });
+            let occupied = chunk
+                .iter()
+                .fold((0, 0), |(a, b), (c, d)| (a + *c as u32, b + *d as u32));
             (
                 occupied.0 as f32 / chunk.len() as f32,
                 occupied.1 as f32 / chunk.len() as f32,
@@ -73,7 +74,7 @@ fn chunk_threads(threads: &Vec<(u8, u8)>, chunk_size: usize) -> Vec<(f32, f32)> 
         .collect()
 }
 
-fn chunk_rate(bpc: &Vec<bool>, chunk_size: usize) -> Vec<f32> {
+fn chunk_rate(bpc: &[bool], chunk_size: usize) -> Vec<f32> {
     bpc.chunks(chunk_size)
         .map(|chunk| {
             let busy_count = chunk.iter().filter(|&&b| b).count();
@@ -82,10 +83,10 @@ fn chunk_rate(bpc: &Vec<bool>, chunk_size: usize) -> Vec<f32> {
         .collect()
 }
 
-fn chunk_util(util: &Vec<u8>, chunk_size: usize) -> Vec<f32> {
+fn chunk_util(util: &[u8], chunk_size: usize) -> Vec<f32> {
     util.chunks(chunk_size)
         .map(|chunk| {
-            let sum: u32 = chunk.iter().rfold(0, |a, b| a as u32 + *b as u32);
+            let sum: u32 = chunk.iter().rfold(0, |a, b| a + *b as u32);
             sum as f32 / chunk.len() as f32
         })
         .collect()
@@ -95,7 +96,7 @@ fn write_threads() -> std::io::Result<()> {
     Ok(())
 }
 
-fn write_busy_rate(file: &mut File, data: &Vec<f32>, chunk_size: usize) -> std::io::Result<()> {
+fn write_busy_rate(file: &mut File, data: &[f32], chunk_size: usize) -> std::io::Result<()> {
     writeln!(file, "time,rate")?;
     for (i, t) in data.iter().enumerate() {
         writeln!(file, "{},{:.2}", i * chunk_size + chunk_size / 2, t * 100.0)?;
@@ -131,7 +132,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::max_value(), HEAP_SIZE, GC_AT);
+    let (ouros, runtime_cycles) = simulate(prog, u8::MAX, HEAP_SIZE, GC_AT);
     let stats = ouros.get_stat();
 
     println!(
@@ -194,9 +195,11 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         log,
         "GC stalls (Reducer): {} ({:.2}%, longest {}) | GC stalls (DHeap): {} ({:.2}%, longest {}) ",
         stats.reducer_stat.gc_stall_cycles,
-        percent_of(stats.reducer_stat.gc_stall_cycles, runtime_cycles), stats.reducer_stat.gc_longest_stall,
+        percent_of(stats.reducer_stat.gc_stall_cycles, runtime_cycles),
+        stats.reducer_stat.gc_longest_stall,
         stats.dheap_stat.gc_stall_cycles,
-        percent_of(stats.dheap_stat.gc_stall_cycles, runtime_cycles), stats.dheap_stat.gc_longest_stall
+        percent_of(stats.dheap_stat.gc_stall_cycles, runtime_cycles),
+        stats.dheap_stat.gc_longest_stall
     )?;
     writeln!(
         log,
@@ -212,8 +215,10 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         "new apps with ptr: {} | new apps without ptr: {} | gc cache hit: {} ({:.2}%) miss: {} ({:.2}%)",
         stats.reducer_stat.nested_with_ptr,
         stats.reducer_stat.nested_no_ptr,
-        stats.gc_stat.cache_hit, percent_of(stats.gc_stat.cache_hit, gc_mark_reads),
-        stats.gc_stat.cache_miss, percent_of(stats.gc_stat.cache_miss, gc_mark_reads),
+        stats.gc_stat.cache_hit,
+        percent_of(stats.gc_stat.cache_hit, gc_mark_reads),
+        stats.gc_stat.cache_miss,
+        percent_of(stats.gc_stat.cache_miss, gc_mark_reads),
     )?;
     writeln!(log, "============= REGISTER CONTENTS ==================")?;
 
@@ -270,7 +275,10 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     write_busy_rate(&mut gc_mreq_rate, &gc_mreq_rate_data, chunk_size)?;
 
     // write buffer utilisation
-    writeln!(buffer_util, "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3")?;
+    writeln!(
+        buffer_util,
+        "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3"
+    )?;
     let buffer_util_data = stats
         .fifos_stat
         .map(|s| chunk_util(&s.length_per_cycle, chunk_size));
@@ -332,10 +340,7 @@ fn run_benchmarks(
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
     let results: Vec<_> = benchmarks
         .par_iter()
-        .map(|p| {
-            let res = simulate(&p, 0, HEAP_SIZE, GC_AT);
-            res
-        })
+        .map(|p| simulate(p, 0, HEAP_SIZE, GC_AT))
         .collect();
 
     results.iter().zip(names).for_each(|((core, cycles), n)| {
@@ -355,7 +360,7 @@ fn run_benchmarks(
 }
 
 fn run_big_prog(prog: &Program) -> std::io::Result<()> {
-    let (core, cycles) = simulate(&prog, 0, BIG_HEAP, GC_AT);
+    let (core, cycles) = simulate(prog, 0, BIG_HEAP, GC_AT);
     let stat = core.get_stat();
     println!(
         "finished: {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
@@ -369,7 +374,7 @@ fn run_big_prog(prog: &Program) -> std::io::Result<()> {
 
 const DIR_SIMU_OUT_GC: &str = "simu-out/gc/";
 
-fn vec_to_string<T: std::fmt::Display>(vec: &Vec<T>) -> String {
+fn vec_to_string<T: std::fmt::Display>(vec: &[T]) -> String {
     vec.iter()
         .map(|item| item.to_string())
         .collect::<Vec<String>>()
@@ -477,28 +482,54 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
     Ok(())
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    mode: Mode,
+
+    prog_name: Option<String>,
+
+    #[arg(short, long, default_value_t = 4)]
+    num_threads: usize,
+}
+
+#[derive(Parser, ValueEnum, Clone, Debug, Default)]
+enum Mode {
+    #[default]
+    All,
+    Gc,
+}
+
+// FIX: move rest of code above into lib.rs
 fn main() -> std::io::Result<()> {
+    // FIX: remove unwraps
+    let ref parsed_args @ Args { num_threads, .. } = Args::try_parse().unwrap();
+
     rayon::ThreadPoolBuilder::new()
-        .num_threads(4)
+        .num_threads(num_threads)
         .build_global()
         .unwrap();
-    let args: Vec<String> = env::args().collect();
-    dbg!(&args);
+
     let progs = benchmarks!(
         // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
         // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
         ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
     ); // ignoring TREESUM as it does not have much garbage..
 
-    if args.len() == 1 {
-        println!("usage: cargo run --release @ALL/@GC/<prog>");
-        Ok(())
-    } else {
-        match args[1].as_str() {
-            "@ALL" => run_benchmarks(progs, false),
-            "@GC" => eval_gc(progs),
-            prog => run_big_prog(progs.get(prog).unwrap()),
-            // prog => inspect_prog(progs.get(prog).unwrap()),
-        }
+    match parsed_args {
+        Args {
+            prog_name: Some(program_name),
+            ..
+        } => run_big_prog(progs.get(program_name.as_str()).unwrap()),
+        Args {
+            prog_name: None,
+            mode: Mode::All,
+            ..
+        } => run_benchmarks(progs, false),
+        Args {
+            prog_name: None,
+            mode: Mode::Gc,
+            ..
+        } => eval_gc(progs),
     }
 }
