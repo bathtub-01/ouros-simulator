@@ -127,7 +127,7 @@ impl Reducer {
                 } else {
                     let old_spn = &self.reg_in.value().load;
                     let before = *self.reg_arity.value() as usize + 1;
-                    let mut res = self.inst(&self.comb_table.dout());
+                    let mut res = self.inst(self.comb_table.dout());
                     let after = app_length(&res);
                     assert!(
                         old_spn[before..].iter().filter(|a| !is_nop(a)).count() + after
@@ -180,7 +180,7 @@ impl Reducer {
                     res[1] = Atom::PTR(self.input.free_addrs[0], false, false);
                     res
                 } else {
-                    self.inst(&self.comb_table.dout())
+                    self.inst(self.comb_table.dout())
                 }
             },
         }
@@ -288,14 +288,14 @@ impl Reducer {
     fn is_nested(&self, a: &Atom) -> bool {
         match a {
             Atom::PTR(_, _, new) => *new,
-            Atom::SPE(_, _, l, r, _) => !(self.is_instant(&l) && self.is_instant(&r)),
+            Atom::SPE(_, _, l, r, _) => !(self.is_instant(l) && self.is_instant(r)),
             _ => false,
         }
     }
 
     fn more_app(&self, app: &App) -> bool {
         let idx = *self.reg_idx.value() + 1;
-        app.iter().skip(idx as usize).any(|a| self.is_nested(a))
+        app.iter().skip(idx).any(|a| self.is_nested(a))
     }
 
     fn find_app(&self, app: &App) -> usize {
@@ -465,7 +465,7 @@ impl HwModule for Reducer {
 
         if self.stat_detail_lv >= DLV_GC {
             if fire(self.input.app_ready, self.app_valid()) {
-                if self.app_bits().load.iter().any(|atm| is_ptr(atm)) {
+                if self.app_bits().load.iter().any(is_ptr) {
                     self.stat.nested_with_ptr += 1;
                 } else {
                     self.stat.nested_no_ptr += 1;

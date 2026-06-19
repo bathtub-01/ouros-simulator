@@ -4,7 +4,7 @@ use crate::hardware::common::{DualPortMem, Register};
 use crate::hw_module::{HwInput, HwModule};
 
 use super::config::{APP_LENGTH, CACHE_SIZE, DLV_GC, DLV_GC1, MAX_THREADS};
-use super::program::{get_ptr, is_ptr, ActiveApp, App, Atom};
+use super::program::{ActiveApp, App, Atom, get_ptr, is_ptr};
 use std::collections::VecDeque;
 
 struct FixedFifo<T> {
@@ -131,6 +131,7 @@ pub struct GbgCollector {
 }
 
 impl GbgCollector {
+    // FIX: does this function need a 3rd argument?
     pub fn new(heap_size: usize, free_from: usize, gc_at: f32) -> Self {
         Self {
             input: Default::default(),
@@ -262,7 +263,7 @@ impl GbgCollector {
             && !self.mutator_request()
         {
             let in_app = &self.input.heap_read_bits;
-            if in_app.iter().any(|atm| is_ptr(atm)) {
+            if in_app.iter().any(is_ptr) {
                 0
             } else {
                 if *self.reg_work_drawed.value() {
@@ -321,8 +322,8 @@ impl GbgCollector {
     /// stolen from `reducer.rs`
     fn more_ptr<const N: usize>(&self, app: &[Atom; N]) -> bool {
         let idx = *self.reg_app_idx.value() + 1;
-        app.into_iter()
-            .skip(idx as usize)
+        app.iter()
+            .skip(idx)
             .any(|a| is_ptr(a) && !self.gc_cache.contains(&get_ptr(a)))
     }
 
@@ -461,11 +462,11 @@ impl GbgCollector {
             ///////////////////////////////////////////////
             let in_app = &self.input.heap_read_bits;
             // splition of move-0 and move-1 is needed because mutator requests can modify worklist
-            if in_app.iter().any(|atm| is_ptr(atm)) {
-                self.reg_heap_reader.connect(&in_app);
+            if in_app.iter().any(is_ptr) {
+                self.reg_heap_reader.connect(in_app);
                 self.reg_move.connect(&2);
                 // pre read for move-2
-                let found = in_app.iter().position(|atm| is_ptr(atm)).unwrap();
+                let found = in_app.iter().position(is_ptr).unwrap();
                 // println!("go to move-2, read on: {}", get_ptr(&in_app[found]));
                 self.mark_read(get_ptr(&in_app[found]));
                 // self.gc_mem.read_a(get_ptr(&in_app[found]));

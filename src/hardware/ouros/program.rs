@@ -27,9 +27,10 @@ pub enum SpeCell {
     LIT(i32),
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 // FIX: should we fix capitalisation of variant names?
 pub enum Atom {
+    #[default]
     NOP,
     PTR(usize, Unique, NewCell),
     COM(Arity, usize),
@@ -45,11 +46,6 @@ pub enum Atom {
     ERR(u8),
 }
 
-impl Default for Atom {
-    fn default() -> Self {
-        Atom::NOP
-    }
-}
 
 impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

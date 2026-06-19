@@ -22,14 +22,21 @@ pub struct FIFOStat {
 }
 
 /// FIFO, with size N. Optionally support pipelining (P).
-pub struct FIFO<T: Clone + Default, const N: usize, const P: bool> {
+// FIX: should rename to Fifo?
+pub struct FIFO<T, const N: usize, const P: bool>
+where
+    T: Clone + Default,
+{
     pub input: FIFOInput<T>,
     pub queue: VecDeque<T>,
     stat: FIFOStat,
     record_stat: bool,
 }
 
-impl<T: Clone + Default, const N: usize, const P: bool> FIFO<T, N, P> {
+impl<T, const N: usize, const P: bool> FIFO<T, N, P>
+where
+    T: Clone + Default,
+{
     pub fn new() -> Self {
         Self {
             input: Default::default(),
@@ -72,7 +79,10 @@ impl<T: Clone + Default, const N: usize, const P: bool> FIFO<T, N, P> {
     }
 }
 
-impl<T: Clone + Default, const N: usize, const P: bool> HwModule for FIFO<T, N, P> {
+impl<T, const N: usize, const P: bool> HwModule for FIFO<T, N, P>
+where
+    T: Clone + Default,
+{
     fn update_local(&mut self) {
         // NOTE: if not using old value, will be a bug when P=false and fifo is full
         // Can play verus on this

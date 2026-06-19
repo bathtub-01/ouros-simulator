@@ -39,11 +39,11 @@ impl Bumper {
     }
 
     fn res(&self) -> u32 {
-        self.counter.value().clone()
+        *self.counter.value()
     }
 
     fn stm(&self) -> bool {
-        self.running.value().clone()
+        *self.running.value()
     }
 }
 

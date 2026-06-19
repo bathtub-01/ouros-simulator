@@ -441,18 +441,18 @@ impl DrfHeap {
     pub fn port_a_ready(&self) -> bool {
         let local_release: bool = match *self.stm.value() {
             Stm::IDLE => true,
-            Stm::WHNF => match self.getWHNFs() {
+            Stm::WHNF => match self.get_whnfs() {
                 WHNFs::NoNewFrame => true,
                 _ => false,
             },
             Stm::IA => {
-                let ias1 = self.getIAs1();
-                match self.getIAs2(&ias1) {
+                let ias1 = self.get_ias1();
+                match self.get_ias2(&ias1) {
                     IAs2::NoMoreArgsCanEmit | IAs2::NoMoreArgsNoEmit => !self.is_sensitive(&ias1),
                     _ => false,
                 }
             }
-            Stm::RESUME => match self.getRESUMEs() {
+            Stm::RESUME => match self.get_resumes() {
                 RESUMEs::TopInWHNF => false,
                 RESUMEs::TopInIA => true,
             },
@@ -463,13 +463,13 @@ impl DrfHeap {
     pub fn port_b_ready(&self) -> bool {
         let borrowed: bool = match *self.stm.value() {
             Stm::IDLE => false,
-            Stm::WHNF => match self.getWHNFs() {
+            Stm::WHNF => match self.get_whnfs() {
                 WHNFs::MoreDmders | WHNFs::NewFrame => false,
                 WHNFs::NoNewFrame => !self.can_avoid_update(),
             },
             Stm::IA => {
-                let ias1 = self.getIAs1();
-                match self.getIAs2(&ias1) {
+                let ias1 = self.get_ias1();
+                match self.get_ias2(&ias1) {
                     IAs2::NoMoreArgsNoEmit => true,
                     // IAs2::NoMoreArgsCanEmit => ias1 == IAs1::ExistWHNF && self.need_split(),
                     _ => false,
@@ -486,11 +486,11 @@ impl DrfHeap {
                 Stm::IDLE => false,
                 Stm::WHNF => true,
                 Stm::IA => {
-                    let ias1 = self.getIAs1();
+                    let ias1 = self.get_ias1();
                     if ias1 == IAs1::ExistIAFresh {
                         return true;
                     }
-                    match self.getIAs2(&ias1) {
+                    match self.get_ias2(&ias1) {
                         IAs2::NoMoreArgsCanEmit => true,
                         _ => false,
                     }
@@ -514,11 +514,11 @@ impl DrfHeap {
                 self.gen_active_app(deref_res)
             }
             Stm::IA => {
-                let ias1 = self.getIAs1();
+                let ias1 = self.get_ias1();
                 if ias1 == IAs1::ExistIAFresh {
                     return self.gen_active_app(self.dash_when_shared());
                 }
-                match self.getIAs2(&ias1) {
+                match self.get_ias2(&ias1) {
                     IAs2::NoMoreArgsCanEmit => {
                         let (updated_dmder, _) = deref(
                             &self.holder_in.value().load,
@@ -563,7 +563,7 @@ impl DrfHeap {
         };
         match *self.stm.value() {
             Stm::WHNF => mk_frozen(self.gen_output_whnf().1),
-            Stm::IA if self.getIAs1() == IAs1::ExistWHNF => {
+            Stm::IA if self.get_ias1() == IAs1::ExistWHNF => {
                 let dmder = &self.holder_in.value().load;
                 let target = self.heap_mem.dout_a();
                 // let (_, obig) = deref(dmder, *self.arg_id.value(), target, self.input.free_addr);
@@ -583,7 +583,7 @@ impl DrfHeap {
     pub fn dealloc_valid(&self) -> bool {
         // ready signal does not block DHeap, giving up some chances is fine
         *self.stm.value() == Stm::WHNF
-            && self.getWHNFs() == WHNFs::NoNewFrame
+            && self.get_whnfs() == WHNFs::NoNewFrame
             && self.can_avoid_update()
         // && false
     }
@@ -600,7 +600,7 @@ impl DrfHeap {
 
     /// search for the addr of the App, which is currently being read by DHeap
     pub fn search(&self) -> usize {
-        if self.port_a_fire() && self.getCONSUMEs() == CONSUMEs::InputIA {
+        if self.port_a_fire() && self.get_consumes() == CONSUMEs::InputIA {
             let in_app = mask_seq(&self.input.port_a_bits.load);
             // println!(
             //     "addr: {:?}",
@@ -609,7 +609,7 @@ impl DrfHeap {
             let (_, p) = select_1st_arg(&in_app);
             p
         } else if *self.stm.value() == Stm::IA {
-            match self.getIAs2(&self.getIAs1()) {
+            match self.get_ias2(&self.get_ias1()) {
                 IAs2::NextStrictArgLocal | IAs2::NextStrictArgNewStk => {
                     let dmder = &self.holder_in.value().load;
                     let (_, p) = select_next_arg(dmder, 0);
@@ -643,7 +643,7 @@ impl DrfHeap {
         self.heap_mem.dout_b()
     }
 
-    fn getCONSUMEs(&self) -> CONSUMEs {
+    fn get_consumes(&self) -> CONSUMEs {
         if !self.port_a_fire() {
             CONSUMEs::NoInput
         } else {
@@ -656,7 +656,7 @@ impl DrfHeap {
                 {
                     CONSUMEs::InputWHNFWithDmder
                 } else {
-                    if stk.second() != None {
+                    if stk.second().is_some() {
                         if stack_cell_with(stk.second(), |(flag, _)| !*flag) {
                             panic!("strange new frame!");
                         }
@@ -671,7 +671,7 @@ impl DrfHeap {
         }
     }
 
-    fn getWHNFs(&self) -> WHNFs {
+    fn get_whnfs(&self) -> WHNFs {
         if self
             .thread_stack
             .iter()
@@ -691,7 +691,7 @@ impl DrfHeap {
         }
     }
 
-    fn getIAs1(&self) -> IAs1 {
+    fn get_ias1(&self) -> IAs1 {
         let target = self.heap_mem.dout_a();
         let stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
         if *self.non_exist.value() {
@@ -713,7 +713,7 @@ impl DrfHeap {
         }
     }
 
-    fn getIAs2(&self, s1: &IAs1) -> IAs2 {
+    fn get_ias2(&self, s1: &IAs1) -> IAs2 {
         let ia = &self.holder_in.value().load;
         let target_in_whnf = !*self.non_exist.value() && is_whnf(self.heap_mem.dout_a());
         // if let None = self.frame_stack[self.holder_in.value().stack_idx as usize].top() {
@@ -761,7 +761,7 @@ impl DrfHeap {
         }
     }
 
-    fn getRESUMEs(&self) -> RESUMEs {
+    fn get_resumes(&self) -> RESUMEs {
         let top = self.heap_mem.dout_a();
         if is_whnf(top) {
             RESUMEs::TopInWHNF
@@ -775,7 +775,7 @@ impl DrfHeap {
         let addr = self.input.port_b_bits.heap_addr;
         let a_thread = self.holder_in.value().stack_idx as usize;
         if *self.stm.value() == Stm::IA
-            && self.getIAs1() == IAs1::NoExist
+            && self.get_ias1() == IAs1::NoExist
             && *self.addr_holder.value() == addr
         {
             Some(a_thread)
@@ -850,7 +850,7 @@ impl DrfHeap {
             .thread_stack
             .iter_mut()
             .enumerate()
-            .find(|(_, s)| p(*s))
+            .find(|(_, s)| p(s))
         {
             stack.pop();
             // if pop_frame {
@@ -933,7 +933,7 @@ impl DrfHeap {
 
     fn gen_frame_record(&self) -> FrameRecord {
         let father_stk_id = self.holder_in.value().stack_idx as usize;
-        let mut res = self.frame_stack[father_stk_id].top().unwrap().clone();
+        let mut res = *self.frame_stack[father_stk_id].top().unwrap();
         res[father_stk_id] = self.addr_holder.input;
         res
     }
@@ -969,7 +969,7 @@ impl DrfHeap {
                 let target = &self.holder_in.value().load;
                 app_length(dmder) + app_length(target) - 1 > APP_LENGTH
             }
-            Stm::IA => match self.getIAs1() {
+            Stm::IA => match self.get_ias1() {
                 IAs1::ExistWHNF => {
                     let dmder = &self.holder_in.value().load;
                     let target = self.heap_mem.dout_a();
@@ -990,18 +990,18 @@ impl DrfHeap {
     fn stalled(&self) -> bool {
         let local_release: bool = match *self.stm.value() {
             Stm::IDLE => true,
-            Stm::WHNF => match self.getWHNFs() {
+            Stm::WHNF => match self.get_whnfs() {
                 WHNFs::NoNewFrame => true,
                 _ => false,
             },
             Stm::IA => {
-                let ias1 = self.getIAs1();
-                match self.getIAs2(&ias1) {
+                let ias1 = self.get_ias1();
+                match self.get_ias2(&ias1) {
                     IAs2::NoMoreArgsCanEmit | IAs2::NoMoreArgsNoEmit => !self.is_sensitive(&ias1),
                     _ => false,
                 }
             }
-            Stm::RESUME => match self.getRESUMEs() {
+            Stm::RESUME => match self.get_resumes() {
                 RESUMEs::TopInWHNF => false,
                 RESUMEs::TopInIA => true,
             },
@@ -1050,10 +1050,9 @@ impl DrfHeap {
             stack_idx: self.input.port_a_bits.stack_idx,
             load: in_app.clone(),
         });
-        match self.getCONSUMEs() {
+        match self.get_consumes() {
             CONSUMEs::NoInput => {
-                self.stm.connect(&Stm::IDLE);
-                return;
+                self.stm.connect(&Stm::IDLE)
             }
             CONSUMEs::InputIA => {
                 self.select_1st_arg_read(&in_app);
@@ -1098,7 +1097,7 @@ impl DrfHeap {
     fn step_whnf(&mut self) {
         let whnf_addr = *self.addr_holder.value();
 
-        match self.getWHNFs() {
+        match self.get_whnfs() {
             WHNFs::MoreDmders => {
                 self.find_pop_read(find_more_dmder(whnf_addr), false);
                 self.stm.connect(&Stm::WHNF);
@@ -1147,7 +1146,7 @@ impl DrfHeap {
         let dmder = &self.holder_in.value().load;
         let mut updated_dmder = dmder.clone();
         let target = self.heap_mem.dout_a().clone();
-        let ias1 = self.getIAs1();
+        let ias1 = self.get_ias1();
 
         match ias1 {
             IAs1::NoExist => {
@@ -1177,7 +1176,7 @@ impl DrfHeap {
             }
         }
 
-        match self.getIAs2(&ias1) {
+        match self.get_ias2(&ias1) {
             IAs2::NextStrictArgNewStk => {
                 let current_idx = self.holder_in.value().stack_idx as usize;
                 self.select_next_arg_read(&updated_dmder);
@@ -1222,7 +1221,7 @@ impl DrfHeap {
 
     fn step_resume(&mut self) {
         self.write_whnf(HeapPort::B);
-        match self.getRESUMEs() {
+        match self.get_resumes() {
             RESUMEs::TopInWHNF => {
                 let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
                 let whnf_addr = current_stk.top().unwrap().1;

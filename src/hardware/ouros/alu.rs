@@ -125,14 +125,14 @@ impl Alu {
     fn gen_result(&self) -> ActiveApp {
         let oprand1: i32 = take_int(&self.input.input_bits.load[1]);
         let oprand2: i32 = take_int(&self.input.input_bits.load[2]);
-        let res: Atom;
+        
 
-        match &self.input.input_bits.load[0] {
-            PRM(op, inv) => res = compute(op, *inv, oprand1, oprand2),
+        let res: Atom = match &self.input.input_bits.load[0] {
+            PRM(op, inv) => compute(op, *inv, oprand1, oprand2),
             _ => {
                 panic!("alu: app head is not an primitive op!");
             }
-        }
+        };
 
         ActiveApp {
             stack_idx: self.input.input_bits.stack_idx,
