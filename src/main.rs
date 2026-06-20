@@ -488,8 +488,10 @@ const NUMBER_ACTIVE_THREADS: usize = 4;
 #[command(version, about, long_about = None)]
 #[command(next_line_help = true)]
 struct Args {
-    mode: Mode,
+    #[arg(short, long)]
+    mode: Option<Mode>,
 
+    #[arg(short, long)]
     prog_name: Option<String>,
 
     #[arg(short, long, default_value_t = NUMBER_ACTIVE_THREADS)]
@@ -506,8 +508,10 @@ enum Mode {
 // FIX: move rest of code above into lib.rs
 // FIX: add thisError or anyhow
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    print!("example of command to run");
-    print!("cargo run -- all");
+    println!("examples of command to run:");
+    println!("cargo run -- --mode=all");
+    println!("cargo run -- --prog-name=FIB");
+
     let ref parsed_args @ Args { num_threads, .. } = Args::parse();
 
     rayon::ThreadPoolBuilder::new()
@@ -524,15 +528,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Args {
             prog_name: Some(program_name),
             ..
-        } => run_big_prog(
-            progs
-                .get(program_name.as_str())
-                .ok_or(format!("could not find program named: {}", program_name))?,
-        ),
+        } => {
+            println!("running {}", program_name);
+            // for now the mode will be ignored if a specific program is select
+            // can have an extra check in the future to make it correct
+            run_big_prog(
+                progs
+                    .get(program_name.as_str())
+                    .ok_or(format!("could not find program named: {}", program_name))?,
+            )
+        }
         Args {
-            mode: Mode::All, ..
+            mode: Some(Mode::All),
+            ..
         } => run_benchmarks(progs, false),
-        Args { mode: Mode::Gc, .. } => eval_gc(progs),
+        Args {
+            mode: Some(Mode::Gc),
+            ..
+        } => eval_gc(progs),
+        Args {
+            mode: None,
+            prog_name: None,
+            ..
+        } => Err("need to select a mode or a specific program name to run")?,
     }?;
 
     // FIX: remove this Ok return
