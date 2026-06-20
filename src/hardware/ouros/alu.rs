@@ -32,11 +32,11 @@ pub fn compute(op: &AluOp, rev: bool, l: i32, r: i32) -> Atom {
     fn comb_bool(b: bool, inv: bool) -> Atom {
         if b ^ inv {
             // COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
-            COM(2, 1) // True, always be placed at 0
+            Com(2, 1) // True, always be placed at 0
                       // CON(1, 0, 1)
         } else {
             // COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
-            COM(2, 0) // False
+            Com(2, 0) // False
                       // CON(1, 0, 0)
         }
     }
@@ -45,9 +45,9 @@ pub fn compute(op: &AluOp, rev: bool, l: i32, r: i32) -> Atom {
         EQ => comb_bool(l == r, rev),
         LE => comb_bool(l <= r, rev),
         LT => comb_bool(l < r, rev),
-        ADD => INT(l + r),
-        SUB => INT(l - r),
-        MUL => INT(l * r),
+        Add => Int(l + r),
+        Sub => Int(l - r),
+        Mul => Int(l * r),
     }
 }
 
@@ -125,14 +125,14 @@ impl Alu {
     fn gen_result(&self) -> ActiveApp {
         let oprand1: i32 = take_int(&self.input.input_bits.load[1]);
         let oprand2: i32 = take_int(&self.input.input_bits.load[2]);
-        let res: Atom;
+        
 
-        match &self.input.input_bits.load[0] {
-            PRM(op, inv) => res = compute(op, *inv, oprand1, oprand2),
+        let res: Atom = match &self.input.input_bits.load[0] {
+            Prm(op, inv) => compute(op, *inv, oprand1, oprand2),
             _ => {
                 panic!("alu: app head is not an primitive op!");
             }
-        }
+        };
 
         ActiveApp {
             stack_idx: self.input.input_bits.stack_idx,
@@ -140,7 +140,7 @@ impl Alu {
                 let mut arr: App = Default::default();
                 arr[0] = res;
                 for i in 3..APP_LENGTH {
-                    if self.input.input_bits.load[i] != NOP {
+                    if self.input.input_bits.load[i] != Nop {
                         arr[i - 2] = self.input.input_bits.load[i].clone();
                     } else {
                         break;
@@ -201,14 +201,14 @@ fn alu_spec() {
         input.input_valid = true;
         input.input_bits.stack_idx = 2;
         input.input_bits.load = [
-            PRM(AluOp::LE, false),
-            INT(7),
-            INT(7),
-            PTR(11, false, false),
-            PTR(22, false, false),
-            NOP,
-            NOP,
-            NOP,
+            Prm(AluOp::LE, false),
+            Int(7),
+            Int(7),
+            Ptr(11, false, false),
+            Ptr(22, false, false),
+            Nop,
+            Nop,
+            Nop,
         ];
     });
     alu.tick();

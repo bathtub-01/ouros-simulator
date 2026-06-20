@@ -120,7 +120,7 @@ pub fn parse_pat(p: &Pat) -> ParseRes {
 }
 
 pub static DECODE_TABLE: LazyLock<[ParseRes; 64]> = LazyLock::new(|| {
-    let parsed: Vec<ParseRes> = ALL_PATTERNS.iter().map(|p| parse_pat(p)).collect();
+    let parsed: Vec<ParseRes> = ALL_PATTERNS.iter().map(parse_pat).collect();
     let res: [ParseRes; 64] = parsed
         .try_into()
         .expect("pattern decode table size should match");
@@ -152,7 +152,7 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
         }
     }
     res.push(Hole::Arg(*arg_count));
-    *arg_count = *arg_count + 1;
+    *arg_count += 1;
 
     // pop the stack
     loop {
@@ -163,12 +163,12 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
             Some(v) => match v {
                 Pat::X => {
                     res.push(Hole::Arg(*arg_count));
-                    *arg_count = *arg_count + 1;
+                    *arg_count += 1
                 }
                 Pat::At(_, _) => {
                     // handle nested application
                     res.push(Hole::Ptr(*ptr_count));
-                    *ptr_count = *ptr_count + 1;
+                    *ptr_count += 1;
                     let next_mode: Mode = if *ptr_count == 1 {
                         Mode::App1
                     } else if *ptr_count == 2 {
