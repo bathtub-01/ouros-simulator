@@ -1,8 +1,8 @@
 use crate::hardware::ouros::program::{AluOp, Atom, Program};
 use std::sync::LazyLock;
 use AluOp::*;
-use Atom::*; 
- 
+use Atom::*;
+
 // Combinators in this file: 6
 #[rustfmt::skip]
 pub static FIB: LazyLock<Program> = LazyLock::new(|| { Program {
@@ -10,7 +10,7 @@ pub static FIB: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp0
         vec![ // 0 
             Com(1,9),
-            Int(17),
+            Int(25),
         ], 
     ],
     comb_img: vec![

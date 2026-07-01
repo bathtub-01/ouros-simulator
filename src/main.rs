@@ -15,12 +15,13 @@ use std::sync::LazyLock;
 
 use hardware::ouros::config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE};
 use hardware::ouros::ouros_core::OurosCore;
-use hardware::ouros::program::{ActiveApp, App, Program, app_length};
+use hardware::ouros::program::{app_length, ActiveApp, App, Program};
 
 use hardware::ouros::benchmarks::{self, *};
 use hw_module::HwModule;
 
 fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (OurosCore, u32) {
+    let _span = tracy_client::span!("simulate");
     let mut ouros = OurosCore::new(prog, detail_lv, heap_size, gc_at);
     let mut cycle: u32 = 0;
 
@@ -507,7 +508,16 @@ enum Mode {
 
 // FIX: move rest of code above into lib.rs
 // FIX: add thisError or anyhow
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _tracy = tracy_client::Client::start();
+
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
     println!("examples of command to run:");
     println!("cargo run -- --mode=all");
     println!("cargo run -- --prog-name=FIB");
@@ -516,6 +526,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
+        .start_handler(|idx| {
+            if let Some(client) = tracy_client::Client::running() {
+                client.set_thread_name(&format!("rayon-worker-{idx}"));
+            }
+        })
         .build_global()?;
 
     let progs = benchmarks!(

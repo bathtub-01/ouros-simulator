@@ -4,7 +4,7 @@ use std::cmp::max;
 
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
-use crate::hardware::common::{PArbiter, RArbiter, Ring, Fifo};
+use crate::hardware::common::{Fifo, PArbiter, RArbiter, Ring};
 use crate::hw_module::{HwInput, HwModule};
 
 use super::addr_box::AddrBox;
@@ -208,6 +208,7 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: 
 
 impl HwModule for OurosCore {
     fn update_local(&mut self) {
+        let _span = tracy_client::span!("ouros: update_local");
         /*
         NOTE: there is an assignment ring in the circuit, the order of
         assigning inputs matters and might be buggy here.
@@ -468,6 +469,7 @@ impl HwModule for OurosCore {
     }
 
     fn tick_children(&mut self) {
+        let _span = tracy_client::span!("ouros_core: tick_children");
         self.dheap.tick();
         self.reducer.tick();
         self.alu.tick();
