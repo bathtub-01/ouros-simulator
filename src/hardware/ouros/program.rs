@@ -2,7 +2,7 @@ use crate::hardware::ouros::combinator::{holes_of, Arity, Idx};
 use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
 use std::fmt;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 // FIX: should we fix capitalisation of variant names?
 pub enum AluOp {
     EQ,
@@ -20,14 +20,14 @@ type Index = usize;
 type Fields = usize;
 type FreeVars = u8;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 // FIX: should we fix capitalisation of variant names?
 pub enum SpeCell {
     Arg(usize),
     Lit(i32),
 }
 
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 // FIX: should we fix capitalisation of variant names?
 pub enum Atom {
     #[default]
@@ -45,7 +45,6 @@ pub enum Atom {
     Spe(AluOp, RevCond, SpeCell, SpeCell, usize),
     Err(u8),
 }
-
 
 impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

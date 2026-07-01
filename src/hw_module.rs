@@ -40,7 +40,6 @@ pub trait HwModule {
 
     /// After `input` get setup, use `tick` to update local states.
     fn tick(&mut self) {
-        let _span = tracy_client::span!("tick");
         self.update_stat(); // now `input` and `local` are in the same cycle
         self.update_local();
         self.tick_children();

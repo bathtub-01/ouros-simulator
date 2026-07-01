@@ -228,51 +228,68 @@ fn vec_to_app(v: Vec<Atom>) -> App {
 ///   `app1` is the deref result,
 ///   `app2` goes to port b
 fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Option<App>) {
-    assert!(is_ptr(&app[arg_id]));
-    let unique: bool = matches!(app[arg_id], Atom::Ptr(_, true, _));
-    let target_dashed = if unique { target } else { &dash_app(target) };
+    debug_assert!(is_ptr(&app[arg_id]));
+
+    // Seq(false) never touches target — handle first, skip dash_app entirely.
+    if let Atom::Seq(false) = app[0] {
+        let mut res = *app; // Copy, not clone — no alloc
+        if arg_id == 1 {
+            res[0] = Atom::Seq(true);
+        }
+        return (res, None);
+    }
+
+    let unique = matches!(app[arg_id], Atom::Ptr(_, true, _));
+    let dashed_storage; // holds owned value if needed
+    let target_dashed: &App = if unique {
+        target
+    } else {
+        dashed_storage = dash_app(target);
+        &dashed_storage
+    };
     let app_len = app_length(app);
     let target_len = app_length(target);
-    let mut res_v: Vec<Atom> = Vec::new();
+
+    // Write straight into a stack buffer with a cursor.
+    let mut buf = [Atom::default(); 2 * APP_LENGTH]; // or whatever your empty Atom is
+    let mut n = 0;
+    let mut push = |src: &[Atom]| {
+        buf[n..n + src.len()].copy_from_slice(src);
+        n += src.len();
+    };
 
     match app[0] {
-        Atom::Seq(false) => {
-            if arg_id == 1 {
-                let mut res = app.clone();
-                res[0] = Atom::Seq(true);
-                return (res, None);
-            } else {
-                /* do nothing when arg_id == 2 */
-                return (app.clone(), None);
-            }
-        }
-        Atom::Seq(true) => {
-            assert_eq!(arg_id, 2);
-            res_v.extend_from_slice(&target_dashed[0..target_len]);
-            res_v.extend_from_slice(&app[3..app_len]);
-        }
-        Atom::Try => {
-            assert_eq!(arg_id, 1);
-            res_v.extend_from_slice(&target_dashed[0..target_len]);
-            res_v.extend_from_slice(&app[3..app_len]);
+        Atom::Seq(true) | Atom::Try => {
+            push(&target_dashed[0..target_len]);
+            push(&app[3..app_len]);
         }
         _ => {
-            res_v.extend_from_slice(&app[0..arg_id]);
-            res_v.extend_from_slice(&target_dashed[0..target_len]);
-            res_v.extend_from_slice(&app[arg_id + 1..app_len]);
+            push(&app[0..arg_id]);
+            push(&target_dashed[0..target_len]);
+            push(&app[arg_id + 1..app_len]);
         }
     }
+    let res = &buf[..n];
 
-    if res_v.len() <= APP_LENGTH {
-        (vec_to_app(res_v), None)
+    if n <= APP_LENGTH {
+        (slice_to_app(res), None)
     } else {
-        let mut wb_app = res_v[APP_LENGTH..res_v.len()].to_vec();
-        wb_app.insert(0, Atom::Ptr(free_addr, true, false));
+        // write-back: prepend the pointer without an O(n) insert
+        let mut wb = [Atom::default(); APP_LENGTH];
+        wb[0] = Atom::Ptr(free_addr, true, false);
+        wb[1..1 + (n - APP_LENGTH)].copy_from_slice(&res[APP_LENGTH..]);
         (
-            vec_to_app(wb_app),
-            Some(vec_to_app(res_v[0..APP_LENGTH].to_vec())),
+            slice_to_app(&wb[..1 + (n - APP_LENGTH)]),
+            Some(slice_to_app(&res[0..APP_LENGTH])),
         )
     }
+}
+
+fn slice_to_app(s: &[Atom]) -> App {
+    debug_assert!(s.len() <= APP_LENGTH);
+    let mut a = [Atom::Nop; APP_LENGTH];
+    a[..s.len()].copy_from_slice(s);
+    a
 }
 
 #[test]
