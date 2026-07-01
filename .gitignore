@@ -1,5 +1,6 @@
 /target
 /simu-out
 Rplots.pdf
+dhat-heap.json
 
 .direnv/
