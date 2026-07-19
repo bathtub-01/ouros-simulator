@@ -198,7 +198,7 @@ pub fn take_int(atom: &Atom) -> i32 {
     match *atom {
         Atom::Int(i) => i,
         _ => {
-            panic!("atom not an INT: {:?}", atom);
+            return Err(()); // p_anic!("atom not an INT: {:?}", atom);
         }
     }
 }

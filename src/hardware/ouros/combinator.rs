@@ -86,7 +86,7 @@ pub fn holes_of(code: u8) -> usize {
         9..=22 => 5,
         23..=63 => 6,
         _ => {
-            panic!("Unknown code!");
+            return Err(()); // p_anic!("Unknown code!");
         }
     }
 }
@@ -143,7 +143,7 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
     while *p_it != Pat::X {
         match p_it {
             Pat::X => {
-                panic!("parse: strange!");
+                return Err(()); // p_anic!("parse: strange!");
             }
             Pat::At(l, r) => {
                 stack.push(*r.clone());

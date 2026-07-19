@@ -366,14 +366,14 @@ impl Reducer {
                         self.reg_arity.connect(&(fields as u8 + free_vars + 1));
                         self.comb_table.read(base + idx);
                     } else {
-                        panic!()
+                        return Err(()); // p_anic!()
                     }
                 }
                 Atom::Y => {
                     self.reg_app_mask.connect(&true);
                     self.reg_stm.connect(&Stm::Special);
                 }
-                _ => todo!(),
+                _ => return Err(()); // t_odo!(),
             };
         } else {
             self.reg_stm.connect(&Stm::Idle);
@@ -442,8 +442,7 @@ impl HwModule for Reducer {
             }
         }
         if self.spine_valid() && !self.input.spine_ready {
-            println!("spine leaked!: {:?}", self.spine_bits());
-            panic!();
+            return Err(()); // p_anic!(); println!("spine leaked!: {:?}", self.spine_bits());
         }
 
         if self.stat_detail_lv >= DLV_GC {

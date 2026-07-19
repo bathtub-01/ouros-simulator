@@ -610,7 +610,7 @@ impl GbgCollector {
                     println!("old head is 0 when pushing to freelist!");
                 }
             } else if read_out.state == CellState::WorkList {
-                panic!("Broken WorkList! addr: {}", *self.reg_sweeper.value());
+                return Err(()); // p_anic!("Broken WorkList! addr: {}", *self.reg_sweeper.value());
             }
 
             if *self.reg_sweeper.value() < self.const_heap_size - 1 {

@@ -190,7 +190,7 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
         },
         Atom::Try => match app[1] {
             Atom::Ptr(p, _, false) => (1, p),
-            _ => panic!("TRY literal should not enter the heap"),
+            _ => return Err(()); // p_anic!("TRY literal should not enter the heap"),
         },
         Atom::Seq(true) => match app[2] {
             Atom::Ptr(p, _, false) => (2, p),
@@ -666,7 +666,7 @@ impl DrfHeap {
                 } else {
                     if stk.second().is_some() {
                         if stack_cell_with(stk.second(), |(flag, _)| !*flag) {
-                            panic!("strange new frame!");
+                            return Err(()); // p_anic!("strange new frame!");
                         }
                         CONSUMEs::InputWHNFNoDmderNewFrame
                     } else {
@@ -1185,7 +1185,7 @@ impl DrfHeap {
                 {
                     // FIXME: ensure using a new stack
                     if stk_id as u8 == self.holder_in.value().stack_idx {
-                        panic!("GOT YA!");
+                        return Err(()); // p_anic!("GOT YA!");
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                     self.frame_stack[stk_id].push(self.gen_frame_record());

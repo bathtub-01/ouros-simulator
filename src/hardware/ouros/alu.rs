@@ -130,7 +130,7 @@ impl Alu {
         let res: Atom = match &self.input.input_bits.load[0] {
             Prm(op, inv) => compute(op, *inv, oprand1, oprand2),
             _ => {
-                panic!("alu: app head is not an primitive op!");
+                return Err(()); // p_anic!("alu: app head is not an primitive op!");
             }
         };
 
