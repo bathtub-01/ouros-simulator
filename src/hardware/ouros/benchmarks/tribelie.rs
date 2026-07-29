@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Combinators in this file: 42
+// Combinators in this file: 43
 #[rustfmt::skip]
 pub static TRIBELIE: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
@@ -100,7 +100,7 @@ pub static TRIBELIE: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(16, false, false),
         ], 
         vec![ // 18 
-            Com(2,76),
+            Com(2,78),
             Ptr(17, false, false),
         ], 
         vec![ // 19 
@@ -554,56 +554,62 @@ pub static TRIBELIE: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp36
         vec![ // 71 
+            Arg(0, true),
+            Ptr(0, true, true),
+        ], 
+        vec![ // 72 
+            Arg(1, true),
+            Arg(2, true),
+            Arg(3, true),
+            Arg(4, true),
+            Arg(5, true),
+            Arg(6, true),
+        ], 
+        // AExp37
+        vec![ // 73 
             Com(4,20),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 72 
-            Arg(4, true),
-            Arg(6, true),
-        ], 
-        vec![ // 73 
-            Arg(0, true),
-            Arg(1, true),
-            Arg(2, true),
-            Arg(3, true),
-            Arg(5, true),
-        ], 
-        // AExp37
         vec![ // 74 
-            Com(7,71),
-            Ptr(0, true, true),
+            Arg(1, true),
+            Arg(3, true),
         ], 
         vec![ // 75 
-            Com(3,80),
             Arg(0, true),
-            Arg(1, true),
             Arg(2, true),
-            Arg(3, true),
         ], 
         // AExp38
         vec![ // 76 
+            Com(7,71),
+            Com(4,73),
+            Ptr(0, true, true),
+        ], 
+        vec![ // 77 
+            Com(6,82),
+            Arg(0, true),
+            Arg(1, true),
+        ], 
+        // AExp39
+        vec![ // 78 
             Com(7,67),
             Com(6,69),
             Ptr(0, true, true),
             Arg(0, true),
         ], 
-        vec![ // 77 
-            Com(4,74),
+        vec![ // 79 
+            Com(2,76),
             Arg(1, true),
-        ], 
-        // AExp39
-        vec![ // 78 
-            Arg(0, true),
-            Arg(1, true),
-            Arg(2, true),
-            Arg(3, true),
-            Arg(6, true),
-            Arg(4, true),
-            Arg(5, true),
         ], 
         // AExp40
-        vec![ // 79 
+        vec![ // 80 
+            Arg(0, true),
+            Arg(3, true),
+            Arg(1, true),
+            Arg(2, true),
+        ], 
+        // AExp41
+        vec![ // 81 
             Arg(6, true),
             Arg(0, true),
             Arg(1, true),
@@ -612,16 +618,19 @@ pub static TRIBELIE: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(4, true),
             Arg(5, true),
         ], 
-        // AExp41
-        vec![ // 80 
-            Com(7,78),
+        // AExp42
+        vec![ // 82 
+            Com(4,80),
             Ptr(0, true, true),
         ], 
-        vec![ // 81 
-            Com(7,79),
+        vec![ // 83 
+            Com(7,81),
             Arg(0, true),
             Arg(1, true),
             Arg(2, true),
+            Arg(3, true),
+            Arg(4, true),
+            Arg(5, true),
         ], 
     ],
 

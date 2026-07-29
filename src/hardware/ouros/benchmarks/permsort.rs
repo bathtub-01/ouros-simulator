@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Combinators in this file: 32
+// Combinators in this file: 33
 #[rustfmt::skip]
 pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
@@ -94,43 +94,46 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp6
         vec![ // 8 
-            Com(4,2),
-            Arg(1, true),
-            Ptr(0, true, true),
-        ], 
-        vec![ // 9 
-            Arg(0, true),
-            Arg(2, true),
+            Arg(3, true),
         ], 
         // AExp7
-        vec![ // 10 
+        vec![ // 9 
+            Com(4,2),
             Arg(0, true),
-            Arg(2, false),
-            Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 11 
-            Com(3,8),
-            Arg(1, false),
-            Arg(2, false),
-            Arg(3, false),
-        ], 
-        vec![ // 12 
-            Arg(1, false),
-            Arg(3, false),
+        vec![ // 10 
+            Com(1,15),
+            Arg(1, true),
+            Arg(2, true),
         ], 
         // AExp8
+        vec![ // 11 
+            Arg(0, false),
+            Arg(2, false),
+            Com(4,8),
+            Com(4,9),
+            Arg(2, false),
+            Arg(0, false),
+            Arg(3, false),
+            Ptr(0, true, true),
+        ], 
+        vec![ // 12 
+            Arg(1, true),
+            Arg(3, false),
+        ], 
+        // AExp9
         vec![ // 13 
             Arg(2, true),
             Com(2,0),
             Ptr(0, true, true),
         ], 
         vec![ // 14 
-            Com(4,10),
+            Com(4,11),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp9
+        // AExp10
         vec![ // 15 
             Y,
             Ptr(0, true, true),
@@ -139,7 +142,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,13),
             Arg(0, true),
         ], 
-        // AExp10
+        // AExp11
         vec![ // 17 
             Com(1,24),
             Ptr(0, true, true),
@@ -149,7 +152,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp11
+        // AExp12
         vec![ // 19 
             Com(1,25),
             Ptr(1, true, true),
@@ -165,7 +168,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(1, false),
         ], 
-        // AExp12
+        // AExp13
         vec![ // 22 
             Arg(1, true),
             Com(2,1),
@@ -175,18 +178,18 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,19),
             Arg(0, true),
         ], 
-        // AExp13
+        // AExp14
         vec![ // 24 
             Arg(0, true),
             Com(2,1),
             Com(2,22),
         ], 
-        // AExp14
+        // AExp15
         vec![ // 25 
             Arg(0, true),
             Com(2,0),
         ], 
-        // AExp15
+        // AExp16
         vec![ // 26 
             Com(1,36),
             Ptr(1, true, true),
@@ -200,7 +203,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(1,57),
             Arg(0, true),
         ], 
-        // AExp16
+        // AExp17
         vec![ // 29 
             Arg(0, true),
             Ptr(0, true, true),
@@ -211,7 +214,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(2,0),
             Com(2,0),
         ], 
-        // AExp17
+        // AExp18
         vec![ // 31 
             Com(2,42),
             Ptr(1, true, true),
@@ -225,7 +228,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(2, true),
         ], 
-        // AExp18
+        // AExp19
         vec![ // 34 
             Arg(2, true),
             Com(2,0),
@@ -236,7 +239,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp19
+        // AExp20
         vec![ // 36 
             Y,
             Ptr(0, true, true),
@@ -245,7 +248,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,34),
             Arg(0, true),
         ], 
-        // AExp20
+        // AExp21
         vec![ // 38 
             Com(4,2),
             Arg(1, true),
@@ -255,7 +258,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(2, true),
         ], 
-        // AExp21
+        // AExp22
         vec![ // 40 
             Arg(2, true),
             Arg(0, true),
@@ -265,7 +268,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,38),
             Arg(1, true),
         ], 
-        // AExp22
+        // AExp23
         vec![ // 42 
             Y,
             Ptr(0, true, true),
@@ -275,7 +278,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,40),
             Arg(1, true),
         ], 
-        // AExp23
+        // AExp24
         vec![ // 44 
             Com(4,2),
             Ptr(0, true, true),
@@ -286,7 +289,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Com(2,0),
         ], 
-        // AExp24
+        // AExp25
         vec![ // 46 
             Com(4,2),
             Arg(0, true),
@@ -297,7 +300,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(1, true),
             Arg(2, true),
         ], 
-        // AExp25
+        // AExp26
         vec![ // 48 
             Com(1,64),
             Ptr(1, true, true),
@@ -311,7 +314,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(4,2),
             Arg(1, true),
         ], 
-        // AExp26
+        // AExp27
         vec![ // 51 
             Com(4,2),
             Ptr(1, true, true),
@@ -329,7 +332,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(2, false),
             Arg(3, false),
         ], 
-        // AExp27
+        // AExp28
         vec![ // 54 
             Arg(2, true),
             Ptr(1, true, true),
@@ -344,7 +347,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(1,44),
             Arg(0, false),
         ], 
-        // AExp28
+        // AExp29
         vec![ // 57 
             Y,
             Ptr(0, true, true),
@@ -353,7 +356,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,54),
             Arg(0, true),
         ], 
-        // AExp29
+        // AExp30
         vec![ // 59 
             Com(4,2),
             Ptr(1, true, true),
@@ -367,7 +370,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(2, true),
         ], 
-        // AExp30
+        // AExp31
         vec![ // 62 
             Arg(2, true),
             Com(2,0),
@@ -378,7 +381,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp31
+        // AExp32
         vec![ // 64 
             Y,
             Ptr(0, true, true),

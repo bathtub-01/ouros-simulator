@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Combinators in this file: 10
+// Combinators in this file: 11
 #[rustfmt::skip]
 pub static TREESUM: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
@@ -13,7 +13,7 @@ pub static TREESUM: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(1, false, false),
         ], 
         vec![ // 1 
-            Com(1,14),
+            Com(1,15),
             Int(13),
         ], 
     ],
@@ -64,11 +64,11 @@ pub static TREESUM: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(0, true, true),
         ], 
         vec![ // 9 
-            Com(1,14),
+            Com(1,15),
             Arg(0, false),
         ], 
         vec![ // 10 
-            Com(1,14),
+            Com(1,15),
             Arg(0, false),
         ], 
         // AExp6
@@ -88,17 +88,18 @@ pub static TREESUM: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp8
         vec![ // 14 
+            Com(2,0),
+        ], 
+        // AExp9
+        vec![ // 15 
             Prm(EQ,false),
             Arg(0, false),
             Int(0),
-            Ptr(0, true, true),
-            Com(2,0),
-        ], 
-        vec![ // 15 
             Com(1,12),
+            Com(1,14),
             Arg(0, false),
         ], 
-        // AExp9
+        // AExp10
         vec![ // 16 
             Arg(3, true),
             Arg(0, true),

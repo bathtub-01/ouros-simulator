@@ -131,7 +131,10 @@ impl Reducer {
                     let after = app_length(&res);
                     assert!(
                         old_spn[before..].iter().filter(|a| !is_nop(a)).count() + after
-                            <= APP_LENGTH
+                            <= APP_LENGTH,
+                        "old_spn: {:?}; res: {:?}",
+                        old_spn,
+                        res
                     );
                     for i in 0..(APP_LENGTH - before) {
                         if after + i < APP_LENGTH {

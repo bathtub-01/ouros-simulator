@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Combinators in this file: 31
+// Combinators in this file: 32
 #[rustfmt::skip]
 pub static MSS: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
@@ -18,7 +18,7 @@ pub static MSS: LazyLock<Program> = LazyLock::new(|| { Program {
             Int(20),
         ], 
         vec![ // 2 
-            Com(2,58),
+            Com(2,59),
             Ptr(1, false, false),
             Int(20),
         ], 
@@ -62,8 +62,10 @@ pub static MSS: LazyLock<Program> = LazyLock::new(|| { Program {
             Prm(LE,true),
             Arg(0, false),
             Arg(1, false),
-            Arg(1, false),
+            Com(2,1),
+            Com(2,0),
             Arg(0, false),
+            Arg(1, false),
         ], 
         // AExp5
         vec![ // 7 
@@ -304,35 +306,36 @@ pub static MSS: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp28
         vec![ // 54 
-            Com(2,58),
+            Com(2,0),
+        ], 
+        // AExp29
+        vec![ // 55 
+            Com(2,59),
             Ptr(0, true, true),
         ], 
-        vec![ // 55 
+        vec![ // 56 
             Prm(Add,false),
             Arg(0, true),
             Int(1),
         ], 
-        // AExp29
-        vec![ // 56 
+        // AExp30
+        vec![ // 57 
             Com(4,22),
             Arg(0, false),
             Ptr(0, true, true),
         ], 
-        vec![ // 57 
-            Com(1,54),
+        vec![ // 58 
+            Com(1,55),
             Arg(0, false),
             Arg(1, true),
         ], 
-        // AExp30
-        vec![ // 58 
+        // AExp31
+        vec![ // 59 
             Prm(LE,false),
             Arg(0, false),
             Arg(1, false),
-            Com(2,0),
-            Ptr(0, true, true),
-        ], 
-        vec![ // 59 
-            Com(2,56),
+            Com(2,54),
+            Com(2,57),
             Arg(0, false),
             Arg(1, false),
         ], 

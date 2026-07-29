@@ -15,22 +15,22 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Int(1),
         ], 
         vec![ // 1 
-            Com(3,71),
+            Com(3,67),
             Com(2,1),
         ], 
         vec![ // 2 
             Com(1,0),
-            Com(3,71),
+            Com(3,67),
             Ptr(1, false, false),
         ], 
         vec![ // 3 
             Com(1,0),
-            Com(3,71),
+            Com(3,67),
             Ptr(2, false, false),
         ], 
         vec![ // 4 
             Com(1,0),
-            Com(3,71),
+            Com(3,67),
             Ptr(3, false, false),
         ], 
     ],
@@ -50,7 +50,7 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(0, true, true),
         ], 
         vec![ // 3 
-            Com(1,69),
+            Com(1,65),
             Arg(0, true),
         ], 
         vec![ // 4 
@@ -64,7 +64,7 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(0, true, true),
         ], 
         vec![ // 6 
-            Com(1,69),
+            Com(1,65),
             Arg(0, true),
         ], 
         vec![ // 7 
@@ -97,21 +97,21 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp6
         vec![ // 13 
-            Arg(0, true),
             Com(2,0),
-            Ptr(0, true, true),
-        ], 
-        vec![ // 14 
-            Com(1,15),
-            Arg(1, true),
         ], 
         // AExp7
+        vec![ // 14 
+            Arg(0, true),
+            Com(1,13),
+            Com(1,15),
+        ], 
+        // AExp8
         vec![ // 15 
             Arg(0, true),
             Com(2,1),
-            Com(2,13),
+            Com(1,14),
         ], 
-        // AExp8
+        // AExp9
         vec![ // 16 
             Com(4,22),
             Arg(1, true),
@@ -121,7 +121,7 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(2, true),
         ], 
-        // AExp9
+        // AExp10
         vec![ // 18 
             Arg(2, true),
             Arg(0, true),
@@ -131,7 +131,7 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,16),
             Arg(1, true),
         ], 
-        // AExp10
+        // AExp11
         vec![ // 20 
             Y,
             Ptr(0, true, true),
@@ -141,13 +141,13 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,18),
             Arg(1, true),
         ], 
-        // AExp11
+        // AExp12
         vec![ // 22 
             Arg(3, true),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp12
+        // AExp13
         vec![ // 23 
             Com(4,22),
             Ptr(1, true, true),
@@ -161,7 +161,7 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(2, true),
         ], 
-        // AExp13
+        // AExp14
         vec![ // 26 
             Arg(2, true),
             Com(2,0),
@@ -172,7 +172,7 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp14
+        // AExp15
         vec![ // 28 
             Y,
             Ptr(0, true, true),
@@ -181,17 +181,17 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,26),
             Arg(0, true),
         ], 
-        // AExp15
+        // AExp16
         vec![ // 30 
             Com(1,43),
             Ptr(0, true, true),
         ], 
         vec![ // 31 
-            Com(1,55),
+            Com(2,50),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp16
+        // AExp17
         vec![ // 32 
             Com(1,35),
             Ptr(1, true, true),
@@ -206,12 +206,12 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(1,43),
             Arg(1, false),
         ], 
-        // AExp17
+        // AExp18
         vec![ // 35 
             Arg(0, true),
             Com(2,1),
         ], 
-        // AExp18
+        // AExp19
         vec![ // 36 
             Com(1,43),
             Ptr(0, true, true),
@@ -221,7 +221,7 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp19
+        // AExp20
         vec![ // 38 
             Com(1,44),
             Ptr(1, true, true),
@@ -237,7 +237,7 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(1, false),
         ], 
-        // AExp20
+        // AExp21
         vec![ // 41 
             Arg(1, true),
             Com(2,1),
@@ -247,28 +247,29 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,38),
             Arg(0, true),
         ], 
-        // AExp21
+        // AExp22
         vec![ // 43 
             Arg(0, true),
             Com(2,1),
             Com(2,41),
         ], 
-        // AExp22
+        // AExp23
         vec![ // 44 
             Arg(0, true),
             Com(2,0),
         ], 
-        // AExp23
+        // AExp24
         vec![ // 45 
             Com(4,22),
             Arg(1, true),
             Ptr(0, true, true),
         ], 
         vec![ // 46 
+            Com(2,50),
             Arg(0, true),
             Arg(2, true),
         ], 
-        // AExp24
+        // AExp25
         vec![ // 47 
             Com(4,22),
             Arg(0, true),
@@ -279,120 +280,100 @@ pub static ORDLIST: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(1, true),
             Arg(2, true),
         ], 
-        // AExp25
+        // AExp26
         vec![ // 49 
             Com(1,35),
             Arg(0, false),
-            Arg(2, false),
-            Ptr(1, true, true),
-            Ptr(0, true, true),
-        ], 
-        vec![ // 50 
+            Arg(1, false),
+            Com(3,45),
             Com(3,47),
             Arg(0, false),
-            Arg(2, false),
-            Arg(3, false),
+            Arg(1, false),
         ], 
-        vec![ // 51 
-            Com(3,45),
+        // AExp27
+        vec![ // 50 
             Arg(1, true),
-            Arg(2, false),
-            Arg(3, false),
-        ], 
-        // AExp26
-        vec![ // 52 
-            Arg(2, true),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 53 
-            Com(4,49),
+        vec![ // 51 
+            Com(2,49),
             Arg(0, false),
-            Arg(1, true),
         ], 
-        vec![ // 54 
+        vec![ // 52 
             Com(4,22),
             Arg(0, false),
             Com(2,0),
         ], 
-        // AExp27
-        vec![ // 55 
-            Y,
-            Ptr(0, true, true),
-        ], 
-        vec![ // 56 
-            Com(3,52),
-            Arg(0, true),
-        ], 
         // AExp28
-        vec![ // 57 
+        vec![ // 53 
             Com(1,28),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 58 
-            Com(1,69),
+        vec![ // 54 
+            Com(1,65),
             Arg(0, true),
         ], 
-        vec![ // 59 
+        vec![ // 55 
             Com(4,22),
             Com(2,0),
         ], 
         // AExp29
-        vec![ // 60 
+        vec![ // 56 
             Com(1,28),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 61 
-            Com(1,69),
+        vec![ // 57 
+            Com(1,65),
             Arg(0, true),
         ], 
-        vec![ // 62 
+        vec![ // 58 
             Com(4,22),
             Com(2,1),
         ], 
         // AExp30
-        vec![ // 63 
+        vec![ // 59 
             Com(2,20),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 64 
-            Com(1,60),
+        vec![ // 60 
+            Com(1,56),
             Arg(0, false),
         ], 
-        vec![ // 65 
-            Com(1,57),
+        vec![ // 61 
+            Com(1,53),
             Arg(0, false),
         ], 
         // AExp31
-        vec![ // 66 
+        vec![ // 62 
             Com(2,20),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 67 
-            Com(1,63),
+        vec![ // 63 
+            Com(1,59),
             Arg(0, false),
         ], 
-        vec![ // 68 
-            Com(1,69),
+        vec![ // 64 
+            Com(1,65),
             Arg(0, false),
         ], 
         // AExp32
-        vec![ // 69 
+        vec![ // 65 
             Arg(0, true),
-            Com(1,66),
+            Com(1,62),
             Ptr(0, true, true),
         ], 
-        vec![ // 70 
+        vec![ // 66 
             Com(4,22),
             Com(2,0),
             Com(2,0),
         ], 
         // AExp33
-        vec![ // 71 
+        vec![ // 67 
             Arg(1, true),
             Arg(0, true),
         ], 

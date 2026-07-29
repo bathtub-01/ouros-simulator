@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Combinators in this file: 39
+// Combinators in this file: 40
 #[rustfmt::skip]
 pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
@@ -72,7 +72,7 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp5
         vec![ // 8 
-            Com(2,78),
+            Com(2,71),
             Ptr(0, true, true),
         ], 
         vec![ // 9 
@@ -144,7 +144,7 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp12
         vec![ // 22 
-            Com(2,78),
+            Com(2,71),
             Int(1),
             Ptr(0, true, true),
         ], 
@@ -199,43 +199,46 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp17
         vec![ // 33 
-            Com(4,21),
-            Arg(1, true),
-            Ptr(0, true, true),
-        ], 
-        vec![ // 34 
-            Arg(0, true),
-            Arg(2, true),
+            Arg(3, true),
         ], 
         // AExp18
-        vec![ // 35 
+        vec![ // 34 
+            Com(4,21),
             Arg(0, true),
-            Arg(2, false),
-            Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 36 
-            Com(3,33),
-            Arg(1, false),
-            Arg(2, false),
-            Arg(3, false),
-        ], 
-        vec![ // 37 
-            Arg(1, false),
-            Arg(3, false),
+        vec![ // 35 
+            Com(1,40),
+            Arg(1, true),
+            Arg(2, true),
         ], 
         // AExp19
+        vec![ // 36 
+            Arg(0, false),
+            Arg(2, false),
+            Com(4,33),
+            Com(4,34),
+            Arg(2, false),
+            Arg(0, false),
+            Arg(3, false),
+            Ptr(0, true, true),
+        ], 
+        vec![ // 37 
+            Arg(1, true),
+            Arg(3, false),
+        ], 
+        // AExp20
         vec![ // 38 
             Arg(2, true),
             Com(2,0),
             Ptr(0, true, true),
         ], 
         vec![ // 39 
-            Com(4,35),
+            Com(4,36),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp20
+        // AExp21
         vec![ // 40 
             Y,
             Ptr(0, true, true),
@@ -244,7 +247,7 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,38),
             Arg(0, true),
         ], 
-        // AExp21
+        // AExp22
         vec![ // 42 
             Prm(EQ,false),
             Ptr(0, true, true),
@@ -255,7 +258,7 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp22
+        // AExp23
         vec![ // 44 
             Com(2,46),
             Arg(1, false),
@@ -266,7 +269,7 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(1, false),
         ], 
-        // AExp23
+        // AExp24
         vec![ // 46 
             Prm(EQ,false),
             Int(0),
@@ -279,185 +282,152 @@ pub static SUMEULER: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, false),
             Arg(1, false),
         ], 
-        // AExp24
+        // AExp25
         vec![ // 48 
-            Com(1,72),
+            Com(1,64),
             Arg(0, true),
             Arg(1, true),
             Com(2,1),
         ], 
-        // AExp25
+        // AExp26
         vec![ // 49 
-            Prm(LE,false),
-            Arg(5, false),
-            Arg(1, false),
-            Ptr(1, true, true),
+            Arg(0, true),
+            Arg(2, false),
             Ptr(0, true, true),
         ], 
         vec![ // 50 
-            Arg(3, true),
-            Arg(5, false),
-        ], 
-        vec![ // 51 
-            Prm(LE,false),
-            Arg(4, true),
-            Arg(1, false),
-            Arg(0, true),
-            Arg(2, true),
-        ], 
-        // AExp26
-        vec![ // 52 
             Arg(1, true),
+            Arg(2, false),
+        ], 
+        // AExp27
+        vec![ // 51 
+            Arg(2, true),
             Int(0),
             Arg(0, true),
         ], 
-        // AExp27
-        vec![ // 53 
+        // AExp28
+        vec![ // 52 
             Arg(2, true),
             Int(1),
             Ptr(0, true, true),
         ], 
-        vec![ // 54 
+        vec![ // 53 
             Prm(Sub,false),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp28
-        vec![ // 55 
-            Arg(2, true),
-            Arg(1, true),
-            Arg(0, true),
-        ], 
         // AExp29
-        vec![ // 56 
+        vec![ // 54 
+            Prm(LE,false),
+            Arg(2, false),
+            Arg(0, false),
+            Com(3,51),
+            Com(3,52),
+            Arg(0, false),
+            Arg(2, false),
+        ], 
+        // AExp30
+        vec![ // 55 
             Arg(3, true),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 57 
+        vec![ // 56 
             Prm(Sub,false),
             Arg(1, true),
-            Arg(0, true),
-        ], 
-        vec![ // 58 
-            Prm(Add,false),
             Arg(2, true),
+        ], 
+        vec![ // 57 
+            Prm(Add,false),
+            Arg(0, true),
             Int(1),
         ], 
-        // AExp30
-        vec![ // 59 
+        // AExp31
+        vec![ // 58 
             Prm(LE,false),
             Arg(0, false),
             Arg(2, false),
-            Ptr(1, true, true),
+            Com(4,21),
+            Com(4,55),
+            Ptr(0, true, true),
+            Arg(2, false),
+            Arg(0, false),
+        ], 
+        vec![ // 59 
+            Prm(Add,false),
+            Arg(1, false),
+            Arg(1, false),
+        ], 
+        // AExp32
+        vec![ // 60 
+            Com(1,64),
+            Arg(0, true),
+            Arg(1, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 60 
-            Com(4,56),
+        vec![ // 61 
+            Com(3,58),
+            Arg(2, true),
+        ], 
+        // AExp33
+        vec![ // 62 
+            Prm(LE,false),
+            Arg(2, false),
+            Arg(0, false),
+            Com(3,54),
+            Com(3,60),
             Arg(0, false),
             Arg(2, false),
-            Arg(1, false),
+            Arg(1, true),
         ], 
-        vec![ // 61 
-            Com(3,55),
-            Arg(2, false),
-            Arg(1, false),
-        ], 
-        // AExp31
-        vec![ // 62 
+        // AExp34
+        vec![ // 63 
             Prm(Add,false),
             Arg(0, false),
             Arg(0, false),
         ], 
-        // AExp32
-        vec![ // 63 
-            Com(3,59),
-            Arg(0, true),
-            Ptr(0, true, true),
-        ], 
+        // AExp35
         vec![ // 64 
-            Com(1,62),
-            Arg(1, true),
-        ], 
-        // AExp33
-        vec![ // 65 
-            Arg(0, true),
-            Arg(2, true),
+            Com(3,49),
             Ptr(0, true, true),
+            Com(1,63),
         ], 
+        vec![ // 65 
+            Com(3,62),
+            Arg(0, true),
+        ], 
+        // AExp36
         vec![ // 66 
-            Com(2,63),
-            Arg(1, true),
+            Com(2,0),
         ], 
-        // AExp34
+        // AExp37
         vec![ // 67 
-            Com(6,49),
-            Ptr(3, true, true),
-            Arg(0, false),
-            Ptr(2, true, true),
-            Ptr(1, true, true),
-            Arg(2, false),
+            Com(2,71),
             Ptr(0, true, true),
         ], 
         vec![ // 68 
             Prm(Add,false),
-            Arg(2, false),
-            Arg(2, false),
-        ], 
-        vec![ // 69 
-            Com(3,65),
-            Arg(1, true),
-            Arg(2, false),
-        ], 
-        vec![ // 70 
-            Com(3,53),
-            Arg(0, false),
-            Arg(2, false),
-        ], 
-        vec![ // 71 
-            Com(2,52),
-            Arg(0, false),
-        ], 
-        // AExp35
-        vec![ // 72 
-            Y,
-            Ptr(0, true, true),
-        ], 
-        vec![ // 73 
-            Com(3,67),
-            Arg(0, true),
-        ], 
-        // AExp36
-        vec![ // 74 
-            Com(2,78),
-            Ptr(0, true, true),
-        ], 
-        vec![ // 75 
-            Prm(Add,false),
             Arg(0, true),
             Int(1),
         ], 
-        // AExp37
-        vec![ // 76 
+        // AExp38
+        vec![ // 69 
             Com(4,21),
             Arg(0, false),
             Ptr(0, true, true),
         ], 
-        vec![ // 77 
-            Com(1,74),
+        vec![ // 70 
+            Com(1,67),
             Arg(0, false),
             Arg(1, true),
         ], 
-        // AExp38
-        vec![ // 78 
+        // AExp39
+        vec![ // 71 
             Prm(LE,false),
             Arg(0, false),
             Arg(1, false),
-            Com(2,0),
-            Ptr(0, true, true),
-        ], 
-        vec![ // 79 
-            Com(2,76),
+            Com(2,66),
+            Com(2,69),
             Arg(0, false),
             Arg(1, false),
         ], 

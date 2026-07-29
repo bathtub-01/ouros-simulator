@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Combinators in this file: 32
+// Combinators in this file: 34
 #[rustfmt::skip]
 pub static BRAUN: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
@@ -13,12 +13,12 @@ pub static BRAUN: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(3, false, false),
         ], 
         vec![ // 1 
-            Com(2,58),
+            Com(2,60),
             Int(0),
             Int(255),
         ], 
         vec![ // 2 
-            Com(2,52),
+            Com(2,53),
             Int(2),
             Ptr(1, false, false),
         ], 
@@ -283,69 +283,75 @@ pub static BRAUN: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp26
         vec![ // 48 
-            Com(2,52),
+            Com(2,0),
+        ], 
+        // AExp27
+        vec![ // 49 
+            Com(2,53),
             Ptr(0, true, true),
         ], 
-        vec![ // 49 
+        vec![ // 50 
             Prm(Sub,false),
             Arg(0, true),
             Int(1),
         ], 
-        // AExp27
-        vec![ // 50 
+        // AExp28
+        vec![ // 51 
             Com(4,29),
             Arg(1, false),
             Ptr(0, true, true),
         ], 
-        vec![ // 51 
-            Com(1,48),
+        vec![ // 52 
+            Com(1,49),
             Arg(0, true),
             Arg(1, false),
         ], 
-        // AExp28
-        vec![ // 52 
+        // AExp29
+        vec![ // 53 
             Prm(LE,false),
             Arg(0, false),
             Int(0),
+            Com(1,0),
+            Com(1,48),
             Ptr(0, true, true),
-            Com(2,0),
         ], 
-        vec![ // 53 
-            Com(2,50),
+        vec![ // 54 
+            Com(2,51),
             Arg(0, false),
             Arg(1, true),
         ], 
-        // AExp29
-        vec![ // 54 
-            Com(2,58),
+        // AExp30
+        vec![ // 55 
+            Com(2,0),
+        ], 
+        // AExp31
+        vec![ // 56 
+            Com(2,60),
             Ptr(0, true, true),
         ], 
-        vec![ // 55 
+        vec![ // 57 
             Prm(Add,false),
             Arg(0, true),
             Int(1),
         ], 
-        // AExp30
-        vec![ // 56 
+        // AExp32
+        vec![ // 58 
             Com(4,29),
             Arg(0, false),
             Ptr(0, true, true),
         ], 
-        vec![ // 57 
-            Com(1,54),
+        vec![ // 59 
+            Com(1,56),
             Arg(0, false),
             Arg(1, true),
         ], 
-        // AExp31
-        vec![ // 58 
+        // AExp33
+        vec![ // 60 
             Prm(LE,false),
             Arg(0, false),
             Arg(1, false),
-            Com(2,0),
-            Ptr(0, true, true),
-        ], 
-        vec![ // 59 
-            Com(2,56),
+            Com(2,55),
+            Com(2,58),
             Arg(0, false),
             Arg(1, false),
         ], 
