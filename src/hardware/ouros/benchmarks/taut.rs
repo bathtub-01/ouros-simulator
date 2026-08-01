@@ -274,7 +274,7 @@ pub static TAUT: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp19
         vec![ // 35 
             Arg(0, true),
-            Err(4),
+            E(4),
             Com(1,0),
         ], 
         // AExp20
@@ -700,7 +700,7 @@ pub static TAUT: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp60
         vec![ // 118 
             Arg(2, true),
-            Err(0),
+            E(0),
             Ptr(0, true, true),
         ], 
         vec![ // 119 

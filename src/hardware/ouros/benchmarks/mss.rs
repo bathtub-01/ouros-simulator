@@ -299,7 +299,7 @@ pub static MSS: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp27
         vec![ // 53 
             Arg(0, true),
-            Err(1),
+            E(1),
             Com(2,51),
         ], 
         // AExp28

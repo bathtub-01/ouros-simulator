@@ -1177,13 +1177,13 @@ pub static SUMPUZ: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp97
         vec![ // 202 
             Arg(0, true),
-            Err(4),
+            E(4),
             Com(1,0),
         ], 
         // AExp98
         vec![ // 203 
             Arg(0, true),
-            Err(3),
+            E(3),
             Com(2,0),
         ], 
         // AExp99

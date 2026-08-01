@@ -33,11 +33,11 @@ pub fn compute(op: &AluOp, rev: bool, l: i32, r: i32) -> Atom {
         if b ^ inv {
             // COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
             Com(2, 1) // True, always be placed at 0
-                      // CON(1, 0, 1)
+        // CON(1, 0, 1)
         } else {
             // COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
             Com(2, 0) // False
-                      // CON(1, 0, 0)
+            // CON(1, 0, 0)
         }
     }
 
@@ -122,33 +122,38 @@ impl Alu {
         &self.stat
     }
 
-    fn gen_result(&self) -> ActiveApp {
-        let oprand1: i32 = take_int(&self.input.input_bits.load[1]);
-        let oprand2: i32 = take_int(&self.input.input_bits.load[2]);
-        
-
-        let res: Atom = match &self.input.input_bits.load[0] {
-            Prm(op, inv) => compute(op, *inv, oprand1, oprand2),
-            _ => {
-                return Err(()); // p_anic!("alu: app head is not an primitive op!");
-            }
+    fn gen_result(&self) -> Result<ActiveApp, ()> {
+        let get_operand = |i: usize| -> Result<i32, ()> {
+            self.input.input_bits.load.get(i).map(take_int).ok_or(())
         };
 
-        ActiveApp {
-            stack_idx: self.input.input_bits.stack_idx,
-            load: {
-                let mut arr: App = Default::default();
-                arr[0] = res;
-                for i in 3..APP_LENGTH {
-                    if self.input.input_bits.load[i] != Nop {
-                        arr[i - 2] = self.input.input_bits.load[i].clone();
-                    } else {
-                        break;
-                    }
-                }
-                arr
-            },
-        }
+        let oprand1: i32 = get_operand(1)?;
+        let oprand2: i32 = get_operand(2)?;
+
+        self.input
+            .input_bits
+            .load
+            .get(0)
+            .ok_or(())
+            .and_then(|atom| match atom {
+                Prm(op, inv) => Ok(ActiveApp {
+                    stack_idx: self.input.input_bits.stack_idx,
+                    load: {
+                        let res = compute(op, *inv, oprand1, oprand2);
+                        let mut arr: App = Default::default();
+                        arr[0] = res;
+                        for i in 3..APP_LENGTH {
+                            if self.input.input_bits.load[i] != Nop {
+                                arr[i - 2] = self.input.input_bits.load[i].clone();
+                            } else {
+                                break;
+                            }
+                        }
+                        arr
+                    },
+                }),
+                _ => Err(()), // p_anic!("alu: app head is not an primitive op!");
+            })
     }
 }
 

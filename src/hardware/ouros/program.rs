@@ -21,14 +21,12 @@ type Fields = usize;
 type FreeVars = u8;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-// FIX: should we fix capitalisation of variant names?
 pub enum SpeCell {
     Arg(usize),
     Lit(i32),
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
-// FIX: should we fix capitalisation of variant names?
 pub enum Atom {
     #[default]
     Nop,
@@ -43,7 +41,7 @@ pub enum Atom {
     Arg(usize, Unique),
     Try,
     Spe(AluOp, RevCond, SpeCell, SpeCell, usize),
-    Err(u8),
+    E(u8),
 }
 
 impl fmt::Display for Atom {
@@ -57,7 +55,7 @@ impl fmt::Display for Atom {
             Atom::Y => write!(f, "Y"),
             Atom::Seq(evaluated) => write!(f, "SEQ({})", evaluated),
             Atom::Arg(arg, _) => write!(f, "ARG({})", arg),
-            Atom::Err(e) => write!(f, "ERR({})", e),
+            Atom::E(e) => write!(f, "ERR({})", e),
             Atom::Try => write!(f, "TRY"),
             Atom::Spe(alu_op, _, spe_cell, spe_cell1, _) => write!(f, "SPE"),
             Atom::Con(a, fields, i) => write!(f, "CON({}, {}, {})", a, fields, i),
@@ -66,6 +64,8 @@ impl fmt::Display for Atom {
     }
 }
 
+// FIX: we should wrap this into a new type that checks the bounds of lookups
+// we may trigger null pointer exceptions, if we dont do that
 pub type App = [Atom; APP_LENGTH];
 
 #[derive(Default, Clone, Debug)]
