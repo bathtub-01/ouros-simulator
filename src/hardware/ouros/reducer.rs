@@ -5,6 +5,7 @@
 //          |                 |
 //          +-----------------+===> app
 
+use std::array;
 use std::cmp::max;
 
 use super::alu::compute;
@@ -68,7 +69,9 @@ pub struct Reducer {
     reg_arity: Register<u8>,
     reg_stm: Register<Stm>,
     reg_idx: Register<usize>,
-    reg_app_mask: Register<bool>, // to handle blocked SPECIAL
+    reg_app_mask: Register<bool>,          // to handle blocked SPECIAL
+    reg_big_spine_pending: Register<bool>, // for app output
+    reg_big_spine_used: Register<bool>,    // for new addr picking
     stat: ReducerStat,
     stat_detail_lv: u8,
 }
@@ -87,6 +90,8 @@ impl Reducer {
             reg_idx: Default::default(),
             reg_arity: Default::default(),
             reg_app_mask: Default::default(),
+            reg_big_spine_pending: Default::default(),
+            reg_big_spine_used: Default::default(),
         }
     }
 
@@ -115,77 +120,119 @@ impl Reducer {
     }
 
     pub fn spine_bits(&self) -> ActiveApp {
-        ActiveApp {
-            stack_idx: self.reg_in.value().stack_idx,
-            load: {
-                if *self.reg_stm.value() == Stm::Special {
-                    // Y case
-                    let mut res: App = self.reg_in.value().load.clone();
-                    res[0] = dash_atom(&self.reg_in.value().load[1]);
-                    res[1] = Atom::Ptr(self.input.free_addrs[0], false, false);
+        if self.big_spine_now() {
+            ActiveApp {
+                stack_idx: self.reg_in.value().stack_idx,
+                load: {
+                    // res = [NEW PTR, remaining tail of *this* reduction]
+                    let mut res = App::default();
+                    res[0] = Atom::Ptr(self.input.free_addrs[0], true, false);
+                    let src = &self.reg_in.value().load
+                        [arity_of(&self.reg_in.value().load[0]) as usize + 1..];
+                    res[1..][..src.len()].copy_from_slice(src);
                     res
-                } else {
-                    let old_spn = &self.reg_in.value().load;
-                    let before = *self.reg_arity.value() as usize + 1;
-                    let mut res = self.inst(self.comb_table.dout());
-                    let after = app_length(&res);
-                    assert!(
-                        old_spn[before..].iter().filter(|a| !is_nop(a)).count() + after
-                            <= APP_LENGTH,
-                        "old_spn: {:?}; res: {:?}",
-                        old_spn,
+                },
+            }
+        } else {
+            ActiveApp {
+                stack_idx: self.reg_in.value().stack_idx,
+                load: {
+                    if *self.reg_stm.value() == Stm::Special {
+                        // Y case
+                        let mut res: App = self.reg_in.value().load.clone();
+                        res[0] = dash_atom(&self.reg_in.value().load[1]);
+                        res[1] = Atom::Ptr(self.input.free_addrs[0], false, false);
                         res
-                    );
-                    for i in 0..(APP_LENGTH - before) {
-                        if after + i < APP_LENGTH {
-                            res[after + i] = old_spn[before + i].clone();
+                    } else {
+                        let old_spn = &self.reg_in.value().load;
+                        let before = *self.reg_arity.value() as usize + 1;
+                        let mut res = self.inst(self.comb_table.dout());
+                        let after = app_length(&res);
+                        // assert!(
+                        //     old_spn[before..].iter().filter(|a| !is_nop(a)).count() + after
+                        //         <= APP_LENGTH,
+                        //     "big spine case not being captured! stm: {:?} old_spn: {:?}; res: {:?}",
+                        //     self.reg_stm.value(),
+                        //     old_spn,
+                        //     res
+                        // );
+                        for i in 0..(APP_LENGTH - before) {
+                            if after + i < APP_LENGTH {
+                                res[after + i] = old_spn[before + i].clone();
+                            }
                         }
+                        res
                     }
-                    res
-                }
-            },
+                },
+            }
         }
     }
 
     pub fn app_valid(&self) -> bool {
-        *self.reg_stm.value() == Stm::App || *self.reg_stm.value() == Stm::Special
+        *self.reg_stm.value() == Stm::App
+            || *self.reg_stm.value() == Stm::Special
+            || self.big_spine_now()
+            || *self.reg_big_spine_pending.value()
     }
 
     pub fn app_bits(&self) -> FrozenApp {
-        FrozenApp {
-            heap_addr: {
-                let r = match self.reg_stm.value() {
-                    Stm::Spine | Stm::Idle => 0,
-                    Stm::App => {
-                        if let Atom::Ptr(p, _, _) = self.reg_spine.value()[*self.reg_idx.value()] {
-                            *self.addr_regs[p].value()
-                        } else if let Atom::Spe(_, _, _, _, p) =
-                            self.reg_spine.value()[*self.reg_idx.value()]
-                        {
-                            *self.addr_regs[p].value()
-                        } else {
-                            unreachable!()
+        if self.big_spine_now() || *self.reg_big_spine_pending.value() {
+            match self.reg_stm.value() {
+                Stm::Spine => FrozenApp {
+                    heap_addr: self.input.free_addrs[0],
+                    load: self.inst(self.comb_table.dout()),
+                },
+                _ => FrozenApp {
+                    heap_addr: *self.addr_regs[0].value(),
+                    load: self.inst(self.reg_spine.value()),
+                },
+            }
+        } else {
+            FrozenApp {
+                heap_addr: {
+                    let r = match self.reg_stm.value() {
+                        Stm::Spine | Stm::Idle => 0,
+                        Stm::App => {
+                            if let Atom::Ptr(p, _, _) =
+                                self.reg_spine.value()[*self.reg_idx.value()]
+                            {
+                                *self.addr_regs[p + if *self.reg_big_spine_used.value() {
+                                    1
+                                } else {
+                                    0
+                                }]
+                                .value()
+                            }
+                            //  else if let Atom::Spe(_, _, _, _, p) =
+                            //     self.reg_spine.value()[*self.reg_idx.value()]
+                            // {
+                            //     *self.addr_regs[p].value()
+                            // }
+                            else {
+                                unreachable!()
+                            }
                         }
+                        Stm::Special => self.input.free_addrs[0],
+                    };
+                    if r == 0
+                        && (*self.reg_stm.value() == Stm::App
+                            || *self.reg_stm.value() == Stm::Special)
+                    {
+                        println!("reducer emit nested app with addr 0!");
                     }
-                    Stm::Special => self.input.free_addrs[0],
-                };
-                if r == 0
-                    && (*self.reg_stm.value() == Stm::App || *self.reg_stm.value() == Stm::Special)
-                {
-                    println!("reducer emit nested app with addr 0!");
-                }
-                r
-            },
-            load: {
-                if *self.reg_stm.value() == Stm::Special {
-                    let mut res: App = Default::default();
-                    res[0] = dash_atom(&self.reg_in.value().load[1]);
-                    res[1] = Atom::Ptr(self.input.free_addrs[0], false, false);
-                    res
-                } else {
-                    self.inst(self.comb_table.dout())
-                }
-            },
+                    r
+                },
+                load: {
+                    if *self.reg_stm.value() == Stm::Special {
+                        let mut res: App = Default::default();
+                        res[0] = dash_atom(&self.reg_in.value().load[1]);
+                        res[1] = Atom::Ptr(self.input.free_addrs[0], false, false);
+                        res
+                    } else {
+                        self.inst(self.comb_table.dout())
+                    }
+                },
+            }
         }
     }
 
@@ -201,6 +248,15 @@ impl Reducer {
         };
         // demand all input free addrs are valid
         state_correct && self.input.free_addrs_valid.iter().all(|&vld| vld)
+    }
+
+    fn big_spine_now(&self) -> bool {
+        let template = self.comb_table.dout();
+        *self.reg_stm.value() == Stm::Spine
+            && app_length(template) + app_length(&self.reg_in.value().load)
+                - arity_of(&self.reg_in.value().load[0]) as usize
+                - 1
+                > APP_LENGTH
     }
 
     /// for GC stats
@@ -226,6 +282,7 @@ impl Reducer {
                 .iter()
                 .filter(|a| self.is_nested(a))
                 .count()
+                + if self.big_spine_now() { 1 } else { 0 }
         } else if *self.reg_stm.value() == Stm::Special && self.input.app_ready {
             1
         } else {
@@ -240,20 +297,29 @@ impl Reducer {
 
     /// whether an app is not emitted yet
     pub fn found(&self) -> bool {
+        if *self.reg_big_spine_pending.value() && self.input.search == self.input.free_addrs[0] {
+            return true;
+        }
+
         match *self.reg_stm.value() {
             Stm::App => {
+                let used = if *self.reg_big_spine_used.value() {
+                    1
+                } else {
+                    0
+                };
                 for atm in self.reg_spine.value().iter().skip(*self.reg_idx.value()) {
                     match atm {
                         Atom::Ptr(p, _, true) => {
-                            if self.input.search == *self.addr_regs[*p].value() {
+                            if self.input.search == *self.addr_regs[*p + used].value() {
                                 return true;
                             }
                         }
-                        Atom::Spe(_, _, _, _, p) if self.is_nested(atm) => {
-                            if self.input.search == *self.addr_regs[*p].value() {
-                                return true;
-                            }
-                        }
+                        // Atom::Spe(_, _, _, _, p) if self.is_nested(atm) => {
+                        //     if self.input.search == *self.addr_regs[*p].value() {
+                        //         return true;
+                        //     }
+                        // }
                         _ => {}
                     }
                 }
@@ -315,27 +381,39 @@ impl Reducer {
     /// instantiate an app from template
     fn inst(&self, app: &App) -> App {
         let mut res: App = app.clone();
-        let mut hole = 0;
+        let free_addrs = match *self.reg_stm.value() {
+            Stm::Spine => &self.input.free_addrs,
+            _ => &array::from_fn(|i| *self.addr_regs[i].value()),
+        };
+        // let mut hole = 0;
         for a in &mut res {
             match a {
                 Atom::Ptr(p, _, new) => {
                     if *new {
-                        // assert_eq!(*self.reg_stm.value(), Stm::SPINE);
-                        *a = Atom::Ptr(self.input.free_addrs[*p - hole], true, false);
+                        *a = Atom::Ptr(
+                            free_addrs[*p
+                                + if self.big_spine_now() || *self.reg_big_spine_used.value() {
+                                    1
+                                } else {
+                                    0
+                                }],
+                            true,
+                            false,
+                        );
                     }
                 }
-                Atom::Spe(op, rev, l, r, p) => {
-                    if self.is_instant(l) && self.is_instant(r) {
-                        // speculation success
-                        let op1 = self.get_instant(l);
-                        let op2 = self.get_instant(r);
-                        hole += 1;
-                        *a = compute(op, *rev, op1, op2);
-                    } else {
-                        // speculation fails
-                        *a = Atom::Ptr(self.input.free_addrs[*p - hole], true, false);
-                    }
-                }
+                // Atom::Spe(op, rev, l, r, p) => {
+                //     if self.is_instant(l) && self.is_instant(r) {
+                //         // speculation success
+                //         let op1 = self.get_instant(l);
+                //         let op2 = self.get_instant(r);
+                //         hole += 1;
+                //         *a = compute(op, *rev, op1, op2);
+                //     } else {
+                //         // speculation fails
+                //         *a = Atom::Ptr(self.input.free_addrs[*p - hole], true, false);
+                //     }
+                // }
                 Atom::Arg(arg, unq) => {
                     *a = {
                         let mut r = self.reg_in.value().load[*arg + 1].clone();
@@ -355,6 +433,7 @@ impl Reducer {
         if self.in_fire() {
             self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
+            self.reg_big_spine_used.connect(&false);
 
             match self.input.in_app.load[0] {
                 Atom::Com(arity, addr) => {
@@ -394,9 +473,15 @@ impl HwModule for Reducer {
             Stm::Spine => {
                 // !NOTE! We are assuming this state won't be blocked.
                 let template = self.comb_table.dout();
+                self.reg_spine.connect(template);
+
+                if self.big_spine_now() {
+                    self.reg_big_spine_pending.connect(&true);
+                    self.reg_big_spine_used.connect(&true);
+                }
+
                 if self.more_app(template) {
                     let founded = self.find_app(template);
-                    self.reg_spine.connect(template);
                     self.reg_stm.connect(&Stm::App);
                     self.reg_idx.connect(&founded);
                     self.comb_table.read(
@@ -416,7 +501,9 @@ impl HwModule for Reducer {
             }
             Stm::App => {
                 let template = self.reg_spine.value();
-                if fire(self.input.app_ready, self.app_valid()) {
+                if !*self.reg_big_spine_pending.value()
+                    && fire(self.input.app_ready, self.app_valid())
+                {
                     if self.more_app(template) {
                         let founded = self.find_app(template);
                         self.reg_idx.connect(&founded);
@@ -444,6 +531,11 @@ impl HwModule for Reducer {
                 }
             }
         }
+
+        if self.app_valid() && self.input.app_ready {
+            self.reg_big_spine_pending.connect(&false);
+        }
+
         if self.spine_valid() && !self.input.spine_ready {
             println!("spine leaked!: {:?}", self.spine_bits());
             panic!();
@@ -508,5 +600,7 @@ impl HwModule for Reducer {
         self.reg_stm.tick();
         self.reg_idx.tick();
         self.reg_app_mask.tick();
+        self.reg_big_spine_pending.tick();
+        self.reg_big_spine_used.tick();
     }
 }
