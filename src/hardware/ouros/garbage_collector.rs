@@ -628,7 +628,7 @@ impl GbgCollector {
 }
 
 impl HwModule for GbgCollector {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         if *self.reg_collector.value() != CollectorState::Mark {
             // if self.input.monitor_unset_valid {
             //     self.reg_monitors.input[self.input.monitor_unset] = (false, Default::default());

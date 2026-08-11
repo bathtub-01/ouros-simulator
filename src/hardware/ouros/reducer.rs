@@ -269,11 +269,11 @@ impl Reducer {
         fire(self.input.in_valid, self.in_ready())
     }
 
-    fn get_instant(&self, c: &SpeCell) -> i32 {
+    fn get_instant(&self, c: &SpeCell) -> Result<i32, String> {
         let in_app = &self.reg_in.value().load;
         match c {
             SpeCell::Arg(arg) => take_int(&in_app[arg + 1]),
-            SpeCell::Lit(i) => *i,
+            SpeCell::Lit(i) => Ok(*i),
         }
     }
 
@@ -382,7 +382,7 @@ impl Reducer {
 }
 
 impl HwModule for Reducer {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
             Stm::Idle => {

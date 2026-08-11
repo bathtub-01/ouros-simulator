@@ -110,9 +110,9 @@ impl Alu {
         }
     }
 
-    pub fn output_bits(&self) -> ActiveApp {
+    pub fn output_bits(&self) -> Result<ActiveApp, String> {
         if ALU_PIPE {
-            self.holder.1.clone()
+            Ok(self.holder.1.clone())
         } else {
             self.gen_result()
         }
@@ -122,9 +122,14 @@ impl Alu {
         &self.stat
     }
 
-    fn gen_result(&self) -> Result<ActiveApp, ()> {
-        let get_operand = |i: usize| -> Result<i32, ()> {
-            self.input.input_bits.load.get(i).map(take_int).ok_or(())
+    fn gen_result(&self) -> Result<ActiveApp, String> {
+        let get_operand = |i: usize| -> Result<i32, String> {
+            self.input
+                .input_bits
+                .load
+                .get(i)
+                .ok_or(format!("{} operand could not be load", i))
+                .and_then(take_int)
         };
 
         let oprand1: i32 = get_operand(1)?;
@@ -134,7 +139,7 @@ impl Alu {
             .input_bits
             .load
             .get(0)
-            .ok_or(())
+            .ok_or("failed to load input bits".to_string())
             .and_then(|atom| match atom {
                 Prm(op, inv) => Ok(ActiveApp {
                     stack_idx: self.input.input_bits.stack_idx,
@@ -152,21 +157,22 @@ impl Alu {
                         arr
                     },
                 }),
-                _ => Err(()), // p_anic!("alu: app head is not an primitive op!");
+                _ => Err("alu: app head is not an primitive op!".to_string()),
             })
     }
 }
 
 impl HwModule for Alu {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         if fire(self.holder.0, self.input.output_ready) {
             self.holder.0 = false;
         }
 
         if self.input_fire() {
             self.holder.0 = true;
-            self.holder.1 = self.gen_result();
+            self.holder.1 = self.gen_result()?;
         }
+        Ok(())
     }
 
     fn update_stat(&mut self) {

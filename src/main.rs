@@ -15,7 +15,7 @@ use std::sync::LazyLock;
 
 use hardware::ouros::config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE};
 use hardware::ouros::ouros_core::OurosCore;
-use hardware::ouros::program::{app_length, ActiveApp, App, Program};
+use hardware::ouros::program::{ActiveApp, App, Program, app_length};
 
 use hardware::ouros::benchmarks::{self, *};
 use hw_module::HwModule;
@@ -512,7 +512,7 @@ enum Mode {
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), String> {
     let _tracy = tracy_client::Client::start();
 
     #[cfg(feature = "dhat-heap")]
@@ -531,43 +531,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 client.set_thread_name(&format!("rayon-worker-{idx}"));
             }
         })
-        .build_global()?;
+        .build_global()
+        .map_err(|e| e.to_string())
+        .and({
+            let progs = benchmarks!(
+                // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
+                // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
+                ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
+            ); // ignoring TREESUM as it does not have much garbage..
 
-    let progs = benchmarks!(
-        // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
-        ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
-    ); // ignoring TREESUM as it does not have much garbage..
-
-    match parsed_args {
-        Args {
-            prog_name: Some(program_name),
-            ..
-        } => {
-            println!("running {}", program_name);
-            // for now the mode will be ignored if a specific program is select
-            // can have an extra check in the future to make it correct
-            run_big_prog(
-                progs
-                    .get(program_name.as_str())
-                    .ok_or(format!("could not find program named: {}", program_name))?,
-            )
-        }
-        Args {
-            mode: Some(Mode::All),
-            ..
-        } => run_benchmarks(progs, false),
-        Args {
-            mode: Some(Mode::Gc),
-            ..
-        } => eval_gc(progs),
-        Args {
-            mode: None,
-            prog_name: None,
-            ..
-        } => Err("need to select a mode or a specific program name to run")?,
-    }?;
-
-    // FIX: remove this Ok return
-    Ok(())
+            match parsed_args {
+                Args {
+                    prog_name: Some(program_name),
+                    ..
+                } => {
+                    println!("running {}", program_name);
+                    // for now the mode will be ignored if a specific program is select
+                    // can have an extra check in the future to make it correct
+                    run_big_prog(
+                        progs
+                            .get(program_name.as_str())
+                            .ok_or(format!("could not find program named: {}", program_name))?,
+                    )
+                }
+                Args {
+                    mode: Some(Mode::All),
+                    ..
+                } => run_benchmarks(progs, false),
+                Args {
+                    mode: Some(Mode::Gc),
+                    ..
+                } => eval_gc(progs),
+                Args {
+                    mode: None,
+                    prog_name: None,
+                    ..
+                } => Err("need to select a mode or a specific program name to run")?,
+            }
+            .map_err(|e| e.to_string())
+        })
 }

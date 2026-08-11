@@ -34,7 +34,7 @@ pub trait HwInput {
 /// By calling `tick` at cycle `n`, the whole module is **updated**. The `local`
 /// states are now in cycle `n+1`.
 pub trait HwModule {
-    fn update_local(&mut self);
+    fn update_local(&mut self) -> Result<(), String>;
     fn update_stat(&mut self) {}
     fn tick_children(&mut self);
 

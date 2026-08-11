@@ -83,7 +83,7 @@ impl<T, const N: usize, const P: bool> HwModule for Fifo<T, N, P>
 where
     T: Clone + Default,
 {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         // NOTE: if not using old value, will be a bug when P=false and fifo is full
         // Can play verus on this
         let old_in_ready = self.in_ready();
@@ -94,6 +94,7 @@ where
         if fire(self.input.in_valid, old_in_ready) {
             self.queue.push_back(self.input.din.clone());
         }
+        Ok(())
     }
 
     fn update_stat(&mut self) {

@@ -207,7 +207,7 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: 
 }
 
 impl HwModule for OurosCore {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         let _span = tracy_client::span!("ouros: update_local");
         /*
         NOTE: there is an assignment ring in the circuit, the order of
@@ -428,13 +428,13 @@ impl HwModule for OurosCore {
             }
 
             if self.alu.output_valid() {
-                if !is_whnf(&self.alu.output_bits().load) {
+                if !is_whnf(&self.alu.output_bits()?.load) {
                     self.buffers_reducer_2.input.in_valid = true;
-                    self.buffers_reducer_2.input.din = self.alu.output_bits();
+                    self.buffers_reducer_2.input.din = self.alu.output_bits()?;
                     self.alu.input.output_ready = self.buffers_reducer_2.in_ready();
                 } else {
                     self.buffers_dheap_a_2.input.in_valid = true;
-                    self.buffers_dheap_a_2.input.din = self.alu.output_bits();
+                    self.buffers_dheap_a_2.input.din = self.alu.output_bits()?;
                     self.alu.input.output_ready = self.buffers_dheap_a_2.in_ready();
                 }
             }

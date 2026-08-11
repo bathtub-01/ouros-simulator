@@ -56,14 +56,17 @@ impl<T: Default + Clone> SinglePortMem<T> {
 }
 
 impl<T: Default + Clone> HwModule for SinglePortMem<T> {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         if self.input.enable {
             if self.input.is_write {
+                // FIX: fix this possible exception
                 self.ram[self.input.addr] = self.input.din.clone();
             } else {
+                // FIX: fix this possible exception
                 self.holder = self.ram[self.input.addr].clone();
             }
         }
+        Ok(())
     }
 
     fn tick_children(&mut self) {}
@@ -200,7 +203,7 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
         }
     }
 
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         assert!(
             !(self.input.port_a.is_write
                 && self.input.port_b.is_write
@@ -226,6 +229,7 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
         if !self.input.port_b.is_write {
             self.holder_b = self.ram[self.input.port_b.addr].clone();
         }
+        Ok(())
     }
 
     fn tick_children(&mut self) {}

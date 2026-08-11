@@ -177,8 +177,8 @@ enum RESUMEs {
 }
 
 /// select the first pointer to deref, returns (arg position, pointer value)
-fn select_1st_arg(app: &App) -> (usize, usize) {
-    match app[0] {
+fn select_1st_arg(app: &App) -> Result<(i32, usize), String> {
+    Ok(match app[0] {
         Atom::Ptr(p, _, false) => (0, p),
         Atom::Prm(_, _) | Atom::Seq(false) => match app[1] {
             Atom::Ptr(p, _, false) => (1, p),
@@ -190,7 +190,7 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
         },
         Atom::Try => match app[1] {
             Atom::Ptr(p, _, false) => (1, p),
-            _ => return Err(()); // p_anic!("TRY literal should not enter the heap"),
+            _ => return Err("TRY literal should not enter the heap".to_string()),
         },
         Atom::Seq(true) => match app[2] {
             Atom::Ptr(p, _, false) => (2, p),
@@ -204,7 +204,7 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
             println!("app: {:?}", app);
             unreachable!()
         }
-    }
+    })
 }
 
 /// select the next strict arg, returns (arg position, pointer value)
@@ -607,26 +607,26 @@ impl DrfHeap {
     }
 
     /// search for the addr of the App, which is currently being read by DHeap
-    pub fn search(&self) -> usize {
-        if self.port_a_fire() && self.get_consumes() == CONSUMEs::InputIA {
+    pub fn search(&self) -> Result<usize, String> {
+        if self.port_a_fire() && self.get_consumes()? == CONSUMEs::InputIA {
             let in_app = mask_seq(&self.input.port_a_bits.load);
             // println!(
             //     "addr: {:?}",
             //     self.thread_stack[self.input.port_a_bits.stack_idx as usize].top()
             // );
-            let (_, p) = select_1st_arg(&in_app);
-            p
+            let (_, p) = select_1st_arg(&in_app)?;
+            Ok(p)
         } else if *self.stm.value() == Stm::Ia {
             match self.get_ias2(&self.get_ias1()) {
                 IAs2::NextStrictArgLocal | IAs2::NextStrictArgNewStk => {
                     let dmder = &self.holder_in.value().load;
                     let (_, p) = select_next_arg(dmder, 0);
-                    p
+                    Ok(p)
                 }
-                _ => 0,
+                _ => Ok(0),
             }
         } else {
-            0
+            Ok(0)
         }
     }
 
@@ -651,9 +651,9 @@ impl DrfHeap {
         self.heap_mem.dout_b()
     }
 
-    fn get_consumes(&self) -> CONSUMEs {
+    fn get_consumes(&self) -> Result<CONSUMEs, String> {
         if !self.port_a_fire() {
-            CONSUMEs::NoInput
+            Ok(CONSUMEs::NoInput)
         } else {
             let stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
             if is_whnf(&self.input.port_a_bits.load) {
@@ -662,19 +662,19 @@ impl DrfHeap {
                     .iter()
                     .any(find_more_dmder(stk.top().unwrap().1))
                 {
-                    CONSUMEs::InputWHNFWithDmder
+                    Ok(CONSUMEs::InputWHNFWithDmder)
                 } else {
                     if stk.second().is_some() {
                         if stack_cell_with(stk.second(), |(flag, _)| !*flag) {
-                            return Err(()); // p_anic!("strange new frame!");
+                            return Err("strange new frame!".to_string());
                         }
-                        CONSUMEs::InputWHNFNoDmderNewFrame
+                        Ok(CONSUMEs::InputWHNFNoDmderNewFrame)
                     } else {
-                        CONSUMEs::InputWHNFNoDmderNoFrame
+                        Ok(CONSUMEs::InputWHNFNoDmderNoFrame)
                     }
                 }
             } else {
-                CONSUMEs::InputIA
+                Ok(CONSUMEs::InputIA)
             }
         }
     }
@@ -1042,13 +1042,13 @@ impl DrfHeap {
     }
 
     /// consumes the next task; must not use heap port b!
-    fn consume_next(&mut self) {
+    fn consume_next(&mut self) -> Result<(), String> {
         let in_app = mask_seq(&self.input.port_a_bits.load);
         self.holder_in.connect(&ActiveApp {
             stack_idx: self.input.port_a_bits.stack_idx,
             load: in_app.clone(),
         });
-        match self.get_consumes() {
+        self.get_consumes().map(|v| match v {
             CONSUMEs::NoInput => self.stm.connect(&Stm::Idle),
             CONSUMEs::InputIA => {
                 self.select_1st_arg_read(&in_app);
@@ -1087,7 +1087,7 @@ impl DrfHeap {
                 self.write_incoming(HeapPort::A);
                 self.stm.connect(&Stm::Idle);
             }
-        }
+        })
     }
 
     fn step_whnf(&mut self) {
@@ -1185,7 +1185,7 @@ impl DrfHeap {
                 {
                     // FIXME: ensure using a new stack
                     if stk_id as u8 == self.holder_in.value().stack_idx {
-                        return Err(()); // p_anic!("GOT YA!");
+                        return Err("GOT YA!".to_string());
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                     self.frame_stack[stk_id].push(self.gen_frame_record());
@@ -1263,7 +1263,7 @@ impl DrfHeap {
 }
 
 impl HwModule for DrfHeap {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         self.update_prepare();
         self.gc_read_granted.connect(&false);
 

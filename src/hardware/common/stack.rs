@@ -77,7 +77,7 @@ impl<T: Clone + Default, const N: usize> Stack<T, N> {
 }
 
 impl<T: Clone + Default, const N: usize> HwModule for Stack<T, N> {
-    fn update_local(&mut self)
+    fn update_local(&mut self) 
     ensures
     self.input.op is NOP ==> self.mem == old(self).mem,
     self.input.op is PUSH ==> self.mem@.len() > old(self).mem@.len(),

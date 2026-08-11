@@ -52,7 +52,7 @@ impl<T: Clone + Default + PartialEq, const N: usize> Ring<T, N> {
 }
 
 impl<T: Clone + Default + PartialEq, const N: usize> HwModule for Ring<T, N> {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         if self.input.out_fire {
             self.reg_bank[*self.head.value()] = (false, Default::default());
             self.head.connect(&((*self.head.value() + 1) % N));
@@ -61,6 +61,7 @@ impl<T: Clone + Default + PartialEq, const N: usize> HwModule for Ring<T, N> {
             self.reg_bank[*self.tail.value()] = (true, self.input.din.clone());
             self.tail.connect(&((*self.tail.value() + 1) % N));
         }
+        Ok(())
     }
 
     fn tick_children(&mut self) {

@@ -77,18 +77,16 @@ pub static ALL_PATTERNS: LazyLock<Vec<Pat>> = LazyLock::new(|| {
     all
 });
 
-pub fn holes_of(code: u8) -> usize {
-    match code {
+pub fn holes_of(code: u8) -> Result<usize, String> {
+    Ok(match code {
         0 => 1,
         1 => 2,
         2..=3 => 3,
         4..=8 => 4,
         9..=22 => 5,
         23..=63 => 6,
-        _ => {
-            return Err(()); // p_anic!("Unknown code!");
-        }
-    }
+        unknown_code => return Err(format!("{} unknownCode in holes of", unknown_code)),
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +132,13 @@ fn parse_pat_spec() {
     }
 }
 
-fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut ParseRes) {
+fn parse(
+    p: &Pat,
+    mode: Mode,
+    arg_count: &mut u8,
+    ptr_count: &mut u8,
+    acc: &mut ParseRes,
+) -> Result<(), String> {
     let mut stack: Vec<Pat> = Vec::new();
     let mut p_it = p;
     let mut res: Vec<Hole> = Vec::new();
@@ -143,7 +147,7 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
     while *p_it != Pat::X {
         match p_it {
             Pat::X => {
-                return Err(()); // p_anic!("parse: strange!");
+                return Err("parse: strange!".to_string());
             }
             Pat::At(l, r) => {
                 stack.push(*r.clone());
@@ -183,7 +187,7 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
     }
 
     // accumulate the result
-    match mode {
+    Ok(match mode {
         Mode::Spine => {
             acc.spine = res;
         }
@@ -196,5 +200,5 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
         Mode::App3 => {
             acc.app3 = res;
         }
-    }
+    })
 }

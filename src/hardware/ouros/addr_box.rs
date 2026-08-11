@@ -104,7 +104,7 @@ impl AddrBox {
 }
 
 impl HwModule for AddrBox {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         // ============ handle free addrs ===========
         for i in 0..CONSUMERS {
             // reg value shifting

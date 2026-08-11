@@ -194,11 +194,11 @@ pub fn is_int(atom: &Atom) -> bool {
     matches!(atom, Atom::Int(_))
 }
 
-pub fn take_int(atom: &Atom) -> i32 {
+pub fn take_int(atom: &Atom) -> Result<i32, String> {
     match *atom {
-        Atom::Int(i) => i,
+        Atom::Int(i) => Ok(i),
         _ => {
-            return Err(()); // p_anic!("atom not an INT: {:?}", atom);
+            return Err("atom not an INT: {:?}".to_string());
         }
     }
 }

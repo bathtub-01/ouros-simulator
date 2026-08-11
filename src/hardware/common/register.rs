@@ -26,8 +26,9 @@ impl<V: Clone + Default> Register<V> {
     }
 }
 impl<V: Clone + Default> HwModule for Register<V> {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         self.value = self.input.clone();
+        Ok(())
     }
     fn tick_children(&mut self) {}
 
