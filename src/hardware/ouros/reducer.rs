@@ -238,8 +238,11 @@ impl Reducer {
 
     pub fn in_ready(&self) -> bool {
         let state_correct = match *self.reg_stm.value() {
-            Stm::Idle => true,
-            Stm::Spine => !self.more_app(self.comb_table.dout()),
+            Stm::Idle => !self.reg_big_spine_pending.value(),
+            Stm::Spine => {
+                !self.more_app(self.comb_table.dout())
+                    && !(self.big_spine_now() && !self.input.app_ready)
+            }
             Stm::App => {
                 fire(self.input.app_ready, self.app_valid())
                     && !self.more_app(self.reg_spine.value())
@@ -297,7 +300,7 @@ impl Reducer {
 
     /// whether an app is not emitted yet
     pub fn found(&self) -> bool {
-        if *self.reg_big_spine_pending.value() && self.input.search == self.input.free_addrs[0] {
+        if *self.reg_big_spine_pending.value() && self.input.search == *self.addr_regs[0].value() {
             return true;
         }
 
@@ -474,6 +477,12 @@ impl HwModule for Reducer {
                 // !NOTE! We are assuming this state won't be blocked.
                 let template = self.comb_table.dout();
                 self.reg_spine.connect(template);
+                self.addr_regs
+                    .iter_mut()
+                    .zip(self.input.free_addrs)
+                    .for_each(|(reg, addr)| {
+                        reg.connect(&addr);
+                    });
 
                 if self.big_spine_now() {
                     self.reg_big_spine_pending.connect(&true);
@@ -489,12 +498,6 @@ impl HwModule for Reducer {
                             + get_ptr(&template[founded])
                             + 1,
                     );
-                    self.addr_regs
-                        .iter_mut()
-                        .zip(self.input.free_addrs)
-                        .for_each(|(reg, addr)| {
-                            reg.connect(&addr);
-                        });
                 } else {
                     self.step_next();
                 }
@@ -540,6 +543,18 @@ impl HwModule for Reducer {
             println!("spine leaked!: {:?}", self.spine_bits());
             panic!();
         }
+
+        // if self.spine_valid() {
+        //     println!(
+        //         "reducer: spine{:?}, app{:?}, app-ready:{}, pending-input:{}, pending: {}, stm: {:?}",
+        //         self.spine_bits(),
+        //         self.app_bits(),
+        //         self.input.app_ready,
+        //         self.reg_big_spine_pending.input,
+        //         self.reg_big_spine_pending.value(),
+        //         self.reg_stm.value()
+        //     );
+        // }
 
         if self.stat_detail_lv >= DLV_GC {
             if self.stalled() {

@@ -3,13 +3,13 @@ use std::sync::LazyLock;
 use AluOp::*;
 use Atom::*; 
  
-// Combinators in this file: 82
+// Combinators in this file: 81
 #[rustfmt::skip]
 pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
         // AExp0
         vec![ // 0 
-            Com(1,17),
+            Com(1,18),
             Ptr(52, false, false),
             Int(5),
             Com(1,0),
@@ -45,7 +45,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(5, false, false),
         ], 
         vec![ // 7 
-            Com(5,43),
+            Com(5,44),
             Int(1),
         ], 
         vec![ // 8 
@@ -63,7 +63,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(9, false, false),
         ], 
         vec![ // 11 
-            Com(5,43),
+            Com(5,44),
             Int(1),
         ], 
         vec![ // 12 
@@ -81,7 +81,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(13, false, false),
         ], 
         vec![ // 15 
-            Com(5,43),
+            Com(5,44),
             Int(0),
         ], 
         vec![ // 16 
@@ -100,7 +100,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(5,114),
         ], 
         vec![ // 19 
-            Com(5,43),
+            Com(5,44),
             Int(1),
         ], 
         vec![ // 20 
@@ -205,7 +205,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(10, false, false),
         ], 
         vec![ // 42 
-            Com(5,43),
+            Com(5,44),
             Int(0),
         ], 
         vec![ // 43 
@@ -249,7 +249,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(47, false, false),
         ], 
         vec![ // 52 
-            Com(2,18),
+            Com(2,19),
             Ptr(51, false, false),
             Ptr(6, false, false),
         ], 
@@ -291,7 +291,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
         vec![ // 6 
             Arg(0, true),
             Int(3),
-            Int(17),
+            Int(14000),
         ], 
         // AExp7
         vec![ // 7 
@@ -317,386 +317,384 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp11
         vec![ // 11 
-            Com(1,17),
-            Arg(2, true),
+            Prm(EQ,false),
+            Arg(5, true),
             Arg(3, true),
             Arg(0, true),
+            Arg(1, true),
+            Arg(4, true),
+            Arg(6, true),
+            Arg(2, true),
         ], 
         // AExp12
         vec![ // 12 
+            Com(1,18),
+            Arg(2, true),
+            Arg(3, true),
             Arg(0, true),
-            Arg(1, true),
         ], 
         // AExp13
         vec![ // 13 
-            Prm(EQ,false),
             Arg(0, true),
-            Arg(2, true),
-            Com(4,11),
-            Com(4,12),
-            Arg(3, true),
             Arg(1, true),
         ], 
         // AExp14
         vec![ // 14 
             Com(3,10),
             Ptr(0, true, true),
-            Arg(2, false),
+            Arg(1, false),
         ], 
         vec![ // 15 
+            Com(7,11),
+            Com(4,12),
             Com(4,13),
             Arg(0, true),
-            Arg(1, true),
-            Arg(2, false),
+            Arg(1, false),
+            Arg(2, true),
             Arg(3, true),
         ], 
         // AExp15
         vec![ // 16 
             Arg(0, true),
+            Ptr(0, true, true),
+        ], 
+        vec![ // 17 
             Com(4,14),
+            Arg(1, true),
             Arg(2, true),
             Arg(3, true),
-            Arg(1, true),
         ], 
         // AExp16
-        vec![ // 17 
+        vec![ // 18 
             Arg(0, true),
             Com(2,9),
             Com(4,16),
         ], 
         // AExp17
-        vec![ // 18 
-            Com(1,22),
+        vec![ // 19 
+            Com(1,23),
             Ptr(0, true, true),
         ], 
-        vec![ // 19 
+        vec![ // 20 
             Com(4,2),
             Arg(0, true),
             Arg(1, true),
         ], 
         // AExp18
-        vec![ // 20 
-            Com(1,22),
+        vec![ // 21 
+            Com(1,23),
             Ptr(0, true, true),
         ], 
-        vec![ // 21 
-            Com(1,37),
+        vec![ // 22 
+            Com(1,38),
             Arg(0, true),
             Arg(1, true),
         ], 
         // AExp19
-        vec![ // 22 
+        vec![ // 23 
             Arg(0, true),
             Com(1,0),
-            Com(2,20),
+            Com(2,21),
         ], 
         // AExp20
-        vec![ // 23 
-            Com(1,49),
+        vec![ // 24 
+            Com(1,50),
             Arg(1, true),
             Arg(2, false),
             Ptr(0, true, true),
         ], 
-        vec![ // 24 
+        vec![ // 25 
             Com(3,72),
             Arg(2, false),
             Arg(0, true),
-            Com(3,38),
+            Com(3,39),
         ], 
         // AExp21
-        vec![ // 25 
+        vec![ // 26 
             Com(4,2),
             Arg(1, true),
             Arg(0, true),
         ], 
         // AExp22
-        vec![ // 26 
+        vec![ // 27 
             Com(4,2),
             Ptr(0, true, true),
             Arg(1, true),
         ], 
-        vec![ // 27 
+        vec![ // 28 
             Com(7,2),
             Arg(0, true),
             Arg(2, true),
         ], 
         // AExp23
-        vec![ // 28 
-            Com(1,37),
+        vec![ // 29 
+            Com(1,38),
             Arg(0, true),
             Arg(2, true),
-            Com(2,25),
-            Com(3,26),
+            Com(2,26),
+            Com(3,27),
             Arg(1, true),
         ], 
         // AExp24
-        vec![ // 29 
+        vec![ // 30 
             Com(1,94),
             Arg(0, true),
             Arg(3, false),
             Ptr(0, true, true),
         ], 
-        vec![ // 30 
+        vec![ // 31 
             Com(4,111),
             Arg(3, false),
             Arg(1, true),
             Arg(2, true),
         ], 
         // AExp25
-        vec![ // 31 
+        vec![ // 32 
             Com(4,2),
             Ptr(0, true, true),
         ], 
-        vec![ // 32 
+        vec![ // 33 
             Com(4,113),
             Arg(0, true),
             Arg(1, true),
             Com(5,114),
         ], 
         // AExp26
-        vec![ // 33 
+        vec![ // 34 
             Com(7,2),
             Arg(1, false),
             Ptr(0, true, true),
         ], 
-        vec![ // 34 
+        vec![ // 35 
             Com(7,115),
             Arg(0, true),
             Arg(1, false),
         ], 
         // AExp27
-        vec![ // 35 
-            Com(2,31),
+        vec![ // 36 
+            Com(2,32),
             Arg(0, false),
             Ptr(0, true, true),
         ], 
-        vec![ // 36 
-            Com(2,33),
+        vec![ // 37 
+            Com(2,34),
             Arg(0, false),
             Arg(1, true),
         ], 
         // AExp28
-        vec![ // 37 
+        vec![ // 38 
             Arg(0, true),
-            Com(3,23),
-            Com(3,28),
-            Com(4,29),
-            Com(3,38),
-            Com(2,35),
+            Com(3,24),
+            Com(3,29),
+            Com(4,30),
+            Com(3,39),
+            Com(2,36),
         ], 
         // AExp29
-        vec![ // 38 
+        vec![ // 39 
             Arg(1, true),
             Arg(0, true),
         ], 
         // AExp30
-        vec![ // 39 
-            Com(3,50),
+        vec![ // 40 
+            Com(3,51),
             Ptr(2, true, true),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 40 
-            Com(3,54),
+        vec![ // 41 
+            Com(3,55),
             Arg(3, true),
         ], 
-        vec![ // 41 
-            Com(1,49),
+        vec![ // 42 
+            Com(1,50),
             Arg(1, true),
             Arg(2, false),
         ], 
-        vec![ // 42 
-            Com(1,49),
+        vec![ // 43 
+            Com(1,50),
             Arg(0, true),
             Arg(2, false),
         ], 
         // AExp31
-        vec![ // 43 
+        vec![ // 44 
             Arg(2, true),
             Arg(0, true),
         ], 
         // AExp32
-        vec![ // 44 
-            Com(3,50),
+        vec![ // 45 
+            Com(3,51),
             Ptr(2, true, true),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 45 
-            Com(3,58),
+        vec![ // 46 
+            Com(3,59),
             Arg(3, true),
         ], 
-        vec![ // 46 
-            Com(1,49),
+        vec![ // 47 
+            Com(1,50),
             Arg(1, true),
             Arg(2, false),
         ], 
-        vec![ // 47 
-            Com(1,49),
+        vec![ // 48 
+            Com(1,50),
             Arg(0, true),
             Arg(2, false),
         ], 
         // AExp33
-        vec![ // 48 
-            Com(1,17),
+        vec![ // 49 
+            Com(1,18),
             Arg(1, true),
             Arg(0, true),
         ], 
         // AExp34
-        vec![ // 49 
+        vec![ // 50 
             Arg(0, true),
-            Com(4,39),
-            Com(3,43),
-            Com(4,44),
-            Com(2,48),
+            Com(4,40),
+            Com(3,44),
+            Com(4,45),
+            Com(2,49),
         ], 
         // AExp35
-        vec![ // 50 
+        vec![ // 51 
             Arg(0, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 51 
-            Com(3,52),
+        vec![ // 52 
+            Com(3,53),
             Arg(1, true),
             Arg(2, true),
         ], 
         // AExp36
-        vec![ // 52 
+        vec![ // 53 
             Arg(0, true),
             Ptr(0, true, true),
         ], 
-        vec![ // 53 
+        vec![ // 54 
             Arg(1, true),
             Arg(2, true),
         ], 
         // AExp37
-        vec![ // 54 
-            Com(2,57),
+        vec![ // 55 
+            Com(2,58),
             Ptr(0, true, true),
             Arg(0, true),
         ], 
-        vec![ // 55 
+        vec![ // 56 
             Prm(Add,false),
             Arg(1, true),
             Arg(2, true),
         ], 
         // AExp38
-        vec![ // 56 
+        vec![ // 57 
             Arg(0, true),
             Int(0),
         ], 
         // AExp39
-        vec![ // 57 
+        vec![ // 58 
             Prm(EQ,false),
             Arg(0, false),
             Int(0),
             Com(1,0),
-            Com(2,56),
+            Com(2,57),
             Arg(1, true),
             Arg(0, false),
         ], 
         // AExp40
-        vec![ // 58 
-            Com(2,57),
+        vec![ // 59 
+            Com(2,58),
             Ptr(0, true, true),
             Arg(0, true),
         ], 
-        vec![ // 59 
+        vec![ // 60 
             Prm(Sub,false),
             Arg(1, true),
             Arg(2, true),
         ], 
         // AExp41
-        vec![ // 60 
+        vec![ // 61 
             Arg(0, true),
             Com(2,0),
         ], 
         // AExp42
-        vec![ // 61 
-            Arg(0, true),
-            Ptr(0, true, true),
-            Arg(2, true),
-            Arg(3, true),
-        ], 
         vec![ // 62 
+            Arg(0, true),
+            Arg(2, false),
             Arg(1, true),
-            Arg(4, true),
-            Arg(5, true),
-            Arg(6, true),
+            Arg(2, false),
         ], 
         // AExp43
         vec![ // 63 
-            Arg(0, true),
-            Arg(3, true),
-            Arg(1, true),
-            Arg(2, true),
-        ], 
-        // AExp44
-        vec![ // 64 
             Com(3,72),
             Arg(0, true),
             Arg(1, true),
             Ptr(0, true, true),
             Arg(3, true),
         ], 
-        vec![ // 65 
+        vec![ // 64 
             Com(3,76),
             Arg(2, true),
             Arg(4, true),
             Arg(5, true),
         ], 
-        // AExp45
-        vec![ // 66 
+        // AExp44
+        vec![ // 65 
             Com(3,72),
             Arg(0, true),
             Arg(1, false),
             Ptr(0, true, true),
             Arg(3, false),
         ], 
-        vec![ // 67 
+        vec![ // 66 
             Com(3,76),
             Arg(2, true),
             Arg(1, false),
             Arg(3, false),
         ], 
+        // AExp45
+        vec![ // 67 
+            Prm(EQ,false),
+            Arg(3, true),
+            Arg(2, false),
+            Com(6,63),
+            Com(6,65),
+            Arg(0, true),
+            Arg(2, false),
+            Arg(1, true),
+        ], 
         // AExp46
         vec![ // 68 
-            Prm(EQ,false),
+            Com(3,62),
+            Ptr(0, true, true),
+        ], 
+        vec![ // 69 
+            Com(4,67),
             Arg(0, true),
-            Arg(1, false),
-            Com(6,64),
-            Com(6,66),
+            Arg(1, true),
             Arg(2, true),
-            Arg(1, false),
         ], 
         // AExp47
-        vec![ // 69 
-            Com(7,61),
-            Com(4,63),
-            Ptr(0, true, true),
-            Arg(0, false),
-        ], 
         vec![ // 70 
+            Arg(0, true),
+            Ptr(0, true, true),
+        ], 
+        vec![ // 71 
             Com(3,68),
-            Arg(0, false),
+            Arg(1, true),
+            Arg(2, true),
+            Arg(3, true),
+            Arg(4, true),
         ], 
         // AExp48
-        vec![ // 71 
-            Arg(0, true),
-            Com(1,69),
-            Arg(3, true),
-            Arg(1, true),
-            Arg(2, true),
-        ], 
-        // AExp49
         vec![ // 72 
             Arg(0, true),
-            Com(3,60),
-            Com(4,71),
+            Com(3,61),
+            Com(5,70),
             Arg(2, true),
             Arg(1, true),
         ], 
-        // AExp50
+        // AExp49
         vec![ // 73 
             Arg(0, true),
             Ptr(0, true, true),
@@ -706,13 +704,13 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(1, true),
             Arg(2, true),
         ], 
-        // AExp51
+        // AExp50
         vec![ // 75 
             Arg(2, true),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp52
+        // AExp51
         vec![ // 76 
             Com(3,73),
             Arg(0, true),
@@ -723,9 +721,9 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(1, true),
             Arg(2, true),
         ], 
-        // AExp53
+        // AExp52
         vec![ // 78 
-            Com(3,50),
+            Com(3,51),
             Ptr(2, true, true),
             Ptr(1, true, true),
             Ptr(0, true, true),
@@ -744,9 +742,9 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(2, false),
         ], 
-        // AExp54
+        // AExp53
         vec![ // 82 
-            Com(3,50),
+            Com(3,51),
             Ptr(2, true, true),
             Ptr(1, true, true),
             Ptr(0, true, true),
@@ -756,23 +754,23 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(3, true),
         ], 
         vec![ // 84 
-            Com(1,49),
+            Com(1,50),
             Arg(1, true),
             Arg(2, false),
         ], 
         vec![ // 85 
-            Com(1,49),
+            Com(1,50),
             Arg(0, true),
             Arg(2, false),
         ], 
-        // AExp55
+        // AExp54
         vec![ // 86 
             Arg(1, true),
             Com(2,0),
         ], 
-        // AExp56
+        // AExp55
         vec![ // 87 
-            Com(3,50),
+            Com(3,51),
             Ptr(2, true, true),
             Ptr(1, true, true),
             Ptr(0, true, true),
@@ -782,16 +780,16 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(3, true),
         ], 
         vec![ // 89 
-            Com(1,49),
+            Com(1,50),
             Arg(1, true),
             Arg(2, false),
         ], 
         vec![ // 90 
-            Com(1,49),
+            Com(1,50),
             Arg(0, true),
             Arg(2, false),
         ], 
-        // AExp57
+        // AExp56
         vec![ // 91 
             Com(1,94),
             Arg(0, true),
@@ -802,12 +800,12 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(2,106),
             Arg(2, true),
         ], 
-        // AExp58
+        // AExp57
         vec![ // 93 
             Arg(1, true),
             Com(2,1),
         ], 
-        // AExp59
+        // AExp58
         vec![ // 94 
             Arg(0, true),
             Com(4,78),
@@ -817,7 +815,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(3,91),
             Com(2,93),
         ], 
-        // AExp60
+        // AExp59
         vec![ // 95 
             Com(1,99),
             Ptr(0, true, true),
@@ -828,33 +826,33 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(1, true),
             Arg(2, true),
         ], 
-        // AExp61
+        // AExp60
         vec![ // 97 
             Arg(0, true),
             Com(2,0),
         ], 
-        // AExp62
+        // AExp61
         vec![ // 98 
             Arg(0, true),
             Com(2,1),
         ], 
-        // AExp63
+        // AExp62
         vec![ // 99 
             Arg(0, true),
             Com(1,97),
             Com(1,98),
         ], 
-        // AExp64
+        // AExp63
         vec![ // 100 
             Com(2,0),
         ], 
-        // AExp65
+        // AExp64
         vec![ // 101 
             Arg(0, true),
             Com(1,100),
             Com(1,0),
         ], 
-        // AExp66
+        // AExp65
         vec![ // 102 
             Com(1,99),
             Ptr(0, true, true),
@@ -865,7 +863,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(1, true),
             Arg(2, true),
         ], 
-        // AExp67
+        // AExp66
         vec![ // 104 
             Com(1,99),
             Ptr(0, true, true),
@@ -876,7 +874,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(1, true),
             Arg(2, true),
         ], 
-        // AExp68
+        // AExp67
         vec![ // 106 
             Com(1,99),
             Ptr(0, true, true),
@@ -886,25 +884,25 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Com(1,108),
             Arg(1, true),
         ], 
-        // AExp69
+        // AExp68
         vec![ // 108 
             Arg(0, true),
             Com(2,1),
             Com(2,0),
         ], 
-        // AExp70
+        // AExp69
         vec![ // 109 
             Com(4,2),
             Arg(2, true),
             Arg(1, true),
         ], 
-        // AExp71
+        // AExp70
         vec![ // 110 
             Com(4,2),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp72
+        // AExp71
         vec![ // 111 
             Arg(3, true),
             Com(3,109),
@@ -913,53 +911,53 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
             Arg(0, true),
             Arg(2, true),
         ], 
-        // AExp73
+        // AExp72
         vec![ // 112 
             Arg(4, true),
             Arg(0, true),
             Arg(1, true),
             Arg(2, true),
         ], 
-        // AExp74
+        // AExp73
         vec![ // 113 
             Com(7,112),
             Arg(0, true),
             Arg(1, true),
             Arg(2, true),
         ], 
-        // AExp75
+        // AExp74
         vec![ // 114 
             Arg(3, true),
         ], 
-        // AExp76
+        // AExp75
         vec![ // 115 
             Arg(6, true),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp77
+        // AExp76
         vec![ // 116 
             Arg(4, true),
             Arg(0, true),
         ], 
-        // AExp78
+        // AExp77
         vec![ // 117 
             Arg(5, true),
             Arg(0, true),
         ], 
-        // AExp79
+        // AExp78
         vec![ // 118 
             Com(7,75),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp80
+        // AExp79
         vec![ // 119 
             Arg(4, true),
             Arg(0, true),
             Arg(1, true),
         ], 
-        // AExp81
+        // AExp80
         vec![ // 120 
             Com(7,119),
             Arg(0, true),

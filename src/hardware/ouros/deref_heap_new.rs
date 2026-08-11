@@ -611,7 +611,8 @@ impl DrfHeap {
         if self.port_a_fire() && self.get_consumes() == CONSUMEs::InputIA {
             let in_app = mask_seq(&self.input.port_a_bits.load);
             // println!(
-            //     "addr: {:?}",
+            //     "stack id : {} addr: {:?}",
+            //     self.input.port_a_bits.stack_idx,
             //     self.thread_stack[self.input.port_a_bits.stack_idx as usize].top()
             // );
             let (_, p) = select_1st_arg(&in_app);
@@ -1351,8 +1352,8 @@ impl HwModule for DrfHeap {
         //     );
         // }
 
-        // let look_at_1 = 175;
-        // let look_at_2 = 523;
+        // let look_at_1 = 67960;
+        // let look_at_2 = 67748;
         // println!(
         //     "addr-{} | working: {} | {:?} | addr-{} | working: {} | {:?}",
         //     look_at_1,

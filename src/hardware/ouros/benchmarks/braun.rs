@@ -19,7 +19,7 @@ pub static BRAUN: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         vec![ // 2 
             Com(2,50),
-            Int(2),
+            Int(6000),
             Ptr(1, false, false),
         ], 
         vec![ // 3 

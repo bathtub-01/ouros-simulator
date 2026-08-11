@@ -4,7 +4,7 @@ use crate::hardware::common::{DualPortMem, Register};
 use crate::hw_module::{HwInput, HwModule};
 
 use super::config::{APP_LENGTH, CACHE_SIZE, DLV_GC, DLV_GC1, MAX_THREADS};
-use super::program::{ActiveApp, App, Atom, get_ptr, is_ptr};
+use super::program::{get_ptr, is_ptr, ActiveApp, App, Atom};
 use std::collections::VecDeque;
 
 struct FixedFifo<T> {
