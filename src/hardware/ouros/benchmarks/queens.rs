@@ -10,7 +10,7 @@ pub static QUEENS: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp0
         vec![ // 0 
             Com(1,2),
-            Int(11),
+            Int(6),
         ], 
         // AExp1
         vec![ // 1 

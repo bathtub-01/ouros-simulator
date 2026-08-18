@@ -10,7 +10,7 @@ pub static FIB: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp0
         vec![ // 0 
             Com(1,10),
-            Int(28),
+            Int(17),
         ], 
     ],
     comb_img: vec![

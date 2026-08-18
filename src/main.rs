@@ -341,6 +341,7 @@ fn run_benchmarks(
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
     let results: Vec<_> = benchmarks
         .par_iter()
+        .progress_count(benchmarks.len() as u64)
         .map(|p| simulate(p, 0, HEAP_SIZE, GC_AT))
         .collect();
 

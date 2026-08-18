@@ -15,12 +15,12 @@ pub static MSS: LazyLock<Program> = LazyLock::new(|| { Program {
         vec![ // 1 
             Prm(Sub,false),
             Int(0),
-            Int(100),
+            Int(20),
         ], 
         vec![ // 2 
             Com(2,58),
             Ptr(1, false, false),
-            Int(100),
+            Int(20),
         ], 
         // AExp1
         vec![ // 3 

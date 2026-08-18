@@ -291,7 +291,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
         vec![ // 6 
             Arg(0, true),
             Int(3),
-            Int(14000),
+            Int(17),
         ], 
         // AExp7
         vec![ // 7 

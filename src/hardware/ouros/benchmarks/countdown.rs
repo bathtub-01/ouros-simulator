@@ -9,71 +9,61 @@ pub static COUNTDOWN: LazyLock<Program> = LazyLock::new(|| { Program {
     heap_img: vec![
         // AExp0
         vec![ // 0 
-            Ptr(7, false, false),
-            Ptr(6, false, false),
+            Ptr(5, false, false),
+            Ptr(4, false, false),
         ], 
         vec![ // 1 
             Com(4,2),
-            Int(25),
+            Int(10),
             Com(2,0),
         ], 
         vec![ // 2 
             Com(4,2),
-            Int(10),
+            Int(4),
             Ptr(1, false, false),
         ], 
         vec![ // 3 
             Com(4,2),
-            Int(7),
+            Int(3),
             Ptr(2, false, false),
         ], 
         vec![ // 4 
-            Com(4,2),
-            Int(3),
-            Ptr(3, false, false),
-        ], 
-        vec![ // 5 
-            Com(4,2),
-            Int(1),
-            Ptr(4, false, false),
-        ], 
-        vec![ // 6 
             Com(2,6),
-            Ptr(5, false, false),
-            Int(765),
+            Ptr(3, false, false),
+            Int(70),
         ], 
         // AExp1
-        vec![ // 7 
+        vec![ // 5 
             Y,
             Com(3,5),
             Int(0),
         ], 
         // AExp2
-        vec![ // 8 
+        vec![ // 6 
             Com(3,57),
-            Ptr(13, false, false),
+            Ptr(11, false, false),
         ], 
-        vec![ // 9 
+        vec![ // 7 
             Com(4,2),
             Com(6,1),
             Com(2,0),
         ], 
-        vec![ // 10 
+        vec![ // 8 
             Com(4,2),
             Com(6,124),
+            Ptr(7, false, false),
+        ], 
+        vec![ // 9 
+            Com(1,63),
+            Ptr(8, false, false),
+        ], 
+        vec![ // 10 
+            Com(5,61),
             Ptr(9, false, false),
         ], 
         vec![ // 11 
-            Com(1,63),
-            Ptr(10, false, false),
-        ], 
-        vec![ // 12 
-            Com(5,61),
-            Ptr(11, false, false),
-        ], 
-        vec![ // 13 
             Com(4,59),
-            Ptr(12, false, false),
+            Ptr(10, false, false),
         ], 
     ],
     comb_img: vec![
@@ -313,7 +303,7 @@ pub static COUNTDOWN: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp28
         vec![ // 43 
             Com(1,55),
-            Ptr(8, false, false),
+            Ptr(6, false, false),
             Ptr(1, true, true),
             Ptr(0, true, true),
         ], 
