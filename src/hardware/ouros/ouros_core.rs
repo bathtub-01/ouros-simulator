@@ -21,19 +21,20 @@ enum DESTs {
     ToReducer,
 }
 
-fn is_lit_seq(app: &App) -> bool {
-    match app[0] {
-        Atom::Seq(true) => is_lit_atom(&app[2]),
-        _ => false,
-    }
-}
+// fn is_lit_seq(app: &App) -> bool {
+//     match app[0] {
+//         Atom::Seq(true) => is_lit_atom(&app[2]),
+//         _ => false,
+//     }
+// }
 
 fn get_dests(app: &App) -> DESTs {
     if is_prm(&app[0]) && is_int(&app[1]) && is_int(&app[2]) {
         DESTs::ToALU
-    } else if !is_whnf(app) && (is_comb(&app[0]) || is_lit_seq(app) || is_con(&app[0])) {
+    } else if !is_whnf(app) && (is_comb(&app[0]) || is_con(&app[0])) {
         DESTs::ToReducer
     } else {
+        // NOTE [Seq, 1, x] also goes to DHeap...
         DESTs::ToDHeap
     }
 }
@@ -465,6 +466,13 @@ impl HwModule for OurosCore {
             );
             self.peak_workset_size = max(work_set.len(), self.peak_workset_size);
             self.cycle_ctr = 0;
+            // if work_set.len() > 100 && work_set.len() < 200 {
+            //     println!("======== live set ========");
+            //     work_set.sort();
+            //     for addr in work_set {
+            //         println!("{}: {:?}", addr, self.dheap.heap_mem.ram[addr]);
+            //     }
+            // }
         }
     }
 

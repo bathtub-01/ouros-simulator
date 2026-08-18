@@ -12,6 +12,8 @@ pub const HEAP_SIZE: usize = 1024 * 256;
 pub const PROG_SIZE: usize = 1024;
 pub const MAX_THREADS: usize = 4;
 pub const BUFFER_SIZE: usize = MAX_THREADS;
+pub const ADDR_STK_SIZE: usize = 512;
+pub const FRM_STK_SIZE: usize = 64;
 
 pub const ALU_PIPE: bool = false;
 pub const REDUCER_PIPE: bool = false;

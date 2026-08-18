@@ -34,9 +34,9 @@ pub struct DrfHeapInput {
 impl HwInput for DrfHeapInput {}
 
 type StackCell = (bool, usize);
-type AddrStack = Stack<StackCell, 512>;
+type AddrStack = Stack<StackCell, ADDR_STK_SIZE>;
 type FrameRecord = [usize; MAX_THREADS];
-type FrameStack = Stack<FrameRecord, 64>;
+type FrameStack = Stack<FrameRecord, FRM_STK_SIZE>;
 
 fn stack_cell_with(cell: Option<&StackCell>, p: impl FnOnce(&StackCell) -> bool) -> bool {
     match cell {
@@ -84,18 +84,19 @@ fn dash_app(app: &App) -> App {
 
 /// setup the evaluated flag in seq if the 1st arg is a literal
 fn mask_seq(app: &App) -> App {
-    match app[0] {
-        Atom::Seq(false) => {
-            if is_lit_atom(&app[1]) {
-                let mut res: App = app.clone();
-                res[0] = Atom::Seq(true);
-                res
-            } else {
-                app.clone()
-            }
-        }
-        _ => app.clone(),
-    }
+    // match app[0] {
+    //     Atom::Seq(false) => {
+    //         if is_lit_atom(&app[1]) {
+    //             let mut res: App = app.clone();
+    //             res[0] = Atom::Seq(true);
+    //             res
+    //         } else {
+    //             app.clone()
+    //         }
+    //     }
+    //     _ => app.clone(),
+    // }
+    app.clone()
 }
 
 enum HeapPort {
@@ -180,7 +181,7 @@ enum RESUMEs {
 fn select_1st_arg(app: &App) -> (usize, usize) {
     match app[0] {
         Atom::Ptr(p, _, false) => (0, p),
-        Atom::Prm(_, _) | Atom::Seq(false) => match app[1] {
+        Atom::Prm(_, _) => match app[1] {
             Atom::Ptr(p, _, false) => (1, p),
             Atom::Nop => unreachable!(),
             _ => match app[2] {
@@ -188,17 +189,9 @@ fn select_1st_arg(app: &App) -> (usize, usize) {
                 _ => unreachable!("app: {:?}", app),
             },
         },
-        Atom::Try => match app[1] {
+        Atom::Try | Atom::Seq => match app[1] {
             Atom::Ptr(p, _, false) => (1, p),
-            _ => panic!("TRY literal should not enter the heap"),
-        },
-        Atom::Seq(true) => match app[2] {
-            Atom::Ptr(p, _, false) => (2, p),
-            // NOTE: currently rejecting things like `seq a 1` (direct it to reducer will be easier)
-            _ => {
-                println!("app: {:?}", app);
-                unreachable!()
-            }
+            _ => panic!("No Ptr here: {:?}", app),
         },
         _ => {
             println!("app: {:?}", app);
@@ -230,14 +223,14 @@ fn vec_to_app(v: Vec<Atom>) -> App {
 fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Option<App>) {
     debug_assert!(is_ptr(&app[arg_id]));
 
-    // Seq(false) never touches target — handle first, skip dash_app entirely.
-    if let Atom::Seq(false) = app[0] {
-        let mut res = *app; // Copy, not clone — no alloc
-        if arg_id == 1 {
-            res[0] = Atom::Seq(true);
-        }
-        return (res, None);
-    }
+    // Seq(false) never touches target, handle first, skip dash_app entirely.
+    // if let Atom::Seq = app[0] {
+    //     let mut res = *app; // Copy, not clone — no alloc
+    //     if arg_id == 1 {
+    //         res[0] = Atom::Seq(true);
+    //     }
+    //     return (res, None);
+    // }
 
     let unique = matches!(app[arg_id], Atom::Ptr(_, true, _));
     let dashed_storage; // holds owned value if needed
@@ -251,7 +244,7 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
     let target_len = app_length(target);
 
     // Write straight into a stack buffer with a cursor.
-    let mut buf = [Atom::default(); 2 * APP_LENGTH]; // or whatever your empty Atom is
+    let mut buf = [Atom::default(); 2 * APP_LENGTH];
     let mut n = 0;
     let mut push = |src: &[Atom]| {
         buf[n..n + src.len()].copy_from_slice(src);
@@ -259,9 +252,8 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
     };
 
     match app[0] {
-        Atom::Seq(true) | Atom::Try => {
-            push(&target_dashed[0..target_len]);
-            push(&app[3..app_len]);
+        Atom::Seq /*| Atom::Try*/ => {
+            push(&app[2..app_len]);
         }
         _ => {
             push(&app[0..arg_id]);
@@ -274,7 +266,7 @@ fn deref(app: &App, arg_id: usize, target: &App, free_addr: usize) -> (App, Opti
     if n <= APP_LENGTH {
         (slice_to_app(res), None)
     } else {
-        // write-back: prepend the pointer without an O(n) insert
+        // write-back: prepend the pointer
         let mut wb = [Atom::default(); APP_LENGTH];
         wb[0] = Atom::Ptr(free_addr, true, false);
         wb[1..1 + (n - APP_LENGTH)].copy_from_slice(&res[APP_LENGTH..]);
@@ -589,6 +581,7 @@ impl DrfHeap {
 
     /// Deallocate an address based on one-bit ref count
     pub fn dealloc_valid(&self) -> bool {
+        // NOTE should do this *on return* or *on deref*?
         // ready signal does not block DHeap, giving up some chances is fine
         *self.stm.value() == Stm::Whnf
             && self.get_whnfs() == WHNFs::NoNewFrame
@@ -744,8 +737,8 @@ impl DrfHeap {
         let local_stack: bool = *s1 == IAs1::ExistWHNF || *s1 == IAs1::ExistIAWorkingAtNewFrame; // NOTE
         let more_strict_args: bool = {
             match ia[0] {
-                Atom::Ptr(_, _, _) => false,
-                Atom::Prm(_, _) | Atom::Seq(_) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
+                Atom::Ptr(_, _, _) | Atom::Seq => false,
+                Atom::Prm(_, _) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
                 Atom::Try => *self.arg_id.value() == 1 && *s1 != IAs1::ExistWHNF,
                 // more on this to support strict args in the future
                 _ => unreachable!(),
@@ -759,7 +752,7 @@ impl DrfHeap {
         } else {
             if (is_ptr(&ia[0])
                 || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
-                || is_seq_evaluated(&ia[0])
+                || is_seq(&ia[0])
                 || (is_try(&ia[0]) && *self.arg_id.value() == 1))
                 && target_in_whnf
             {
@@ -890,9 +883,6 @@ impl DrfHeap {
         let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
         self.working_heap.write_b(*self.addr_holder.value(), true);
         current_stk.push((new_frame, *self.addr_holder.value()));
-        // if self.holder_in.value().stack_idx == 3 && new_frame {
-        //     println!("push new_frame tag");
-        // }
     }
 
     /// ''sensitive'' cases:
@@ -1020,11 +1010,7 @@ impl DrfHeap {
                 Atom::Ptr(_, unique, _) => *unique,
                 _ => matches!(&self.heap_mem.dout_a()[2], Atom::Ptr(_, true, _)),
             },
-            Atom::Seq(false) => match &self.heap_mem.dout_a()[1] {
-                Atom::Ptr(_, unique, _) => *unique,
-                _ => false,
-            },
-            Atom::Seq(true) => match &self.heap_mem.dout_a()[2] {
+            Atom::Seq => match &self.heap_mem.dout_a()[1] {
                 Atom::Ptr(_, unique, _) => *unique,
                 _ => false,
             },
@@ -1169,7 +1155,11 @@ impl DrfHeap {
             }
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
-                self.push_target(false);
+                if app_length(&self.holder_in.value().load) > 1
+                    || matches!(self.holder_in.value().load[0], Atom::Ptr(_, false, _))
+                {
+                    self.push_target(false);
+                }
             }
         }
 
