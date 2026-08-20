@@ -69,7 +69,9 @@ impl<T: Default + Clone> HwModule for SinglePortMem<T> {
         Ok(())
     }
 
-    fn tick_children(&mut self) {}
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(())
+    }
 }
 
 #[test]
@@ -183,8 +185,8 @@ impl<T: Clone + Default> DualPortMem<T> {
 }
 
 impl<T: Clone + Default> HwModule for DualPortMem<T> {
-    fn update_stat(&mut self) {
-        if self.record_stat {
+    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(if self.record_stat {
             if self.input.port_a.enable {
                 if self.input.port_a.is_write {
                     self.stat.a_writes += 1;
@@ -200,7 +202,7 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
                     self.stat.b_reads += 1;
                 }
             }
-        }
+        })
     }
 
     fn update_local(&mut self) -> Result<(), String> {
@@ -232,7 +234,9 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
         Ok(())
     }
 
-    fn tick_children(&mut self) {}
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(())
+    }
 }
 
 #[test]

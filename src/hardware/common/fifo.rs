@@ -97,13 +97,15 @@ where
         Ok(())
     }
 
-    fn update_stat(&mut self) {
-        if self.record_stat {
+    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(if self.record_stat {
             self.stat.length_per_cycle.push(self.queue.len() as u8);
-        }
+        })
     }
 
-    fn tick_children(&mut self) {}
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(())
+    }
 }
 
 #[test]

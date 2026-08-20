@@ -175,7 +175,7 @@ impl HwModule for Alu {
         Ok(())
     }
 
-    fn update_stat(&mut self) {
+    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
         if self.input_fire() {
             self.stat.reductions += 1;
         }
@@ -189,16 +189,18 @@ impl HwModule for Alu {
             }
         }
 
-        if self.stat_detail_lv >= DLV_FULL_LOG {
+        Ok(if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.holder.0 {
                 self.stat.holder_contents.push(Some(self.holder.1.clone()));
             } else {
                 self.stat.holder_contents.push(None);
             }
-        }
+        })
     }
 
-    fn tick_children(&mut self) {}
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(())
+    }
 }
 
 #[test]

@@ -565,7 +565,7 @@ impl GbgCollector {
         }
     }
 
-    fn step_sweep(&mut self) {
+    fn step_sweep(&mut self) -> Result<(), String> {
         // ========== defaults (update regs from previous demands) ==========
         self.reg_pre_gc.connect(&false);
         if *self.reg_pre_gc.value() {
@@ -610,7 +610,7 @@ impl GbgCollector {
                     println!("old head is 0 when pushing to freelist!");
                 }
             } else if read_out.state == CellState::WorkList {
-                return Err(()); // p_anic!("Broken WorkList! addr: {}", *self.reg_sweeper.value());
+                return Err("Broken WorkList! addr: {}".to_string()); // p_anic!("Broken WorkList! addr: {}", *self.reg_sweeper.value());
             }
 
             if *self.reg_sweeper.value() < self.const_heap_size - 1 {
@@ -624,6 +624,7 @@ impl GbgCollector {
                 self.reg_collector.connect(&CollectorState::Idle);
             }
         }
+        Ok(())
     }
 }
 
@@ -749,7 +750,7 @@ impl HwModule for GbgCollector {
             CollectorState::Idle => self.step_idle(),
             CollectorState::Root => self.step_root(),
             CollectorState::Mark => self.step_mark(),
-            CollectorState::Sweep => self.step_sweep(),
+            CollectorState::Sweep => self.step_sweep()?,
         }
 
         if self.stat_detail_lv >= DLV_GC {
@@ -785,9 +786,10 @@ impl HwModule for GbgCollector {
                 self.reg_sweeper.value()
             );
         }
+        Ok(())
     }
 
-    fn update_stat(&mut self) {
+    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
         // println!(
         //     "collector state: {:?}, worklist len: {}, worklist head: {}, freelist len: {}, freelist head: {}, monitor idx: {}",
         //     self.reg_collector.value(),
@@ -802,7 +804,7 @@ impl HwModule for GbgCollector {
             self.stat.allocations += 1;
         }
 
-        if self.stat_detail_lv >= DLV_GC1 {
+        Ok(if self.stat_detail_lv >= DLV_GC1 {
             if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::Mark {
                 self.stat.immediate_reuse += 1;
             }
@@ -818,27 +820,27 @@ impl HwModule for GbgCollector {
 
             self.stat.free_len.push(*self.reg_free_len.value());
             self.stat.work_len.push(*self.reg_work_len.value());
-        }
+        })
     }
 
-    fn tick_children(&mut self) {
-        self.reg_collector.tick();
-        self.gc_mem.tick();
-        self.reg_free_head.tick();
-        self.reg_work_head.tick();
-        self.reg_free_drawed.tick();
-        self.reg_work_drawed.tick();
-        self.reg_free_len.tick();
-        self.reg_work_len.tick();
-        self.reg_sweeper.tick();
-        self.reg_bk_reader.tick();
-        self.reg_heap_reader.tick();
-        self.reg_pre_gc.tick();
-        self.reg_move.tick();
-        self.reg_work_on.tick();
-        self.reg_app_idx.tick();
-        self.reg_monitors.tick();
-        self.reg_monitor_idx.tick();
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        self.reg_collector.tick()?;
+        self.gc_mem.tick()?;
+        self.reg_free_head.tick()?;
+        self.reg_work_head.tick()?;
+        self.reg_free_drawed.tick()?;
+        self.reg_work_drawed.tick()?;
+        self.reg_free_len.tick()?;
+        self.reg_work_len.tick()?;
+        self.reg_sweeper.tick()?;
+        self.reg_bk_reader.tick()?;
+        self.reg_heap_reader.tick()?;
+        self.reg_pre_gc.tick()?;
+        self.reg_move.tick()?;
+        self.reg_work_on.tick()?;
+        self.reg_app_idx.tick()?;
+        self.reg_monitors.tick()?;
+        self.reg_monitor_idx.tick()
     }
 }
 

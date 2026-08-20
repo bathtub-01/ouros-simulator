@@ -64,9 +64,9 @@ impl<T: Clone + Default + PartialEq, const N: usize> HwModule for Ring<T, N> {
         Ok(())
     }
 
-    fn tick_children(&mut self) {
-        self.head.tick();
-        self.tail.tick();
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        self.head.tick()?;
+        self.tail.tick()
     }
 }
 

@@ -111,14 +111,18 @@ pub struct ParseRes {
     pub app3: Vec<Hole>,
 }
 
-pub fn parse_pat(p: &Pat) -> ParseRes {
+pub fn parse_pat(p: &Pat) -> Result<ParseRes, String> {
     let mut result = ParseRes::default();
-    parse(p, Mode::Spine, &mut 0, &mut 0, &mut result);
-    result
+    parse(p, Mode::Spine, &mut 0, &mut 0, &mut result)?;
+    Ok(result)
 }
 
 pub static DECODE_TABLE: LazyLock<[ParseRes; 64]> = LazyLock::new(|| {
-    let parsed: Vec<ParseRes> = ALL_PATTERNS.iter().map(parse_pat).collect();
+    let parsed: Vec<ParseRes> = ALL_PATTERNS
+        .iter()
+        .map(parse_pat)
+        .collect::<Result<_, _>>()
+        .unwrap_or_default();
     let res: [ParseRes; 64] = parsed
         .try_into()
         .expect("pattern decode table size should match");
@@ -180,14 +184,14 @@ fn parse(
                     } else {
                         Mode::App3
                     };
-                    parse(&v, next_mode, arg_count, ptr_count, acc);
+                    parse(&v, next_mode, arg_count, ptr_count, acc)?
                 }
             },
         }
     }
 
     // accumulate the result
-    Ok(match mode {
+    match mode {
         Mode::Spine => {
             acc.spine = res;
         }
@@ -200,5 +204,6 @@ fn parse(
         Mode::App3 => {
             acc.app3 = res;
         }
-    })
+    }
+    Ok(())
 }

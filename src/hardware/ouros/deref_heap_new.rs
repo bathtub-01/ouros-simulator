@@ -509,22 +509,22 @@ impl DrfHeap {
         self.holder_out.0 || derived
     }
 
-    pub fn out_main_bits(&self) -> ActiveApp {
+    pub fn out_main_bits(&self) -> Result<ActiveApp, String> {
         let target = self.heap_mem.dout_a();
         if self.holder_out.0 {
-            return self.holder_out.1.clone();
+            return Ok(self.holder_out.1.clone());
         }
 
         match *self.stm.value() {
-            Stm::Idle => Default::default(),
+            Stm::Idle => Ok(Default::default()),
             Stm::Whnf => {
-                let (deref_res, _) = self.gen_output_whnf();
-                self.gen_active_app(deref_res)
+                let (deref_res, _) = self.gen_output_whnf()?;
+                Ok(self.gen_active_app(deref_res))
             }
             Stm::Ia => {
                 let ias1 = self.get_ias1();
                 if ias1 == IAs1::ExistIAFresh {
-                    return self.gen_active_app(self.dash_when_shared());
+                    return Ok(self.gen_active_app(self.dash_when_shared()));
                 }
                 match self.get_ias2(&ias1) {
                     IAs2::NoMoreArgsCanEmit => {
@@ -535,12 +535,12 @@ impl DrfHeap {
                             // self.input.free_addr,
                             self.reg_free_addr.value().1,
                         );
-                        self.gen_active_app(updated_dmder)
+                        Ok(self.gen_active_app(updated_dmder))
                     }
-                    _ => Default::default(),
+                    _ => Ok(Default::default()),
                 }
             }
-            Stm::Resume => Default::default(),
+            Stm::Resume => Ok(Default::default()),
         }
     }
 
@@ -560,7 +560,7 @@ impl DrfHeap {
         self.need_split()
     }
 
-    pub fn out_big_drg_bits(&self) -> FrozenApp {
+    pub fn out_big_drg_bits(&self) -> Result<FrozenApp, String> {
         let mk_frozen = |a: Option<App>| match a {
             Some(big) => FrozenApp {
                 // heap_addr: self.input.free_addr,
@@ -569,8 +569,9 @@ impl DrfHeap {
             },
             None => Default::default(),
         };
-        match *self.stm.value() {
-            Stm::Whnf => mk_frozen(self.gen_output_whnf().1),
+
+        Ok(match *self.stm.value() {
+            Stm::Whnf => mk_frozen(self.gen_output_whnf()?.1),
             Stm::Ia if self.get_ias1() == IAs1::ExistWHNF => {
                 let dmder = &self.holder_in.value().load;
                 let target = self.heap_mem.dout_a();
@@ -584,7 +585,7 @@ impl DrfHeap {
                 mk_frozen(obig)
             }
             _ => Default::default(),
-        }
+        })
     }
 
     /// Deallocate an address based on one-bit ref count
@@ -871,10 +872,11 @@ impl DrfHeap {
     }
 
     /// select first arg from `app` and read it
-    fn select_1st_arg_read(&mut self, app: &App) {
-        let (arg_id, p) = select_1st_arg(app);
+    fn select_1st_arg_read(&mut self, app: &App) -> Result<(), String> {
+        let (arg_id, p) = select_1st_arg(app)?;
         self.read_target(p);
-        self.arg_id.connect(&arg_id);
+        self.arg_id.connect(&(arg_id as usize));
+        Ok(())
     }
 
     /// select next arg from `app` and read it
@@ -911,21 +913,29 @@ impl DrfHeap {
     }
 
     /// take shortcuts, unless 'sensitive cases' are encountered
-    fn step_to_next(&mut self, s1: &IAs1) {
+    fn step_to_next(&mut self, s1: &IAs1) -> Result<(), String> {
         if self.is_sensitive(s1) {
             self.stm.connect(&Stm::Idle);
         } else {
-            self.consume_next();
+            self.consume_next()?;
         }
+
+        Ok(())
     }
 
-    fn gen_output_whnf(&self) -> (App, Option<App>) {
+    fn gen_output_whnf(&self) -> Result<(App, Option<App>), String> {
         let dmder = self.heap_mem.dout_a();
         let target = &self.holder_in.value().load;
         // println!("addr: {}", self.heap_mem.input.port_a.addr); // use this for GC debugging
-        let (arg_id, _) = select_1st_arg(dmder);
+        let (arg_id, _) = select_1st_arg(dmder)?;
         // deref(dmder, arg_id, target, self.input.free_addr)
-        deref(dmder, arg_id, target, self.reg_free_addr.value().1)
+
+        Ok(deref(
+            dmder,
+            usize::try_from(arg_id).map_err(|e| e.to_string())?,
+            target,
+            self.reg_free_addr.value().1,
+        ))
     }
 
     fn gen_active_app(&self, app: App) -> ActiveApp {
@@ -1035,7 +1045,7 @@ impl DrfHeap {
         let dmder = &self.holder_in.value().load;
         let target = self.heap_mem.dout_a();
         if is_unique_ptr(&dmder[*self.arg_id.value()]) {
-            target.clone()
+            *target
         } else {
             dash_app(target)
         }
@@ -1046,12 +1056,13 @@ impl DrfHeap {
         let in_app = mask_seq(&self.input.port_a_bits.load);
         self.holder_in.connect(&ActiveApp {
             stack_idx: self.input.port_a_bits.stack_idx,
-            load: in_app.clone(),
+            load: in_app,
         });
-        self.get_consumes().map(|v| match v {
+
+        match self.get_consumes()? {
             CONSUMEs::NoInput => self.stm.connect(&Stm::Idle),
             CONSUMEs::InputIA => {
-                self.select_1st_arg_read(&in_app);
+                self.select_1st_arg_read(&in_app)?;
                 self.ia_addr.connect(
                     &self.thread_stack[self.input.port_a_bits.stack_idx as usize]
                         .top()
@@ -1087,10 +1098,11 @@ impl DrfHeap {
                 self.write_incoming(HeapPort::A);
                 self.stm.connect(&Stm::Idle);
             }
-        })
+        }
+        Ok(())
     }
 
-    fn step_whnf(&mut self) {
+    fn step_whnf(&mut self) -> Result<(), String> {
         let whnf_addr = *self.addr_holder.value();
 
         match self.get_whnfs() {
@@ -1133,12 +1145,13 @@ impl DrfHeap {
                     self.stat.heap_update += 1;
                     self.write_whnf(HeapPort::B);
                 }
-                self.consume_next();
+                self.consume_next()?;
             }
         }
+        Ok(())
     }
 
-    fn step_ia(&mut self) {
+    fn step_ia(&mut self) -> Result<(), String> {
         let dmder = &self.holder_in.value().load;
         let mut updated_dmder = dmder.clone();
         let target = self.heap_mem.dout_a().clone();
@@ -1153,7 +1166,7 @@ impl DrfHeap {
                 // deref(dmder, *self.arg_id.value(), &target, self.input.free_addr);
                     deref(dmder, *self.arg_id.value(), &target, self.reg_free_addr.value().1);
                 updated_dmder = deref_res;
-                self.holder_in.input.load = updated_dmder.clone();
+                self.holder_in.input.load = updated_dmder;
             }
             IAs1::ExistIAWorkingNormal => {
                 // change this to `self.push_target(false);` will disable stack riding
@@ -1206,37 +1219,39 @@ impl DrfHeap {
             IAs2::NoMoreArgsNoEmit => {
                 self.cancel_new_frame(&ias1);
                 self.heap_mem.write_b(*self.ia_addr.value(), updated_dmder);
-                self.step_to_next(&ias1);
+                self.step_to_next(&ias1)?;
             }
             IAs2::NoMoreArgsCanEmit => {
                 self.cancel_new_frame(&ias1);
-                self.step_to_next(&ias1);
+                self.step_to_next(&ias1)?;
             }
         }
+        Ok(())
     }
 
-    fn step_resume(&mut self) {
+    fn step_resume(&mut self) -> Result<(), String> {
         self.write_whnf(HeapPort::B);
         match self.get_resumes() {
             RESUMEs::TopInWHNF => {
                 let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
                 let whnf_addr = current_stk.top().unwrap().1;
                 let dmder_addr = current_stk.second().unwrap().1;
-                self.holder_in.input.load = self.heap_mem.dout_a().clone();
+                self.holder_in.input.load = *self.heap_mem.dout_a();
                 current_stk.pop();
                 self.heap_mem.read_a(dmder_addr);
                 self.addr_holder.connect(&whnf_addr);
                 self.stm.connect(&Stm::Whnf);
             }
             RESUMEs::TopInIA => {
-                self.consume_next();
+                self.consume_next()?;
             }
         }
+        Ok(())
     }
 
-    fn handle_port_a(&mut self) {
+    fn handle_port_a(&mut self) -> Result<(), String> {
         if self.holder_out.0 && !self.input.out_main_ready {
-            return;
+            return Ok(());
         }
 
         match *self.stm.value() {
@@ -1279,11 +1294,11 @@ impl HwModule for DrfHeap {
                     true,
                     ActiveApp {
                         stack_idx: 0,
-                        load: self.heap_mem.dout_a().clone(),
+                        load: *self.heap_mem.dout_a(),
                     },
                 );
             }
-            return;
+            return Ok(());
         }
         // stop the machine when finished
         if self.port_a_fire() {
@@ -1293,12 +1308,12 @@ impl HwModule for DrfHeap {
                 && is_whnf(&self.input.port_a_bits.load)
             {
                 self.working.connect(&false);
-                return;
+                return Ok(());
             }
         }
         self.non_exist.connect(&self.input.found);
 
-        self.handle_port_a();
+        self.handle_port_a()?;
         self.handle_port_b();
 
         // when port b is not locally used, grant it to GC usage
@@ -1333,9 +1348,10 @@ impl HwModule for DrfHeap {
                 self.stat.gc_current_stall = 0;
             }
         }
+        Ok(())
     }
 
-    fn update_stat(&mut self) {
+    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
         // if self.dealloc_valid() && self.dealloc_bits() == 4077 {
         //     println!("deallocate 65!");
         // }
@@ -1371,7 +1387,7 @@ impl HwModule for DrfHeap {
                     .holder_contents
                     .push(Some(self.holder_out.1.clone()));
             } else if self.output_fire() {
-                self.stat.holder_contents.push(Some(self.out_main_bits()));
+                self.stat.holder_contents.push(Some(self.out_main_bits()?));
             } else {
                 self.stat.holder_contents.push(None);
             }
@@ -1408,7 +1424,6 @@ impl HwModule for DrfHeap {
                 self.stat.busy_per_cycle.push(false);
             }
         }
-
         if self.stat_detail_lv >= DLV_STM_DIST {
             match *self.stm.value() {
                 Stm::Idle => self.stat.stm_cycles[0] += 1,
@@ -1417,25 +1432,26 @@ impl HwModule for DrfHeap {
                 Stm::Resume => self.stat.stm_cycles[3] += 1,
             }
         }
+        Ok(())
     }
 
-    fn tick_children(&mut self) {
-        self.stm.tick();
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        self.stm.tick()?;
         for stk in &mut self.thread_stack {
-            stk.tick();
+            stk.tick()?
         }
         for stk in &mut self.frame_stack {
-            stk.tick();
+            stk.tick()?
         }
-        self.heap_mem.tick();
-        self.working_heap.tick();
-        self.working.tick();
-        self.holder_in.tick();
-        self.arg_id.tick();
-        self.addr_holder.tick();
-        self.ia_addr.tick();
-        self.non_exist.tick();
-        self.gc_read_granted.tick();
-        self.reg_free_addr.tick();
+        self.heap_mem.tick()?;
+        self.working_heap.tick()?;
+        self.working.tick()?;
+        self.holder_in.tick()?;
+        self.arg_id.tick()?;
+        self.addr_holder.tick()?;
+        self.ia_addr.tick()?;
+        self.non_exist.tick()?;
+        self.gc_read_granted.tick()?;
+        self.reg_free_addr.tick()
     }
 }

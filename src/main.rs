@@ -20,16 +20,21 @@ use hardware::ouros::program::{ActiveApp, App, Program, app_length};
 use hardware::ouros::benchmarks::{self, *};
 use hw_module::HwModule;
 
-fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (OurosCore, u32) {
+fn simulate(
+    prog: &Program,
+    detail_lv: u8,
+    heap_size: usize,
+    gc_at: f32,
+) -> Result<(OurosCore, u32), String> {
     let _span = tracy_client::span!("simulate");
     let mut ouros = OurosCore::new(prog, detail_lv, heap_size, gc_at);
     let mut cycle: u32 = 0;
 
-    ouros.tick();
+    ouros.tick()?;
 
     // kick start the machine
     ouros.input.start = true;
-    ouros.tick();
+    ouros.tick()?;
     ouros.input.start = false;
 
     loop {
@@ -37,11 +42,11 @@ fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (Our
         if ouros.done() || cycle == 900_000_000 {
             break;
         }
-        ouros.tick();
+        ouros.tick()?;
         cycle += 1;
     }
 
-    (ouros, cycle)
+    Ok((ouros, cycle))
 }
 
 fn compress(oapp: &Option<ActiveApp>) -> String {
@@ -133,7 +138,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::MAX, HEAP_SIZE, GC_AT);
+    let (ouros, runtime_cycles) = simulate(prog, u8::MAX, HEAP_SIZE, GC_AT).unwrap();
     let stats = ouros.get_stat();
 
     println!(
@@ -342,7 +347,8 @@ fn run_benchmarks(
     let results: Vec<_> = benchmarks
         .par_iter()
         .map(|p| simulate(p, 0, HEAP_SIZE, GC_AT))
-        .collect();
+        .collect::<Result<_, _>>()
+        .map_err(std::io::Error::other)?;
 
     results.iter().zip(names).for_each(|((core, cycles), n)| {
         let stat = core.get_stat();
@@ -361,7 +367,7 @@ fn run_benchmarks(
 }
 
 fn run_big_prog(prog: &Program) -> std::io::Result<()> {
-    let (core, cycles) = simulate(prog, 0, BIG_HEAP, GC_AT);
+    let (core, cycles) = simulate(prog, 0, BIG_HEAP, GC_AT).map_err(std::io::Error::other)?;
     let stat = core.get_stat();
     println!(
         "finished: {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
@@ -408,61 +414,74 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
         .progress_count(benchmarks.len() as u64)
         .map(|p| {
             // run a test to get gc free runtime and an approximate peak work set size
-            let (c, _) = simulate(p, 0, BIG_HEAP, GC_AT);
-            let peak_workset = c.get_stat().peak_workset_size;
-            // run several more rounds with different heap size
-            let points = if peak_workset > 1000 {
-                [2.5, 4.0, 5.0, 6.0]
-            } else {
-                [2.5, 5.0, 10.0, 20.0]
-            };
-            let res = points.map(|pt| {
-                // println!(
-                //     "PEAK: {}; HEAP SIZE: {}",
-                //     peak_workset,
-                //     (peak_workset as f32 * pt) as usize
-                // );
-                simulate(p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
-            });
-            let res_cycle: Vec<u32> = res.iter().map(|(_, cycles)| *cycles).collect();
-            let res_gc_percent: Vec<f32> = res
-                .iter()
-                .map(|(c, time)| {
-                    let stat = c.get_stat();
-                    let gc_overhead = max(
-                        stat.dheap_stat.gc_stall_cycles,
-                        stat.reducer_stat.gc_stall_cycles,
-                    );
-                    percent_of(gc_overhead, *time)
+            simulate(p, 0, BIG_HEAP, GC_AT)
+                .map_err(std::io::Error::other)
+                .and_then(|(c, _)| {
+                    let peak_workset = c.get_stat().peak_workset_size;
+                    // run several more rounds with different heap size
+                    let points = if peak_workset > 1000 {
+                        vec![2.5, 4.0, 5.0, 6.0]
+                    } else {
+                        vec![2.5, 5.0, 10.0, 20.0]
+                    };
+                    points
+                        .into_iter()
+                        .map(|pt| {
+                            // println!(
+                            //     "PEAK: {}; HEAP SIZE: {}",
+                            //     peak_workset,
+                            //     (peak_workset as f32 * pt) as usize
+                            // );
+                            simulate(p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
+                                .map_err(std::io::Error::other)
+                        })
+                        .collect::<std::io::Result<Vec<(OurosCore, u32)>>>()
+                        .map(|res| {
+                            let res_cycle: Vec<u32> =
+                                res.iter().map(|(_, cycles)| *cycles).collect();
+                            let res_gc_percent: Vec<f32> = res
+                                .iter()
+                                .map(|(c, time)| {
+                                    let stat = c.get_stat();
+                                    let gc_overhead = max(
+                                        stat.dheap_stat.gc_stall_cycles,
+                                        stat.reducer_stat.gc_stall_cycles,
+                                    );
+                                    percent_of(gc_overhead, *time)
+                                })
+                                .collect();
+                            let res_max_pause: Vec<u32> = res
+                                .iter()
+                                .map(|(core, _)| {
+                                    max(
+                                        core.get_stat().reducer_stat.gc_longest_stall,
+                                        core.get_stat().dheap_stat.gc_longest_stall,
+                                    )
+                                })
+                                .collect();
+                            let res_gc_rounds: Vec<u32> = res
+                                .iter()
+                                .map(|(c, _)| c.get_stat().gc_stat.gc_rounds)
+                                .collect();
+                            let res_points: Vec<f32> = res
+                                .iter()
+                                .map(|(core, _)| {
+                                    core.heap_size as f32
+                                        / (core.get_stat().peak_workset_size as f32)
+                                })
+                                .collect();
+                            (
+                                res_cycle,
+                                res_gc_percent,
+                                res_max_pause,
+                                res_points,
+                                peak_workset,
+                                res_gc_rounds,
+                            )
+                        })
                 })
-                .collect();
-            let res_max_pause: Vec<u32> = res
-                .iter()
-                .map(|(core, _)| {
-                    max(
-                        core.get_stat().reducer_stat.gc_longest_stall,
-                        core.get_stat().dheap_stat.gc_longest_stall,
-                    )
-                })
-                .collect();
-            let res_gc_rounds: Vec<u32> = res
-                .iter()
-                .map(|(c, _)| c.get_stat().gc_stat.gc_rounds)
-                .collect();
-            let res_points: Vec<f32> = res
-                .iter()
-                .map(|(core, _)| core.heap_size as f32 / (core.get_stat().peak_workset_size as f32))
-                .collect();
-            (
-                res_cycle,
-                res_gc_percent,
-                res_max_pause,
-                res_points,
-                peak_workset,
-                res_gc_rounds,
-            )
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
 
     results
         .into_iter()

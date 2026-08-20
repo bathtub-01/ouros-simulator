@@ -30,9 +30,11 @@ impl<V: Clone + Default> HwModule for Register<V> {
         self.value = self.input.clone();
         Ok(())
     }
-    fn tick_children(&mut self) {}
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(())
+    }
 
-    fn tick(&mut self) {
-        self.update_local();
+    fn tick(&mut self) -> std::result::Result<(), std::string::String> {
+        self.update_local()
     }
 }

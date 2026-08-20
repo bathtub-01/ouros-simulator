@@ -114,8 +114,8 @@ impl Reducer {
             || (*self.reg_stm.value() == Stm::Special && *self.reg_app_mask.value())
     }
 
-    pub fn spine_bits(&self) -> ActiveApp {
-        ActiveApp {
+    pub fn spine_bits(&self) -> Result<ActiveApp, String> {
+        Ok(ActiveApp {
             stack_idx: self.reg_in.value().stack_idx,
             load: {
                 if *self.reg_stm.value() == Stm::Special {
@@ -127,7 +127,7 @@ impl Reducer {
                 } else {
                     let old_spn = &self.reg_in.value().load;
                     let before = *self.reg_arity.value() as usize + 1;
-                    let mut res = self.inst(self.comb_table.dout());
+                    let mut res = self.inst(self.comb_table.dout())?;
                     let after = app_length(&res);
                     assert!(
                         old_spn[before..].iter().filter(|a| !is_nop(a)).count() + after
@@ -141,15 +141,15 @@ impl Reducer {
                     res
                 }
             },
-        }
+        })
     }
 
     pub fn app_valid(&self) -> bool {
         *self.reg_stm.value() == Stm::App || *self.reg_stm.value() == Stm::Special
     }
 
-    pub fn app_bits(&self) -> FrozenApp {
-        FrozenApp {
+    pub fn app_bits(&self) -> Result<FrozenApp, String> {
+        Ok(FrozenApp {
             heap_addr: {
                 let r = match self.reg_stm.value() {
                     Stm::Spine | Stm::Idle => 0,
@@ -180,10 +180,10 @@ impl Reducer {
                     res[1] = Atom::Ptr(self.input.free_addrs[0], false, false);
                     res
                 } else {
-                    self.inst(self.comb_table.dout())
+                    self.inst(self.comb_table.dout())?
                 }
             },
-        }
+        })
     }
 
     pub fn in_ready(&self) -> bool {
@@ -310,8 +310,8 @@ impl Reducer {
     }
 
     /// instantiate an app from template
-    fn inst(&self, app: &App) -> App {
-        let mut res: App = app.clone();
+    fn inst(&self, app: &App) -> Result<App, String> {
+        let mut res: App = *app;
         let mut hole = 0;
         for a in &mut res {
             match a {
@@ -324,8 +324,8 @@ impl Reducer {
                 Atom::Spe(op, rev, l, r, p) => {
                     if self.is_instant(l) && self.is_instant(r) {
                         // speculation success
-                        let op1 = self.get_instant(l);
-                        let op2 = self.get_instant(r);
+                        let op1 = self.get_instant(l)?;
+                        let op2 = self.get_instant(r)?;
                         hole += 1;
                         *a = compute(op, *rev, op1, op2);
                     } else {
@@ -345,11 +345,11 @@ impl Reducer {
                 _ => {}
             }
         }
-        res
+        Ok(res)
     }
 
-    fn step_next(&mut self) {
-        if self.in_fire() {
+    fn step_next(&mut self) -> Result<(), String> {
+        Ok(if self.in_fire() {
             self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
 
@@ -366,18 +366,18 @@ impl Reducer {
                         self.reg_arity.connect(&(fields as u8 + free_vars + 1));
                         self.comb_table.read(base + idx);
                     } else {
-                        return Err(()); // p_anic!()
+                        return Err("panic during step".to_string()); // p_anic!()
                     }
                 }
                 Atom::Y => {
                     self.reg_app_mask.connect(&true);
                     self.reg_stm.connect(&Stm::Special);
                 }
-                _ => return Err(()); // t_odo!(),
+                _ => return Err("panic during step".to_string()), // t_odo!(),
             };
         } else {
             self.reg_stm.connect(&Stm::Idle);
-        }
+        })
     }
 }
 
@@ -386,7 +386,7 @@ impl HwModule for Reducer {
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
             Stm::Idle => {
-                self.step_next();
+                self.step_next()?;
             }
             Stm::Spine => {
                 // !NOTE! We are assuming this state won't be blocked.
@@ -408,7 +408,7 @@ impl HwModule for Reducer {
                             reg.connect(&addr);
                         });
                 } else {
-                    self.step_next();
+                    self.step_next()?;
                 }
             }
             Stm::App => {
@@ -423,7 +423,7 @@ impl HwModule for Reducer {
                                 + 1,
                         );
                     } else {
-                        self.step_next();
+                        self.step_next()?;
                     }
                 } else {
                     // fail to fire, keep reading
@@ -437,15 +437,15 @@ impl HwModule for Reducer {
             Stm::Special => {
                 self.reg_app_mask.connect(&false);
                 if fire(self.input.app_ready, self.app_valid()) {
-                    self.step_next();
+                    self.step_next()?;
                 }
             }
         }
         if self.spine_valid() && !self.input.spine_ready {
-            return Err(()); // p_anic!(); println!("spine leaked!: {:?}", self.spine_bits());
+            return Err("spine leaked".to_string()); // p_anic!(); println!("spine leaked!: {:?}", self.spine_bits());
         }
 
-        if self.stat_detail_lv >= DLV_GC {
+        Ok(if self.stat_detail_lv >= DLV_GC {
             if self.stalled() {
                 self.stat.gc_stall_cycles += 1;
                 self.stat.gc_current_stall += 1;
@@ -454,17 +454,17 @@ impl HwModule for Reducer {
                     max(self.stat.gc_longest_stall, self.stat.gc_current_stall);
                 self.stat.gc_current_stall = 0;
             }
-        }
+        })
     }
 
-    fn update_stat(&mut self) {
+    fn update_stat(&mut self) -> Result<(), String> {
         if self.in_fire() {
             self.stat.reductions += 1;
         }
 
         if self.stat_detail_lv >= DLV_GC {
             if fire(self.input.app_ready, self.app_valid()) {
-                if self.app_bits().load.iter().any(is_ptr) {
+                if self.app_bits()?.load.iter().any(is_ptr) {
                     self.stat.nested_with_ptr += 1;
                 } else {
                     self.stat.nested_no_ptr += 1;
@@ -484,25 +484,25 @@ impl HwModule for Reducer {
             }
         }
 
-        if self.stat_detail_lv >= DLV_FULL_LOG {
+        Ok(if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.spine_valid() {
-                self.stat.holder_contents.push(Some(self.spine_bits()));
+                self.stat.holder_contents.push(Some(self.spine_bits()?));
             } else {
                 self.stat.holder_contents.push(None);
             }
-        }
+        })
     }
 
-    fn tick_children(&mut self) {
-        self.comb_table.tick();
-        self.reg_in.tick();
-        self.addr_regs.iter_mut().for_each(|reg| {
-            reg.tick();
-        });
-        self.reg_spine.tick();
-        self.reg_arity.tick();
-        self.reg_stm.tick();
-        self.reg_idx.tick();
-        self.reg_app_mask.tick();
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        self.comb_table.tick()?;
+        self.reg_in.tick()?;
+        for reg in self.addr_regs.iter_mut() {
+            reg.tick()?
+        }
+        self.reg_spine.tick()?;
+        self.reg_arity.tick()?;
+        self.reg_stm.tick()?;
+        self.reg_idx.tick()?;
+        self.reg_app_mask.tick()
     }
 }

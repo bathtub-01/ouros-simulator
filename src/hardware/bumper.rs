@@ -28,9 +28,9 @@ impl HwModule for Bumper {
         Ok(())
     }
 
-    fn tick_children(&mut self) {
-        self.counter.tick();
-        self.running.tick();
+    fn tick_children(&mut self) -> Result<(), String> {
+        self.counter.tick()?;
+        self.running.tick()
     }
 }
 
