@@ -581,10 +581,12 @@ impl DrfHeap {
     pub fn dealloc_valid(&self) -> bool {
         // NOTE should do this *on return* or *on deref*?
         // ready signal does not block DHeap, giving up some chances is fine
-        *self.stm.value() == Stm::Whnf
+        (*self.stm.value() == Stm::Whnf
             && self.get_whnfs() == WHNFs::NoNewFrame
-            && self.can_avoid_update()
-        // && false
+            && self.can_avoid_update())
+            || (*self.stm.value() == Stm::Ia
+                && self.get_ias1() == IAs1::ExistIAFresh
+                && self.can_forward())
     }
 
     /// Deallocate an address based on one-bit ref count
@@ -1036,6 +1038,11 @@ impl DrfHeap {
         }
     }
 
+    fn can_forward(&self) -> bool {
+        app_length(&self.holder_in.value().load) == 1
+            && matches!(self.holder_in.value().load[0], Atom::Ptr(_, true, _))
+    }
+
     /// consumes the next task; must not use heap port b!
     fn consume_next(&mut self) -> Result<(), String> {
         let in_app = mask_seq(&self.input.port_a_bits.load);
@@ -1166,9 +1173,7 @@ impl DrfHeap {
             }
             IAs1::ExistIAWorkingAtNewFrame => { /* do nothing here */ }
             IAs1::ExistIAFresh => {
-                if app_length(&self.holder_in.value().load) > 1
-                    || matches!(self.holder_in.value().load[0], Atom::Ptr(_, false, _))
-                {
+                if !self.can_forward() {
                     self.push_target(false);
                 }
             }
@@ -1191,15 +1196,6 @@ impl DrfHeap {
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                     self.frame_stack[stk_id].push(self.gen_frame_record());
-                    // if stk_id == 3 {
-                    //     println!("frame stk 3 pushed. P1");
-                    // }
-                    // !NEW! update current frame record, too (not good, hurts SUMEULER)
-                    // self.frame_stack[current_idx].modify({
-                    //     let mut record = self.frame_stack[current_idx].top().unwrap().clone();
-                    //     record[stk_id] = *self.addr_holder.value(); // next top of current stk
-                    //     record
-                    // });
                 };
             }
             IAs2::NextStrictArgLocal => {
