@@ -104,7 +104,7 @@ impl AddrBox {
 }
 
 impl HwModule for AddrBox {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         // ============ handle free addrs ===========
         for i in 0..CONSUMERS {
             // reg value shifting
@@ -143,15 +143,17 @@ impl HwModule for AddrBox {
         // if self.feedback_valid() && self.feedback_bits() == 85 {
         //     println!("addr box put 85 as feedback");
         // }
+        Ok(())
     }
 
-    fn tick_children(&mut self) {
-        self.addr_regs.iter_mut().for_each(|reg| {
-            reg.tick();
-        });
-        self.feedback_regs.iter_mut().for_each(|reg| {
-            reg.tick();
-        });
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        for reg in self.addr_regs.iter_mut() {
+            reg.tick()?
+        }
+        for reg in self.feedback_regs.iter_mut() {
+            reg.tick()?
+        }
+        Ok(())
     }
 }
 

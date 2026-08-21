@@ -56,17 +56,22 @@ impl<T: Default + Clone> SinglePortMem<T> {
 }
 
 impl<T: Default + Clone> HwModule for SinglePortMem<T> {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         if self.input.enable {
             if self.input.is_write {
+                // FIX: fix this possible exception
                 self.ram[self.input.addr] = self.input.din.clone();
             } else {
+                // FIX: fix this possible exception
                 self.holder = self.ram[self.input.addr].clone();
             }
         }
+        Ok(())
     }
 
-    fn tick_children(&mut self) {}
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(())
+    }
 }
 
 #[test]
@@ -180,8 +185,8 @@ impl<T: Clone + Default> DualPortMem<T> {
 }
 
 impl<T: Clone + Default> HwModule for DualPortMem<T> {
-    fn update_stat(&mut self) {
-        if self.record_stat {
+    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(if self.record_stat {
             if self.input.port_a.enable {
                 if self.input.port_a.is_write {
                     self.stat.a_writes += 1;
@@ -197,10 +202,10 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
                     self.stat.b_reads += 1;
                 }
             }
-        }
+        })
     }
 
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         assert!(
             !(self.input.port_a.is_write
                 && self.input.port_b.is_write
@@ -226,9 +231,12 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
         if !self.input.port_b.is_write {
             self.holder_b = self.ram[self.input.port_b.addr].clone();
         }
+        Ok(())
     }
 
-    fn tick_children(&mut self) {}
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(())
+    }
 }
 
 #[test]

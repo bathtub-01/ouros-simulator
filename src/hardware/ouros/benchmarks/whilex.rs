@@ -307,7 +307,7 @@ pub static WHILEX: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp9
         vec![ // 9 
-            Err(42),
+            E(42),
         ], 
         // AExp10
         vec![ // 10 

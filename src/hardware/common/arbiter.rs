@@ -63,15 +63,14 @@ impl<T: Clone + Default, const N: usize> RArbiter<T, N> {
 }
 
 impl<T: Clone + Default, const N: usize> HwModule for RArbiter<T, N> {
-    fn update_local(&mut self) {
-        match self.select() {
-            None => {}
-            Some(p) => self.priority.connect(&((p + 1) % N)),
-        }
+    fn update_local(&mut self) -> Result<(), String> {
+        self.select()
+            .map(|p| self.priority.connect(&((p + 1) % N)))
+            .ok_or("Could not select in RArbiter".to_string())
     }
 
-    fn tick_children(&mut self) {
-        self.priority.tick();
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        self.priority.tick()
     }
 }
 
@@ -121,8 +120,12 @@ impl<T: Clone + Default, const N: usize> PArbiter<T, N> {
 
 impl<T: Clone + Default, const N: usize> HwModule for PArbiter<T, N> {
     // no local states to update
-    fn update_local(&mut self) {}
-    fn tick_children(&mut self) {}
+    fn update_local(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(())
+    }
 }
 
 #[test]

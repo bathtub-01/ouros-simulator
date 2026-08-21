@@ -70,7 +70,7 @@ pub static PERMSORT: LazyLock<Program> = LazyLock::new(|| { Program {
         // AExp3
         vec![ // 3 
             Arg(0, true),
-            Err(3),
+            E(3),
             Com(2,0),
         ], 
         // AExp4

@@ -15,21 +15,26 @@ use std::sync::LazyLock;
 
 use hardware::ouros::config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE};
 use hardware::ouros::ouros_core::OurosCore;
-use hardware::ouros::program::{app_length, ActiveApp, App, Program};
+use hardware::ouros::program::{ActiveApp, App, Program, app_length};
 
 use hardware::ouros::benchmarks::{self, *};
 use hw_module::HwModule;
 
-fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (OurosCore, u32) {
+fn simulate(
+    prog: &Program,
+    detail_lv: u8,
+    heap_size: usize,
+    gc_at: f32,
+) -> Result<(OurosCore, u32), String> {
     let _span = tracy_client::span!("simulate");
     let mut ouros = OurosCore::new(prog, detail_lv, heap_size, gc_at);
     let mut cycle: u32 = 0;
 
-    ouros.tick();
+    ouros.tick()?;
 
     // kick start the machine
     ouros.input.start = true;
-    ouros.tick();
+    ouros.tick()?;
     ouros.input.start = false;
 
     loop {
@@ -37,11 +42,11 @@ fn simulate(prog: &Program, detail_lv: u8, heap_size: usize, gc_at: f32) -> (Our
         if ouros.done() || cycle == 900_000_000 {
             break;
         }
-        ouros.tick();
+        ouros.tick()?;
         cycle += 1;
     }
 
-    (ouros, cycle)
+    Ok((ouros, cycle))
 }
 
 fn compress(oapp: &Option<ActiveApp>) -> String {
@@ -133,7 +138,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::MAX, HEAP_SIZE, GC_AT);
+    let (ouros, runtime_cycles) =
+        simulate(prog, u8::MAX, HEAP_SIZE, GC_AT).map_err(std::io::Error::other)?;
     let stats = ouros.get_stat();
 
     println!(
@@ -343,9 +349,10 @@ fn run_benchmarks(
         .par_iter()
         .progress_count(benchmarks.len() as u64)
         .map(|p| simulate(p, 0, HEAP_SIZE, GC_AT))
-        .collect();
+        .collect::<Result<_, _>>()
+        .map_err(std::io::Error::other)?;
 
-    results.iter().zip(names).for_each(|((core, cycles), n)| {
+    for ((core, cycles), n) in results.iter().zip(names) {
         let stat = core.get_stat();
         println!(
             "{:<12} {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
@@ -355,14 +362,14 @@ fn run_benchmarks(
             stat.gc_stat.allocations,
             stat.peak_workset_size
         );
-        writeln!(cycle_file, "{},{}", n, cycles).unwrap();
-    });
+        writeln!(cycle_file, "{},{}", n, cycles).map_err(std::io::Error::other)?;
+    }
 
     Ok(())
 }
 
 fn run_big_prog(prog: &Program) -> std::io::Result<()> {
-    let (core, cycles) = simulate(prog, 0, BIG_HEAP, GC_AT);
+    let (core, cycles) = simulate(prog, 0, BIG_HEAP, GC_AT).map_err(std::io::Error::other)?;
     let stat = core.get_stat();
     println!(
         "finished: {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
@@ -409,77 +416,91 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
         .progress_count(benchmarks.len() as u64)
         .map(|p| {
             // run a test to get gc free runtime and an approximate peak work set size
-            let (c, _) = simulate(p, 0, BIG_HEAP, GC_AT);
-            let peak_workset = c.get_stat().peak_workset_size;
-            // run several more rounds with different heap size
-            let points = if peak_workset > 1000 {
-                [2.5, 4.0, 5.0, 6.0]
-            } else {
-                [2.5, 5.0, 10.0, 20.0]
-            };
-            let res = points.map(|pt| {
-                // println!(
-                //     "PEAK: {}; HEAP SIZE: {}",
-                //     peak_workset,
-                //     (peak_workset as f32 * pt) as usize
-                // );
-                simulate(p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
-            });
-            let res_cycle: Vec<u32> = res.iter().map(|(_, cycles)| *cycles).collect();
-            let res_gc_percent: Vec<f32> = res
-                .iter()
-                .map(|(c, time)| {
-                    let stat = c.get_stat();
-                    let gc_overhead = max(
-                        stat.dheap_stat.gc_stall_cycles,
-                        stat.reducer_stat.gc_stall_cycles,
-                    );
-                    percent_of(gc_overhead, *time)
+            simulate(p, 0, BIG_HEAP, GC_AT)
+                .map_err(std::io::Error::other)
+                .and_then(|(c, _)| {
+                    let peak_workset = c.get_stat().peak_workset_size;
+                    // run several more rounds with different heap size
+                    let points = if peak_workset > 1000 {
+                        vec![2.5, 4.0, 5.0, 6.0]
+                    } else {
+                        vec![2.5, 5.0, 10.0, 20.0]
+                    };
+                    points
+                        .into_iter()
+                        .map(|pt| {
+                            // println!(
+                            //     "PEAK: {}; HEAP SIZE: {}",
+                            //     peak_workset,
+                            //     (peak_workset as f32 * pt) as usize
+                            // );
+                            simulate(p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
+                                .map_err(std::io::Error::other)
+                        })
+                        .collect::<std::io::Result<Vec<(OurosCore, u32)>>>()
+                        .map(|res| {
+                            let res_cycle: Vec<u32> =
+                                res.iter().map(|(_, cycles)| *cycles).collect();
+                            let res_gc_percent: Vec<f32> = res
+                                .iter()
+                                .map(|(c, time)| {
+                                    let stat = c.get_stat();
+                                    let gc_overhead = max(
+                                        stat.dheap_stat.gc_stall_cycles,
+                                        stat.reducer_stat.gc_stall_cycles,
+                                    );
+                                    percent_of(gc_overhead, *time)
+                                })
+                                .collect();
+                            let res_max_pause: Vec<u32> = res
+                                .iter()
+                                .map(|(core, _)| {
+                                    max(
+                                        core.get_stat().reducer_stat.gc_longest_stall,
+                                        core.get_stat().dheap_stat.gc_longest_stall,
+                                    )
+                                })
+                                .collect();
+                            let res_gc_rounds: Vec<u32> = res
+                                .iter()
+                                .map(|(c, _)| c.get_stat().gc_stat.gc_rounds)
+                                .collect();
+                            let res_points: Vec<f32> = res
+                                .iter()
+                                .map(|(core, _)| {
+                                    core.heap_size as f32
+                                        / (core.get_stat().peak_workset_size as f32)
+                                })
+                                .collect();
+                            (
+                                res_cycle,
+                                res_gc_percent,
+                                res_max_pause,
+                                res_points,
+                                peak_workset,
+                                res_gc_rounds,
+                            )
+                        })
                 })
-                .collect();
-            let res_max_pause: Vec<u32> = res
-                .iter()
-                .map(|(core, _)| {
-                    max(
-                        core.get_stat().reducer_stat.gc_longest_stall,
-                        core.get_stat().dheap_stat.gc_longest_stall,
-                    )
-                })
-                .collect();
-            let res_gc_rounds: Vec<u32> = res
-                .iter()
-                .map(|(c, _)| c.get_stat().gc_stat.gc_rounds)
-                .collect();
-            let res_points: Vec<f32> = res
-                .iter()
-                .map(|(core, _)| core.heap_size as f32 / (core.get_stat().peak_workset_size as f32))
-                .collect();
-            (
-                res_cycle,
-                res_gc_percent,
-                res_max_pause,
-                res_points,
-                peak_workset,
-                res_gc_rounds,
-            )
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
 
-    results
-        .into_iter()
-        .zip(names)
-        .for_each(|((cycle,percent, max_pause, points, peak, rounds), n)| {
-            println!(
-                "{:<10} | Peak work set {} | GC rounds {:?} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
-                n, peak, rounds, percent, max_pause, points
-            );
-            writeln!(cycle_file, "{},{}", n, vec_to_string(&cycle)).unwrap();
-            writeln!(gc_percent_file, "{},{}", n, vec_to_string(&percent)).unwrap();
-            writeln!(max_pause_file, "{},{}", n, vec_to_string(&max_pause)).unwrap();
-            writeln!(heap_peak_file, "{},{}", n, vec_to_string(&points)).unwrap();
-            writeln!(gc_rounds_file, "{},{}", n, vec_to_string(&rounds)).unwrap();
-            writeln!(peak_workset_file, "{},{}", n, peak).unwrap();
-        });
+    for ((cycle, percent, max_pause, points, peak, rounds), n) in results.into_iter().zip(names) {
+        println!(
+            "{:<10} | Peak work set {} | GC rounds {:?} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
+            n, peak, rounds, percent, max_pause, points
+        );
+        writeln!(cycle_file, "{},{}", n, vec_to_string(&cycle)).map_err(std::io::Error::other)?;
+        writeln!(gc_percent_file, "{},{}", n, vec_to_string(&percent))
+            .map_err(std::io::Error::other)?;
+        writeln!(max_pause_file, "{},{}", n, vec_to_string(&max_pause))
+            .map_err(std::io::Error::other)?;
+        writeln!(heap_peak_file, "{},{}", n, vec_to_string(&points))
+            .map_err(std::io::Error::other)?;
+        writeln!(gc_rounds_file, "{},{}", n, vec_to_string(&rounds))
+            .map_err(std::io::Error::other)?;
+        writeln!(peak_workset_file, "{},{}", n, peak).map_err(std::io::Error::other)?;
+    }
 
     Ok(())
 }
@@ -513,7 +534,7 @@ enum Mode {
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), String> {
     let _tracy = tracy_client::Client::start();
 
     #[cfg(feature = "dhat-heap")]
@@ -532,43 +553,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 client.set_thread_name(&format!("rayon-worker-{idx}"));
             }
         })
-        .build_global()?;
+        .build_global()
+        .map_err(|e| e.to_string())
+        .and({
+            let progs = benchmarks!(
+                // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
+                // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
+                ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
+            ); // ignoring TREESUM as it does not have much garbage..
 
-    let progs = benchmarks!(
-        // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
-        // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
-        ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
-    ); // ignoring TREESUM as it does not have much garbage..
-
-    match parsed_args {
-        Args {
-            prog_name: Some(program_name),
-            ..
-        } => {
-            println!("running {}", program_name);
-            // for now the mode will be ignored if a specific program is select
-            // can have an extra check in the future to make it correct
-            run_big_prog(
-                progs
-                    .get(program_name.as_str())
-                    .ok_or(format!("could not find program named: {}", program_name))?,
-            )
-        }
-        Args {
-            mode: Some(Mode::All),
-            ..
-        } => run_benchmarks(progs, false),
-        Args {
-            mode: Some(Mode::Gc),
-            ..
-        } => eval_gc(progs),
-        Args {
-            mode: None,
-            prog_name: None,
-            ..
-        } => Err("need to select a mode or a specific program name to run")?,
-    }?;
-
-    // FIX: remove this Ok return
-    Ok(())
+            match parsed_args {
+                Args {
+                    prog_name: Some(program_name),
+                    ..
+                } => {
+                    println!("running {}", program_name);
+                    // for now the mode will be ignored if a specific program is select
+                    // can have an extra check in the future to make it correct
+                    run_big_prog(
+                        progs
+                            .get(program_name.as_str())
+                            .ok_or(format!("could not find program named: {}", program_name))?,
+                    )
+                }
+                Args {
+                    mode: Some(Mode::All),
+                    ..
+                } => run_benchmarks(progs, false),
+                Args {
+                    mode: Some(Mode::Gc),
+                    ..
+                } => eval_gc(progs),
+                Args {
+                    mode: None,
+                    prog_name: None,
+                    ..
+                } => Err("need to select a mode or a specific program name to run")?,
+            }
+            .map_err(|e| e.to_string())
+        })
 }

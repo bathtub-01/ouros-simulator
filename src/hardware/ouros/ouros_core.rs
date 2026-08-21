@@ -208,7 +208,7 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: 
 }
 
 impl HwModule for OurosCore {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         let _span = tracy_client::span!("ouros: update_local");
         /*
         NOTE: there is an assignment ring in the circuit, the order of
@@ -273,15 +273,15 @@ impl HwModule for OurosCore {
             self.buffers_feedback.input.out_ready = self.gc.feedback_ready();
 
             self.gc.input.heap_read_valid = self.dheap.heap_read_valid();
-            self.gc.input.heap_read_bits = self.dheap.heap_read_bits().clone();
+            self.gc.input.heap_read_bits = *self.dheap.heap_read_bits();
             self.dheap.input.read_heap_req_valid = self.gc.read_heap_req_valid();
             self.dheap.input.read_heap_req_addr = self.gc.read_heap_req_addr();
 
             self.gc.input.monitor_valid = self.reducer.spine_valid();
             self.gc.input.monitor_bits = self.reducer.spine_bits();
             self.gc.input.monitor_big_drf_valid = self.dheap.out_big_drf_valid();
-            self.gc.input.monitor_big_drf_stk = self.dheap.out_main_bits().stack_idx as usize;
-            self.gc.input.monitor_big_drf_bits = self.dheap.out_main_bits().load[0].clone();
+            self.gc.input.monitor_big_drf_stk = self.dheap.out_main_bits()?.stack_idx as usize;
+            self.gc.input.monitor_big_drf_bits = self.dheap.out_main_bits()?.load[0];
             self.gc.input.monitor_unset_valid = self.dheap.port_a_fire();
             self.gc.input.monitor_unset = self.dheap.input.port_a_bits.stack_idx as usize;
 
@@ -361,20 +361,20 @@ impl HwModule for OurosCore {
             });
 
             if self.dheap.out_main_valid() {
-                match get_dests(&self.dheap.out_main_bits().load) {
+                match get_dests(&self.dheap.out_main_bits()?.load) {
                     DESTs::ToDHeap => {
                         self.buffers_dheap_a_0.input.in_valid = true;
-                        self.buffers_dheap_a_0.input.din = self.dheap.out_main_bits().clone();
+                        self.buffers_dheap_a_0.input.din = self.dheap.out_main_bits()?.clone();
                         self.dheap.input.out_main_ready = self.buffers_dheap_a_0.in_ready();
                     }
                     DESTs::ToALU => {
                         self.buffers_alu_1.input.in_valid = true;
-                        self.buffers_alu_1.input.din = self.dheap.out_main_bits().clone();
+                        self.buffers_alu_1.input.din = self.dheap.out_main_bits()?.clone();
                         self.dheap.input.out_main_ready = self.buffers_alu_1.in_ready();
                     }
                     DESTs::ToReducer => {
                         self.buffers_reducer_1.input.in_valid = true;
-                        self.buffers_reducer_1.input.din = self.dheap.out_main_bits().clone();
+                        self.buffers_reducer_1.input.din = self.dheap.out_main_bits()?.clone();
                         self.dheap.input.out_main_ready = self.buffers_reducer_1.in_ready();
                     }
                 }
@@ -405,7 +405,7 @@ impl HwModule for OurosCore {
             self.buffers_dheap_b_0.input.din = self.reducer.app_bits().clone();
 
             self.buffers_dheap_b_1.input.in_valid = self.dheap.out_big_drf_valid();
-            self.buffers_dheap_b_1.input.din = self.dheap.out_big_drg_bits();
+            self.buffers_dheap_b_1.input.din = self.dheap.out_big_drg_bits()?;
 
             let out_spine = &self.reducer.spine_bits();
             if self.reducer.spine_valid() {
@@ -429,19 +429,19 @@ impl HwModule for OurosCore {
             }
 
             if self.alu.output_valid() {
-                if !is_whnf(&self.alu.output_bits().load) {
+                if !is_whnf(&self.alu.output_bits()?.load) {
                     self.buffers_reducer_2.input.in_valid = true;
-                    self.buffers_reducer_2.input.din = self.alu.output_bits();
+                    self.buffers_reducer_2.input.din = self.alu.output_bits()?;
                     self.alu.input.output_ready = self.buffers_reducer_2.in_ready();
                 } else {
                     self.buffers_dheap_a_2.input.in_valid = true;
-                    self.buffers_dheap_a_2.input.din = self.alu.output_bits();
+                    self.buffers_dheap_a_2.input.din = self.alu.output_bits()?;
                     self.alu.input.output_ready = self.buffers_dheap_a_2.in_ready();
                 }
             }
 
             // when dheap reads an app, search whether that app is still outstanding
-            let search = self.dheap.search();
+            let search = self.dheap.search()?;
             self.reducer.input.search = search;
             self.rings_dheap_b_0.input.search = search;
             self.rings_dheap_b_0.input.in_fire = self.buffers_dheap_b_0.in_fire();
@@ -474,43 +474,44 @@ impl HwModule for OurosCore {
             //     }
             // }
         }
+        Ok(())
     }
 
-    fn tick_children(&mut self) {
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
         let _span = tracy_client::span!("ouros_core: tick_children");
-        self.dheap.tick();
-        self.reducer.tick();
-        self.alu.tick();
-        self.gc.tick();
-        self.abox.tick();
+        self.dheap.tick()?;
+        self.reducer.tick()?;
+        self.alu.tick()?;
+        self.gc.tick()?;
+        self.abox.tick()?;
 
-        self.buffers_dealloc.tick();
-        self.buffers_free_addr.tick();
-        self.buffers_feedback.tick();
+        self.buffers_dealloc.tick()?;
+        self.buffers_free_addr.tick()?;
+        self.buffers_feedback.tick()?;
 
-        self.buffers_dheap_a_0.tick();
-        self.buffers_dheap_a_1.tick();
-        self.buffers_dheap_a_2.tick();
-        self.buffers_dheap_a_3.tick();
-        self.arbiter_dheap_a.tick();
+        self.buffers_dheap_a_0.tick()?;
+        self.buffers_dheap_a_1.tick()?;
+        self.buffers_dheap_a_2.tick()?;
+        self.buffers_dheap_a_3.tick()?;
+        self.arbiter_dheap_a.tick()?;
 
-        self.buffers_dheap_b_0.tick();
-        self.buffers_dheap_b_1.tick();
-        self.arbiter_dheap_b.tick();
+        self.buffers_dheap_b_0.tick()?;
+        self.buffers_dheap_b_1.tick()?;
+        self.arbiter_dheap_b.tick()?;
 
-        self.rings_dheap_b_0.tick();
-        self.rings_dheap_b_1.tick();
+        self.rings_dheap_b_0.tick()?;
+        self.rings_dheap_b_1.tick()?;
 
-        self.buffers_reducer_0.tick();
-        self.buffers_reducer_1.tick();
-        self.buffers_reducer_2.tick();
-        self.buffers_reducer_3.tick();
-        self.arbiter_reducer.tick();
+        self.buffers_reducer_0.tick()?;
+        self.buffers_reducer_1.tick()?;
+        self.buffers_reducer_2.tick()?;
+        self.buffers_reducer_3.tick()?;
+        self.arbiter_reducer.tick()?;
 
-        self.buffers_alu_0.tick();
-        self.buffers_alu_1.tick();
-        self.buffers_alu_2.tick();
-        self.arbiter_alu.tick();
+        self.buffers_alu_0.tick()?;
+        self.buffers_alu_1.tick()?;
+        self.buffers_alu_2.tick()?;
+        self.arbiter_alu.tick()
     }
 }
 

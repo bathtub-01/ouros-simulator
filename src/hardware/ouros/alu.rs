@@ -33,11 +33,11 @@ pub fn compute(op: &AluOp, rev: bool, l: i32, r: i32) -> Atom {
         if b ^ inv {
             // COM(2, 0, [1, 0, 0, 0, 0, 0]) // MicroHs - True
             Com(2, 1) // True, always be placed at 0
-                      // CON(1, 0, 1)
+        // CON(1, 0, 1)
         } else {
             // COM(2, 0, [0, 0, 0, 0, 0, 0]) // MicroHs - False
             Com(2, 0) // False
-                      // CON(1, 0, 0)
+            // CON(1, 0, 0)
         }
     }
 
@@ -110,9 +110,9 @@ impl Alu {
         }
     }
 
-    pub fn output_bits(&self) -> ActiveApp {
+    pub fn output_bits(&self) -> Result<ActiveApp, String> {
         if ALU_PIPE {
-            self.holder.1.clone()
+            Ok(self.holder.1.clone())
         } else {
             self.gen_result()
         }
@@ -122,49 +122,60 @@ impl Alu {
         &self.stat
     }
 
-    fn gen_result(&self) -> ActiveApp {
-        let oprand1: i32 = take_int(&self.input.input_bits.load[1]);
-        let oprand2: i32 = take_int(&self.input.input_bits.load[2]);
-        
-
-        let res: Atom = match &self.input.input_bits.load[0] {
-            Prm(op, inv) => compute(op, *inv, oprand1, oprand2),
-            _ => {
-                panic!("alu: app head is not an primitive op!");
-            }
+    fn gen_result(&self) -> Result<ActiveApp, String> {
+        let get_operand = |i: usize| -> Result<i32, String> {
+            self.input
+                .input_bits
+                .load
+                .get(i)
+                .ok_or(format!("{} operand could not be load", i))
+                .and_then(take_int)
         };
 
-        ActiveApp {
-            stack_idx: self.input.input_bits.stack_idx,
-            load: {
-                let mut arr: App = Default::default();
-                arr[0] = res;
-                for i in 3..APP_LENGTH {
-                    if self.input.input_bits.load[i] != Nop {
-                        arr[i - 2] = self.input.input_bits.load[i].clone();
-                    } else {
-                        break;
-                    }
-                }
-                arr
-            },
-        }
+        let oprand1: i32 = get_operand(1)?;
+        let oprand2: i32 = get_operand(2)?;
+
+        self.input
+            .input_bits
+            .load
+            .first()
+            .ok_or("failed to load input bits".to_string())
+            .and_then(|atom| match atom {
+                Prm(op, inv) => Ok(ActiveApp {
+                    stack_idx: self.input.input_bits.stack_idx,
+                    load: {
+                        let res = compute(op, *inv, oprand1, oprand2);
+                        let mut arr: App = Default::default();
+                        arr[0] = res;
+                        for i in 3..APP_LENGTH {
+                            if self.input.input_bits.load[i] != Nop {
+                                arr[i - 2] = self.input.input_bits.load[i];
+                            } else {
+                                break;
+                            }
+                        }
+                        arr
+                    },
+                }),
+                _ => Err("alu: app head is not an primitive op!".to_string()),
+            })
     }
 }
 
 impl HwModule for Alu {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         if fire(self.holder.0, self.input.output_ready) {
             self.holder.0 = false;
         }
 
         if self.input_fire() {
             self.holder.0 = true;
-            self.holder.1 = self.gen_result();
+            self.holder.1 = self.gen_result()?;
         }
+        Ok(())
     }
 
-    fn update_stat(&mut self) {
+    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
         if self.input_fire() {
             self.stat.reductions += 1;
         }
@@ -185,9 +196,12 @@ impl HwModule for Alu {
                 self.stat.holder_contents.push(None);
             }
         }
+        Ok(())
     }
 
-    fn tick_children(&mut self) {}
+    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+        Ok(())
+    }
 }
 
 #[test]

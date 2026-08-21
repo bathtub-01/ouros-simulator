@@ -776,7 +776,7 @@ pub static ADJOXO: LazyLock<Program> = LazyLock::new(|| { Program {
         ], 
         // AExp61
         vec![ // 102 
-            Err(0),
+            E(0),
         ], 
         // AExp62
         vec![ // 103 

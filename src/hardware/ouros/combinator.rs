@@ -77,18 +77,16 @@ pub static ALL_PATTERNS: LazyLock<Vec<Pat>> = LazyLock::new(|| {
     all
 });
 
-pub fn holes_of(code: u8) -> usize {
-    match code {
+pub fn holes_of(code: u8) -> Result<usize, String> {
+    Ok(match code {
         0 => 1,
         1 => 2,
         2..=3 => 3,
         4..=8 => 4,
         9..=22 => 5,
         23..=63 => 6,
-        _ => {
-            panic!("Unknown code!");
-        }
-    }
+        unknown_code => return Err(format!("{} unknownCode in holes of", unknown_code)),
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -113,14 +111,18 @@ pub struct ParseRes {
     pub app3: Vec<Hole>,
 }
 
-pub fn parse_pat(p: &Pat) -> ParseRes {
+pub fn parse_pat(p: &Pat) -> Result<ParseRes, String> {
     let mut result = ParseRes::default();
-    parse(p, Mode::Spine, &mut 0, &mut 0, &mut result);
-    result
+    parse(p, Mode::Spine, &mut 0, &mut 0, &mut result)?;
+    Ok(result)
 }
 
 pub static DECODE_TABLE: LazyLock<[ParseRes; 64]> = LazyLock::new(|| {
-    let parsed: Vec<ParseRes> = ALL_PATTERNS.iter().map(parse_pat).collect();
+    let parsed: Vec<ParseRes> = ALL_PATTERNS
+        .iter()
+        .map(parse_pat)
+        .collect::<Result<_, _>>()
+        .unwrap_or_default();
     let res: [ParseRes; 64] = parsed
         .try_into()
         .expect("pattern decode table size should match");
@@ -134,7 +136,13 @@ fn parse_pat_spec() {
     }
 }
 
-fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut ParseRes) {
+fn parse(
+    p: &Pat,
+    mode: Mode,
+    arg_count: &mut u8,
+    ptr_count: &mut u8,
+    acc: &mut ParseRes,
+) -> Result<(), String> {
     let mut stack: Vec<Pat> = Vec::new();
     let mut p_it = p;
     let mut res: Vec<Hole> = Vec::new();
@@ -143,7 +151,7 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
     while *p_it != Pat::X {
         match p_it {
             Pat::X => {
-                panic!("parse: strange!");
+                return Err("parse: strange!".to_string());
             }
             Pat::At(l, r) => {
                 stack.push(*r.clone());
@@ -176,7 +184,7 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
                     } else {
                         Mode::App3
                     };
-                    parse(&v, next_mode, arg_count, ptr_count, acc);
+                    parse(&v, next_mode, arg_count, ptr_count, acc)?
                 }
             },
         }
@@ -197,4 +205,5 @@ fn parse(p: &Pat, mode: Mode, arg_count: &mut u8, ptr_count: &mut u8, acc: &mut 
             acc.app3 = res;
         }
     }
+    Ok(())
 }

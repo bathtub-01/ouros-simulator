@@ -18,18 +18,19 @@ pub struct Bumper {
 }
 
 impl HwModule for Bumper {
-    fn update_local(&mut self) {
+    fn update_local(&mut self) -> Result<(), String> {
         // Update local state based on input
         self.running.connect(&self.input.start);
 
         if *self.running.value() {
             self.counter.connect(&(self.counter.value() + 1));
         }
+        Ok(())
     }
 
-    fn tick_children(&mut self) {
-        self.counter.tick();
-        self.running.tick();
+    fn tick_children(&mut self) -> Result<(), String> {
+        self.counter.tick()?;
+        self.running.tick()
     }
 }
 
