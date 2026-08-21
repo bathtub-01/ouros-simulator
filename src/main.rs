@@ -352,7 +352,7 @@ fn run_benchmarks(
         .collect::<Result<_, _>>()
         .map_err(std::io::Error::other)?;
 
-    results.iter().zip(names).for_each(|((core, cycles), n)| {
+    for ((core, cycles), n) in results.iter().zip(names) {
         let stat = core.get_stat();
         println!(
             "{:<12} {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
@@ -363,7 +363,7 @@ fn run_benchmarks(
             stat.peak_workset_size
         );
         writeln!(cycle_file, "{},{}", n, cycles).map_err(std::io::Error::other)?;
-    });
+    }
 
     Ok(())
 }
