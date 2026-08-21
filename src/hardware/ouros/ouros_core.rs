@@ -21,19 +21,20 @@ enum DESTs {
     ToReducer,
 }
 
-fn is_lit_seq(app: &App) -> bool {
-    match app[0] {
-        Atom::Seq(true) => is_lit_atom(&app[2]),
-        _ => false,
-    }
-}
+// fn is_lit_seq(app: &App) -> bool {
+//     match app[0] {
+//         Atom::Seq(true) => is_lit_atom(&app[2]),
+//         _ => false,
+//     }
+// }
 
 fn get_dests(app: &App) -> DESTs {
     if is_prm(&app[0]) && is_int(&app[1]) && is_int(&app[2]) {
         DESTs::ToALU
-    } else if !is_whnf(app) && (is_comb(&app[0]) || is_lit_seq(app) || is_con(&app[0])) {
+    } else if !is_whnf(app) && (is_comb(&app[0]) || is_con(&app[0])) {
         DESTs::ToReducer
     } else {
+        // NOTE [Seq, 1, x] also goes to DHeap...
         DESTs::ToDHeap
     }
 }
@@ -272,15 +273,15 @@ impl HwModule for OurosCore {
             self.buffers_feedback.input.out_ready = self.gc.feedback_ready();
 
             self.gc.input.heap_read_valid = self.dheap.heap_read_valid();
-            self.gc.input.heap_read_bits = self.dheap.heap_read_bits().clone();
+            self.gc.input.heap_read_bits = *self.dheap.heap_read_bits();
             self.dheap.input.read_heap_req_valid = self.gc.read_heap_req_valid();
             self.dheap.input.read_heap_req_addr = self.gc.read_heap_req_addr();
 
             self.gc.input.monitor_valid = self.reducer.spine_valid();
-            self.gc.input.monitor_bits = self.reducer.spine_bits()?;
+            self.gc.input.monitor_bits = self.reducer.spine_bits();
             self.gc.input.monitor_big_drf_valid = self.dheap.out_big_drf_valid();
             self.gc.input.monitor_big_drf_stk = self.dheap.out_main_bits()?.stack_idx as usize;
-            self.gc.input.monitor_big_drf_bits = self.dheap.out_main_bits()?.load[0].clone();
+            self.gc.input.monitor_big_drf_bits = self.dheap.out_main_bits()?.load[0];
             self.gc.input.monitor_unset_valid = self.dheap.port_a_fire();
             self.gc.input.monitor_unset = self.dheap.input.port_a_bits.stack_idx as usize;
 
@@ -401,12 +402,12 @@ impl HwModule for OurosCore {
 
             self.reducer.input.app_ready = self.buffers_dheap_b_0.in_ready();
             self.buffers_dheap_b_0.input.in_valid = self.reducer.app_valid();
-            self.buffers_dheap_b_0.input.din = self.reducer.app_bits()?.clone();
+            self.buffers_dheap_b_0.input.din = self.reducer.app_bits().clone();
 
             self.buffers_dheap_b_1.input.in_valid = self.dheap.out_big_drf_valid();
             self.buffers_dheap_b_1.input.din = self.dheap.out_big_drg_bits()?;
 
-            let out_spine = &self.reducer.spine_bits()?;
+            let out_spine = &self.reducer.spine_bits();
             if self.reducer.spine_valid() {
                 match get_dests(&out_spine.load) {
                     DESTs::ToDHeap => {
@@ -465,6 +466,13 @@ impl HwModule for OurosCore {
             );
             self.peak_workset_size = max(work_set.len(), self.peak_workset_size);
             self.cycle_ctr = 0;
+            // if work_set.len() > 100 && work_set.len() < 200 {
+            //     println!("======== live set ========");
+            //     work_set.sort();
+            //     for addr in work_set {
+            //         println!("{}: {:?}", addr, self.dheap.heap_mem.ram[addr]);
+            //     }
+            // }
         }
         Ok(())
     }

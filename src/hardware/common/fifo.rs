@@ -98,9 +98,10 @@ where
     }
 
     fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
-        Ok(if self.record_stat {
+        if self.record_stat {
             self.stat.length_per_cycle.push(self.queue.len() as u8);
-        })
+        }
+        Ok(())
     }
 
     fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {

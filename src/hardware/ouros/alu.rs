@@ -138,7 +138,7 @@ impl Alu {
         self.input
             .input_bits
             .load
-            .get(0)
+            .first()
             .ok_or("failed to load input bits".to_string())
             .and_then(|atom| match atom {
                 Prm(op, inv) => Ok(ActiveApp {
@@ -149,7 +149,7 @@ impl Alu {
                         arr[0] = res;
                         for i in 3..APP_LENGTH {
                             if self.input.input_bits.load[i] != Nop {
-                                arr[i - 2] = self.input.input_bits.load[i].clone();
+                                arr[i - 2] = self.input.input_bits.load[i];
                             } else {
                                 break;
                             }
@@ -189,13 +189,14 @@ impl HwModule for Alu {
             }
         }
 
-        Ok(if self.stat_detail_lv >= DLV_FULL_LOG {
+        if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.holder.0 {
                 self.stat.holder_contents.push(Some(self.holder.1.clone()));
             } else {
                 self.stat.holder_contents.push(None);
             }
-        })
+        }
+        Ok(())
     }
 
     fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {

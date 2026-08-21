@@ -37,7 +37,7 @@ pub enum Atom {
     Int(i32),
     Prm(AluOp, RevCond),
     Y,
-    Seq(bool),
+    Seq,
     Arg(usize, Unique),
     Try,
     Spe(AluOp, RevCond, SpeCell, SpeCell, usize),
@@ -53,7 +53,7 @@ impl fmt::Display for Atom {
             Atom::Int(n) => write!(f, "INT({})", n),
             Atom::Prm(p, inv) => write!(f, "PRM({:?}, {})", p, inv),
             Atom::Y => write!(f, "Y"),
-            Atom::Seq(evaluated) => write!(f, "SEQ({})", evaluated),
+            Atom::Seq => write!(f, "SEQ"),
             Atom::Arg(arg, _) => write!(f, "ARG({})", arg),
             Atom::E(e) => write!(f, "ERR({})", e),
             Atom::Try => write!(f, "TRY"),
@@ -96,7 +96,7 @@ pub fn arity_of(atom: &Atom) -> u8 {
         Prm(_, _) => 2,
         Int(_) => 1,
         Y => 1,
-        Seq(_) => 2,
+        Seq => 2,
         Try => 2,
         _ => 0,
     }
@@ -137,15 +137,15 @@ pub fn is_whnf(app: &App) -> bool {
 }
 
 pub fn is_seq(atom: &Atom) -> bool {
-    matches!(atom, Atom::Seq(_))
+    matches!(atom, Atom::Seq)
 }
 
-pub fn is_seq_evaluated(atom: &Atom) -> bool {
-    match atom {
-        Atom::Seq(evaluated) => *evaluated,
-        _ => false,
-    }
-}
+// pub fn is_seq_evaluated(atom: &Atom) -> bool {
+//     match atom {
+//         Atom::Seq(evaluated) => *evaluated,
+//         _ => false,
+//     }
+// }
 
 pub fn is_nop(atom: &Atom) -> bool {
     matches!(atom, Atom::Nop)
@@ -198,7 +198,7 @@ pub fn take_int(atom: &Atom) -> Result<i32, String> {
     match *atom {
         Atom::Int(i) => Ok(i),
         _ => {
-            return Err("atom not an INT: {:?}".to_string());
+            Err("atom not an INT: {:?}".to_string())
         }
     }
 }
