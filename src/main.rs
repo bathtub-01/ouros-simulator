@@ -138,7 +138,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let mut buffer_util = File::create(buffer_util_path)?;
     let mut stm_dist = File::create(stm_dist_path)?;
 
-    let (ouros, runtime_cycles) = simulate(prog, u8::MAX, HEAP_SIZE, GC_AT).unwrap();
+    let (ouros, runtime_cycles) =
+        simulate(prog, u8::MAX, HEAP_SIZE, GC_AT).map_err(std::io::Error::other)?;
     let stats = ouros.get_stat();
 
     println!(
@@ -361,7 +362,7 @@ fn run_benchmarks(
             stat.gc_stat.allocations,
             stat.peak_workset_size
         );
-        writeln!(cycle_file, "{},{}", n, cycles).unwrap();
+        writeln!(cycle_file, "{},{}", n, cycles).map_err(std::io::Error::other)?;
     });
 
     Ok(())
@@ -484,21 +485,22 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
         })
         .collect::<Result<_, _>>()?;
 
-    results
-        .into_iter()
-        .zip(names)
-        .for_each(|((cycle,percent, max_pause, points, peak, rounds), n)| {
-            println!(
-                "{:<10} | Peak work set {} | GC rounds {:?} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
-                n, peak, rounds, percent, max_pause, points
-            );
-            writeln!(cycle_file, "{},{}", n, vec_to_string(&cycle)).unwrap();
-            writeln!(gc_percent_file, "{},{}", n, vec_to_string(&percent)).unwrap();
-            writeln!(max_pause_file, "{},{}", n, vec_to_string(&max_pause)).unwrap();
-            writeln!(heap_peak_file, "{},{}", n, vec_to_string(&points)).unwrap();
-            writeln!(gc_rounds_file, "{},{}", n, vec_to_string(&rounds)).unwrap();
-            writeln!(peak_workset_file, "{},{}", n, peak).unwrap();
-        });
+    for ((cycle, percent, max_pause, points, peak, rounds), n) in results.into_iter().zip(names) {
+        println!(
+            "{:<10} | Peak work set {} | GC rounds {:?} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
+            n, peak, rounds, percent, max_pause, points
+        );
+        writeln!(cycle_file, "{},{}", n, vec_to_string(&cycle)).map_err(std::io::Error::other)?;
+        writeln!(gc_percent_file, "{},{}", n, vec_to_string(&percent))
+            .map_err(std::io::Error::other)?;
+        writeln!(max_pause_file, "{},{}", n, vec_to_string(&max_pause))
+            .map_err(std::io::Error::other)?;
+        writeln!(heap_peak_file, "{},{}", n, vec_to_string(&points))
+            .map_err(std::io::Error::other)?;
+        writeln!(gc_rounds_file, "{},{}", n, vec_to_string(&rounds))
+            .map_err(std::io::Error::other)?;
+        writeln!(peak_workset_file, "{},{}", n, peak).map_err(std::io::Error::other)?;
+    }
 
     Ok(())
 }
