@@ -26,7 +26,7 @@ Run the bundled benchmark suite:
 cargo run --release -- --mode=all
 ```
 
-The simulator prints the cycle count, number of reductions, allocations, and peak working-set size for each benchmark. The cycle-count summary is also written to `simu-out/all/cycles.csv`.
+The simulator prints the cycle count, number of reductions, allocations, and peak working-set size for each benchmark.
 
 Run the garbage-collection evaluation:
 
