@@ -64,7 +64,7 @@ The simulator consumes precompiled program images rather than Haskell source dir
 
 https://github.com/bathtub-01/MicroHs
 
-The fork can emit the Rust program-image format used by this simulator. The benchmark sources used for Ouros are under `microbenchmarks-parallel/` in that repository.
+The fork can emit the Rust program-image format used by this simulator. The benchmark sources used for Ouros are under `microbenchmarks/` in that repository.
 
 Build the compiler:
 
