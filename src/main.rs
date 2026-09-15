@@ -1,3 +1,4 @@
+mod error;
 mod hardware;
 mod hw_module;
 
@@ -25,24 +26,28 @@ fn simulate(
     detail_lv: u8,
     heap_size: usize,
     gc_at: f32,
-) -> Result<(OurosCore, u32), String> {
+) -> Result<(OurosCore, u32), error::Simulation> {
     let _span = tracy_client::span!("simulate");
     let mut ouros = OurosCore::new(prog, detail_lv, heap_size, gc_at);
     let mut cycle: u32 = 0;
 
-    ouros.tick()?;
+    ouros.tick().map_err(error::Simulation::StringError)?;
 
     // kick start the machine
     ouros.input.start = true;
-    ouros.tick()?;
+    ouros.tick().map_err(error::Simulation::StringError)?;
     ouros.input.start = false;
 
     loop {
-        assert!(cycle < 1_000_000_000);
+        if cycle >= 1_000_000_000 {
+            return Err(error::Simulation::StringError(
+                "exceeded cycle limit".to_string(),
+            ));
+        }
         if ouros.done() || cycle == 900_000_000 {
             break;
         }
-        ouros.tick()?;
+        ouros.tick().map_err(error::Simulation::StringError)?;
         cycle += 1;
     }
 
@@ -117,7 +122,7 @@ fn percent_of(v: u32, total: u32) -> f32 {
 const DIR_SIMU_OUT: &str = "simu-out/";
 
 /// inspect a program with full stat details
-fn inspect_prog(prog: &Program) -> std::io::Result<()> {
+fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
     let log_path = Path::new(DIR_SIMU_OUT).join("log.txt");
     let threads_path = Path::new(DIR_SIMU_OUT).join("threads.csv");
     let red_rate_path = Path::new(DIR_SIMU_OUT).join("red-rate.csv");
@@ -127,19 +132,20 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     let buffer_util_path = Path::new(DIR_SIMU_OUT).join("buffer-util.csv");
     let stm_dist_path = Path::new(DIR_SIMU_OUT).join("stm-dist.csv");
 
-    fs::create_dir_all(DIR_SIMU_OUT)?;
+    fs::create_dir_all(DIR_SIMU_OUT).map_err(error::InspectionMode::InitIO)?;
 
-    let mut log = File::create(log_path)?;
-    let mut threads = File::create(threads_path)?;
-    let mut red_rate = File::create(red_rate_path)?;
-    let mut alu_rate = File::create(alu_rate_path)?;
-    let mut dhp_rate = File::create(dhp_rate_path)?;
-    let mut gc_mreq_rate = File::create(gc_mreq_rate_path)?;
-    let mut buffer_util = File::create(buffer_util_path)?;
-    let mut stm_dist = File::create(stm_dist_path)?;
+    let mut log = File::create(log_path).map_err(error::InspectionMode::InitIO)?;
+    let mut threads = File::create(threads_path).map_err(error::InspectionMode::InitIO)?;
+    let mut red_rate = File::create(red_rate_path).map_err(error::InspectionMode::InitIO)?;
+    let mut alu_rate = File::create(alu_rate_path).map_err(error::InspectionMode::InitIO)?;
+    let mut dhp_rate = File::create(dhp_rate_path).map_err(error::InspectionMode::InitIO)?;
+    let mut gc_mreq_rate =
+        File::create(gc_mreq_rate_path).map_err(error::InspectionMode::InitIO)?;
+    let mut buffer_util = File::create(buffer_util_path).map_err(error::InspectionMode::InitIO)?;
+    let mut stm_dist = File::create(stm_dist_path).map_err(error::InspectionMode::InitIO)?;
 
     let (ouros, runtime_cycles) =
-        simulate(prog, u8::MAX, HEAP_SIZE, GC_AT).map_err(std::io::Error::other)?;
+        simulate(prog, u8::MAX, HEAP_SIZE, GC_AT).map_err(error::InspectionMode::Simulation)?;
     let stats = ouros.get_stat();
 
     println!(
@@ -148,7 +154,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
     );
 
     // write log
-    writeln!(log, "==================== SUMMARY =====================")?;
+    writeln!(log, "==================== SUMMARY =====================")
+        .map_err(error::InspectionMode::OutputIO)?;
     writeln!(
         log,
         "     Simulation done! Cycles consumed: {}, Avg. threads: {}",
@@ -159,19 +166,22 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
             .iter()
             .fold(0 as f64, |acc, e| acc + e.1 as f64)
             / stats.dheap_stat.work_threads.len() as f64
-    )?;
+    )
+    .map_err(error::InspectionMode::OutputIO)?;
     writeln!(
         log,
         "       Reducer busy cycles: {} ({:.2}%)",
         stats.reducer_stat.busy_cycles,
         percent_of(stats.reducer_stat.busy_cycles, runtime_cycles)
-    )?;
+    )
+    .map_err(error::InspectionMode::OutputIO)?;
     writeln!(
         log,
         "         ALU busy cycles: {} ({:.2}%)",
         stats.alu_stat.busy_cycles,
         percent_of(stats.alu_stat.busy_cycles, runtime_cycles)
-    )?;
+    )
+    .map_err(error::InspectionMode::OutputIO)?;
     writeln!(
         log,
         "Heap memory accesses: {} (a_read {}, a_write {}, b_read {}, b_write {})",
@@ -183,13 +193,16 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         stats.mem_stat.a_writes,
         stats.mem_stat.b_reads,
         stats.mem_stat.b_writes,
-    )?;
+    )
+    .map_err(error::InspectionMode::OutputIO)?;
     writeln!(
         log,
         "heap allocations: {} | heap update: {} | avoided: {}",
         stats.gc_stat.allocations, stats.dheap_stat.heap_update, stats.dheap_stat.update_avoided
-    )?;
-    writeln!(log, "==================== GC STATS ====================")?;
+    )
+    .map_err(error::InspectionMode::OutputIO)?;
+    writeln!(log, "==================== GC STATS ====================")
+        .map_err(error::InspectionMode::OutputIO)?;
     writeln!(
         log,
         "GC rounds: {} | 1-bit ref count recycle: {} | GC feedbacks: {} ({} shadowed)",
@@ -197,7 +210,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         stats.gc_stat.immediate_reuse,
         stats.gc_stat.feedbacks,
         stats.gc_stat.feedbacks_shadowed
-    )?;
+    )
+    .map_err(error::InspectionMode::OutputIO)?;
     writeln!(
         log,
         "GC stalls (Reducer): {} ({:.2}%, longest {}) | GC stalls (DHeap): {} ({:.2}%, longest {}) ",
@@ -207,7 +221,7 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         stats.dheap_stat.gc_stall_cycles,
         percent_of(stats.dheap_stat.gc_stall_cycles, runtime_cycles),
         stats.dheap_stat.gc_longest_stall
-    )?;
+    ).map_err(error::InspectionMode::OutputIO)?;
     writeln!(
         log,
         "peak workset size: {} (heap size {:.2}x) | cycles on marking: {} ({:?})",
@@ -215,7 +229,8 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         (HEAP_SIZE as f32) / (stats.peak_workset_size as f32),
         stats.gc_stat.mark_cycles,
         stats.gc_stat.mark_cycles_move
-    )?;
+    )
+    .map_err(error::InspectionMode::OutputIO)?;
     let gc_mark_reads = stats.gc_stat.cache_hit + stats.gc_stat.cache_miss;
     writeln!(
         log,
@@ -226,8 +241,9 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
         percent_of(stats.gc_stat.cache_hit, gc_mark_reads),
         stats.gc_stat.cache_miss,
         percent_of(stats.gc_stat.cache_miss, gc_mark_reads),
-    )?;
-    writeln!(log, "============= REGISTER CONTENTS ==================")?;
+    ).map_err(error::InspectionMode::OutputIO)?;
+    writeln!(log, "============= REGISTER CONTENTS ==================")
+        .map_err(error::InspectionMode::OutputIO)?;
 
     for (i, s) in stats
         .dheap_stat
@@ -250,13 +266,14 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
             compress(s.1),
             compress(s.2),
             stats.gc_stat.free_len[i]
-        )?;
+        )
+        .map_err(error::InspectionMode::OutputIO)?;
     }
 
     let points_on_graph = 150;
     let chunk_size = stats.dheap_stat.work_threads.len() / points_on_graph;
     // write thread stats
-    writeln!(threads, "time,occupied,active")?;
+    writeln!(threads, "time,occupied,active").map_err(error::InspectionMode::OutputIO)?;
     let threads_data = chunk_threads(&stats.dheap_stat.work_threads, chunk_size);
     for (i, t) in threads_data.iter().enumerate() {
         writeln!(
@@ -265,27 +282,32 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
             i * chunk_size + chunk_size / 2,
             t.0,
             t.1
-        )?;
+        )
+        .map_err(error::InspectionMode::OutputIO)?;
     }
 
     // write busy rate
     let red_rate_data: Vec<f32> = chunk_rate(&stats.reducer_stat.busy_per_cycle, chunk_size);
-    write_busy_rate(&mut red_rate, &red_rate_data, chunk_size)?;
+    write_busy_rate(&mut red_rate, &red_rate_data, chunk_size)
+        .map_err(error::InspectionMode::OutputIO)?;
 
     let alu_rate_data: Vec<f32> = chunk_rate(&stats.alu_stat.busy_per_cycle, chunk_size);
-    write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)?;
+    write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)
+        .map_err(error::InspectionMode::OutputIO)?;
 
     let dhp_rate_data: Vec<f32> = chunk_rate(&stats.dheap_stat.busy_per_cycle, chunk_size);
-    write_busy_rate(&mut dhp_rate, &dhp_rate_data, chunk_size)?;
+    write_busy_rate(&mut dhp_rate, &dhp_rate_data, chunk_size)
+        .map_err(error::InspectionMode::OutputIO)?;
 
     let gc_mreq_rate_data: Vec<f32> = chunk_rate(&stats.gc_stat.m_request_per_cycle, chunk_size);
-    write_busy_rate(&mut gc_mreq_rate, &gc_mreq_rate_data, chunk_size)?;
+    write_busy_rate(&mut gc_mreq_rate, &gc_mreq_rate_data, chunk_size)
+        .map_err(error::InspectionMode::OutputIO)?;
 
     // write buffer utilisation
     writeln!(
         buffer_util,
         "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3"
-    )?;
+    ).map_err(error::InspectionMode::OutputIO)?;
     let buffer_util_data = stats
         .fifos_stat
         .map(|s| chunk_util(&s.length_per_cycle, chunk_size));
@@ -306,16 +328,17 @@ fn inspect_prog(prog: &Program) -> std::io::Result<()> {
             buffer_util_data[9][i],
             buffer_util_data[10][i],
             buffer_util_data[11][i],
-        )?;
+        )
+        .map_err(error::InspectionMode::OutputIO)?;
     }
 
     // write stm distributioin
-    writeln!(stm_dist, "state,cycles")?;
+    writeln!(stm_dist, "state,cycles").map_err(error::InspectionMode::OutputIO)?;
     for (s, c) in ["IDLE", "WHNF", "IA", "RESUME"]
         .iter()
         .zip(stats.dheap_stat.stm_cycles)
     {
-        writeln!(stm_dist, "{},{}", s, c)?;
+        writeln!(stm_dist, "{},{}", s, c).map_err(error::InspectionMode::OutputIO)?;
     }
 
     Ok(())
@@ -337,10 +360,10 @@ const DIR_SIMU_OUT_ALL: &str = "simu-out/all/";
 fn run_benchmarks(
     progs: HashMap<&str, &LazyLock<Program>>,
     is_big_prog: bool,
-) -> std::io::Result<()> {
+) -> Result<(), error::BenchmarkingMode> {
     let cycle_path = Path::new(DIR_SIMU_OUT_ALL).join("cycles.csv");
-    fs::create_dir_all(DIR_SIMU_OUT_ALL)?;
-    let mut cycle_file = File::create(cycle_path)?;
+    fs::create_dir_all(DIR_SIMU_OUT_ALL).map_err(error::BenchmarkingMode::InitIO)?;
+    let mut cycle_file = File::create(cycle_path).map_err(error::BenchmarkingMode::InitIO)?;
 
     let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
     vec.sort_by_key(|(n, _)| *n);
@@ -350,7 +373,7 @@ fn run_benchmarks(
         .progress_count(benchmarks.len() as u64)
         .map(|p| simulate(p, 0, HEAP_SIZE, GC_AT))
         .collect::<Result<_, _>>()
-        .map_err(std::io::Error::other)?;
+        .map_err(error::BenchmarkingMode::Simulation)?;
 
     for ((core, cycles), n) in results.iter().zip(names) {
         let stat = core.get_stat();
@@ -362,14 +385,15 @@ fn run_benchmarks(
             stat.gc_stat.allocations,
             stat.peak_workset_size
         );
-        writeln!(cycle_file, "{},{}", n, cycles).map_err(std::io::Error::other)?;
+        writeln!(cycle_file, "{},{}", n, cycles).map_err(error::BenchmarkingMode::OutputIO)?;
     }
 
     Ok(())
 }
 
-fn run_big_prog(prog: &Program) -> std::io::Result<()> {
-    let (core, cycles) = simulate(prog, 0, BIG_HEAP, GC_AT).map_err(std::io::Error::other)?;
+fn run_big_prog(prog: &Program) -> Result<(), error::SimulationMode> {
+    let (core, cycles) =
+        simulate(prog, 0, BIG_HEAP, GC_AT).map_err(error::SimulationMode::Simulation)?;
     let stat = core.get_stat();
     println!(
         "finished: {:>8} cycles {:>8} reductions {:>8} allocations {:>5} peak work set",
@@ -391,7 +415,7 @@ fn vec_to_string<T: std::fmt::Display>(vec: &[T]) -> String {
 }
 
 /// evaluate the GC behabiour of the benchmarks
-fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
+fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> Result<(), error::GarbageCollectorMode> {
     let cycle_path = Path::new(DIR_SIMU_OUT_GC).join("cycle.csv");
     let gc_percent_path = Path::new(DIR_SIMU_OUT_GC).join("gc_percent.csv");
     let max_pause_path = Path::new(DIR_SIMU_OUT_GC).join("max_pause.csv");
@@ -399,14 +423,20 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
     let peak_workset_path = Path::new(DIR_SIMU_OUT_GC).join("peak_workset.csv");
     let gc_rounds_path = Path::new(DIR_SIMU_OUT_GC).join("gc_rounds.csv");
 
-    fs::create_dir_all(DIR_SIMU_OUT_GC)?;
+    fs::create_dir_all(DIR_SIMU_OUT_GC).map_err(error::GarbageCollectorMode::InitIO)?;
 
-    let mut cycle_file = File::create(cycle_path)?;
-    let mut gc_percent_file = File::create(gc_percent_path)?;
-    let mut max_pause_file = File::create(max_pause_path)?;
-    let mut heap_peak_file = File::create(heap_peak_path)?;
-    let mut peak_workset_file = File::create(peak_workset_path)?;
-    let mut gc_rounds_file = File::create(gc_rounds_path)?;
+    let mut cycle_file = File::create(cycle_path).map_err(error::GarbageCollectorMode::InitIO)?;
+    let mut gc_percent_file =
+        File::create(gc_percent_path).map_err(error::GarbageCollectorMode::InitIO)?;
+
+    let mut max_pause_file =
+        File::create(max_pause_path).map_err(error::GarbageCollectorMode::InitIO)?;
+    let mut heap_peak_file =
+        File::create(heap_peak_path).map_err(error::GarbageCollectorMode::InitIO)?;
+    let mut peak_workset_file =
+        File::create(peak_workset_path).map_err(error::GarbageCollectorMode::InitIO)?;
+    let mut gc_rounds_file =
+        File::create(gc_rounds_path).map_err(error::GarbageCollectorMode::InitIO)?;
 
     let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
     vec.sort_by_key(|(n, _)| *n);
@@ -417,7 +447,7 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
         .map(|p| {
             // run a test to get gc free runtime and an approximate peak work set size
             simulate(p, 0, BIG_HEAP, GC_AT)
-                .map_err(std::io::Error::other)
+                .map_err(error::GarbageCollectorMode::Simulation)
                 .and_then(|(c, _)| {
                     let peak_workset = c.get_stat().peak_workset_size;
                     // run several more rounds with different heap size
@@ -435,9 +465,9 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
                             //     (peak_workset as f32 * pt) as usize
                             // );
                             simulate(p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
-                                .map_err(std::io::Error::other)
+                                .map_err(error::GarbageCollectorMode::Simulation)
                         })
-                        .collect::<std::io::Result<Vec<(OurosCore, u32)>>>()
+                        .collect::<Result<Vec<(OurosCore, u32)>, error::GarbageCollectorMode>>()
                         .map(|res| {
                             let res_cycle: Vec<u32> =
                                 res.iter().map(|(_, cycles)| *cycles).collect();
@@ -483,23 +513,25 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> std::io::Result<()> {
                         })
                 })
         })
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<_, error::GarbageCollectorMode>>()?;
 
     for ((cycle, percent, max_pause, points, peak, rounds), n) in results.into_iter().zip(names) {
         println!(
             "{:<10} | Peak work set {} | GC rounds {:?} | GC% {:?} | Max pause {:?} | Heap size / Peak work set {:?}",
             n, peak, rounds, percent, max_pause, points
         );
-        writeln!(cycle_file, "{},{}", n, vec_to_string(&cycle)).map_err(std::io::Error::other)?;
+        writeln!(cycle_file, "{},{}", n, vec_to_string(&cycle))
+            .map_err(error::GarbageCollectorMode::OutputIO)?;
         writeln!(gc_percent_file, "{},{}", n, vec_to_string(&percent))
-            .map_err(std::io::Error::other)?;
+            .map_err(error::GarbageCollectorMode::OutputIO)?;
         writeln!(max_pause_file, "{},{}", n, vec_to_string(&max_pause))
-            .map_err(std::io::Error::other)?;
+            .map_err(error::GarbageCollectorMode::OutputIO)?;
         writeln!(heap_peak_file, "{},{}", n, vec_to_string(&points))
-            .map_err(std::io::Error::other)?;
+            .map_err(error::GarbageCollectorMode::OutputIO)?;
         writeln!(gc_rounds_file, "{},{}", n, vec_to_string(&rounds))
-            .map_err(std::io::Error::other)?;
-        writeln!(peak_workset_file, "{},{}", n, peak).map_err(std::io::Error::other)?;
+            .map_err(error::GarbageCollectorMode::OutputIO)?;
+        writeln!(peak_workset_file, "{},{}", n, peak)
+            .map_err(error::GarbageCollectorMode::OutputIO)?;
     }
 
     Ok(())
@@ -534,7 +566,16 @@ enum Mode {
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-fn main() -> Result<(), String> {
+fn main() {
+    match run() {
+        Ok(()) => (),
+        Err(e) => {
+            error::report_ouros(e);
+        }
+    }
+}
+
+fn run() -> Result<(), error::Ouros> {
     let _tracy = tracy_client::Client::start();
 
     #[cfg(feature = "dhat-heap")]
@@ -554,7 +595,8 @@ fn main() -> Result<(), String> {
             }
         })
         .build_global()
-        .map_err(|e| e.to_string())
+        .map_err(error::Initialisation::from)
+        .map_err(error::Ouros::from)
         .and({
             let progs = benchmarks!(
                 // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
@@ -573,23 +615,29 @@ fn main() -> Result<(), String> {
                     run_big_prog(
                         progs
                             .get(program_name.as_str())
-                            .ok_or(format!("could not find program named: {}", program_name))?,
+                            .ok_or(error::Initialisation::ProgramNotFound {
+                                program_name: program_name.to_string(),
+                            })
+                            .map_err(error::Ouros::from)?,
                     )
+                    .map_err(error::Ouros::SimulationMode)
                 }
                 Args {
                     mode: Some(Mode::All),
                     ..
-                } => run_benchmarks(progs, false),
+                } => run_benchmarks(progs, false).map_err(error::Ouros::BenchmarkingMode),
                 Args {
                     mode: Some(Mode::Gc),
                     ..
-                } => eval_gc(progs),
+                } => eval_gc(progs).map_err(error::Ouros::GarbageCollectorMode),
                 Args {
                     mode: None,
                     prog_name: None,
                     ..
-                } => Err("need to select a mode or a specific program name to run")?,
+                } => Err(error::Initialisation::InvalidCliArgs {
+                    reason: "need to select a mode or a specific program name to run".to_string(),
+                })
+                .map_err(error::Ouros::from),
             }
-            .map_err(|e| e.to_string())
         })
 }
