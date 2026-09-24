@@ -2,7 +2,7 @@
 
 Cycle-accurate Rust simulator for **Ouros**, a pipelined processor for Haskell based on combinator graph reduction. Ouros uses dataflow-driven execution to pipeline graph reduction and supports automatic fine-grained multithreading and concurrent garbage collection.
 
-This repository contains the simulator used to study cycle counts, reduction activity, allocation behaviour, thread-level activity, and garbage-collection behaviour in the Ouros architecture described in the paper *Ouros: A Dataflow-Driven Processor for Lazy Functional Programming Languages*.
+This repository contains the simulator used to study cycle counts, reduction activity, allocation behaviour, thread-level activity, and garbage-collection behaviour in the Ouros architecture described in the paper [*Ouros: A Dataflow-Driven Processor for Lazy Functional Programming Languages*](https://ieeexplore.ieee.org/document/11695612).
 
 ## Requirements
 
