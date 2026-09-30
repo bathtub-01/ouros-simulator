@@ -16,19 +16,26 @@ pub struct Packet<T: Clone + Default> {
 // <- out valid --
 // -- out ready ->
 #[derive(Default)]
-pub struct RouterPort<T: Clone + Default> {
+pub struct RouterPortIn<T: Clone + Default> {
     pub in_valid: bool,
     pub in_bits: Packet<T>,
     pub out_ready: bool,
 }
 
 #[derive(Default)]
+pub struct RouterPortOut<T: Clone + Default> {
+    pub out_valid: bool,
+    pub out_bits: Packet<T>,
+    pub in_ready: bool,
+}
+
+#[derive(Default)]
 pub struct RouterInput<T: Clone + Default> {
-    pub north: RouterPort<T>,
-    pub south: RouterPort<T>,
-    pub west: RouterPort<T>,
-    pub east: RouterPort<T>,
-    pub local: RouterPort<T>,
+    pub north: RouterPortIn<T>,
+    pub south: RouterPortIn<T>,
+    pub west: RouterPortIn<T>,
+    pub east: RouterPortIn<T>,
+    pub local: RouterPortIn<T>,
 }
 
 ///  T is the type of the *payload* of the noc packets
@@ -46,7 +53,43 @@ pub struct Router<T: Clone + Default, const X: u8, const Y: u8> {
     out_local_arbiter: RArbiter<Packet<T>, 5>,
 }
 
-impl<T: Clone + Default, const X: u8, const Y: u8> Router<T, X, Y> {}
+impl<T: Clone + Default, const X: u8, const Y: u8> Router<T, X, Y> {
+    pub fn new() -> Self {
+        Self {
+            input: Default::default(),
+            in_north_buffer: Fifo::new(),
+            in_south_buffer: Fifo::new(),
+            in_west_buffer: Fifo::new(),
+            in_east_buufer: Fifo::new(),
+            in_local_buffer: Fifo::new(),
+            out_north_arbiter: RArbiter::new(),
+            out_south_arbiter: RArbiter::new(),
+            out_west_arbiter: RArbiter::new(),
+            out_east_arbiter: RArbiter::new(),
+            out_local_arbiter: RArbiter::new(),
+        }
+    }
+
+    pub fn north_out(&self) -> RouterPortOut<T> {
+        todo!()
+    }
+
+    pub fn south_out(&self) -> RouterPortOut<T> {
+        todo!()
+    }
+
+    pub fn west_out(&self) -> RouterPortOut<T> {
+        todo!()
+    }
+
+    pub fn east_out(&self) -> RouterPortOut<T> {
+        todo!()
+    }
+
+    pub fn local_out(&self) -> RouterPortOut<T> {
+        todo!()
+    }
+}
 
 impl<T: Clone + Default, const X: u8, const Y: u8> HwModule for Router<T, X, Y> {
     fn update_local(&mut self) -> Result<(), String> {
