@@ -5,4 +5,6 @@ pub mod common;
 
 pub mod ouros;
 
+pub mod noc;
+
 pub mod utils;
