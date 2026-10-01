@@ -495,6 +495,26 @@ mod tests {
     }
 
     #[test]
+    fn regression_random_4x4_seed_42_no_duplicate_deliveries() {
+        // Same mesh, pattern, seed and lowest offered rate as the reported
+        // `packet 9 received twice` failure; fewer packets keep CI fast.
+        let path = std::env::temp_dir().join(format!(
+            "ouros_noc_eval_regression_{}.csv", std::process::id()
+        ));
+        let config = Config {
+            width: 4, height: 4, packets: 250, rates: vec![0.02],
+            patterns: vec![Pattern::Random], hotspot: (2, 2),
+            hotspot_prob: 0.5, seed: 42, max_cycles: Some(50_000),
+            output_dir: std::env::temp_dir(),
+        };
+        let result = evaluate(&config, Pattern::Random, 0.02, &path).unwrap();
+        assert!(result.mean >= 1.0);
+        let csv = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(csv.lines().count(), 251); // header + exactly 250 packets
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn hotspot_probability_one_targets_hotspot_from_other_nodes() {
         let mut rng = SplitMix64::new(77);
         for source in 0..16 {

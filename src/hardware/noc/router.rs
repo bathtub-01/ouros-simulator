@@ -230,6 +230,22 @@ impl<T: Clone + Default> Router<T> {
             .collect();
     }
 
+    // The arbiters are combinational: their input bundles must correspond to
+    // the *current* FIFO heads whenever a port is observed. In particular,
+    // refreshing only before the FIFO clock edge leaves port getters exposing
+    // yesterday's valid/bits until the following router.tick().
+    fn refresh_arbiter_inputs(&mut self) {
+        let go_to_vec = [
+            self.route_to(self.in_north_buffer.dout()),
+            self.route_to(self.in_south_buffer.dout()),
+            self.route_to(self.in_west_buffer.dout()),
+            self.route_to(self.in_east_buffer.dout()),
+            self.route_to(self.in_local_buffer.dout()),
+        ];
+        self.connect_arbiter_in_bits();
+        self.arbiter_in_valid(&go_to_vec);
+    }
+
     fn buffer_out_ready_xbar(&mut self) {
         let north_arbiter_ready_vec = self.out_north_arbiter.in_ready_vec();
         let south_arbiter_ready_vec = self.out_south_arbiter.in_ready_vec();
@@ -255,31 +271,12 @@ impl<T: Clone + Default> Router<T> {
 
 impl<T: Clone + Default> HwModule for Router<T> {
     fn update_local(&mut self) -> Result<(), String> {
-        // NOTE input assignment order of arbiters matters
-
-        let go_to_vec = [
-            self.route_to(self.in_north_buffer.dout()),
-            self.route_to(self.in_south_buffer.dout()),
-            self.route_to(self.in_west_buffer.dout()),
-            self.route_to(self.in_east_buffer.dout()),
-            self.route_to(self.in_local_buffer.dout()),
-        ];
-
-        // buffer in valid + bits
+        // Prepare the handshakes for the upcoming edge. In particular, feed
+        // the combinational arbiter inputs BEFORE querying their ready vector.
         self.port_to_buffer_in();
-
-        // arbiter out ready
         self.arbiter_out_ready();
-
-        // arbiter in bits
-        self.connect_arbiter_in_bits();
-
-        // arbiter in valid
-        self.arbiter_in_valid(&go_to_vec);
-
-        // buffer out ready
+        self.refresh_arbiter_inputs();
         self.buffer_out_ready_xbar();
-
         Ok(())
     }
 
@@ -294,6 +291,15 @@ impl<T: Clone + Default> HwModule for Router<T> {
         self.out_west_arbiter.tick()?;
         self.out_east_arbiter.tick()?;
         self.out_local_arbiter.tick()?;
+
+        // The FIFOs and arbiter round-robin pointers now contain the NEXT
+        // cycle's state. Propagate the new FIFO heads into the combinational
+        // arbiters immediately, so network.update_local() can snapshot valid
+        // and bits at the next edge without seeing an already-consumed flit.
+        //
+        // This does NOT advance any child or call a child's update_local().
+        // The normal HwModule::tick lifecycle remains unchanged.
+        self.refresh_arbiter_inputs();
         Ok(())
     }
 }

@@ -192,6 +192,7 @@ impl<T: Clone + Default> HwModule for Network<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::router::Packet;
 
     fn cycle(network: &mut Network<u32>) {
         network.tick().unwrap();
@@ -206,7 +207,8 @@ mod tests {
         injector.in_bits.dest = dst;
         injector.in_bits.load = 0x8765_4321;
 
-        mesh.update_local().unwrap();
+        // FIFO readiness is available before the edge; never invoke a
+        // child's lifecycle method manually just to observe this signal.
         assert!(mesh.local_out(src.0 as usize, src.1 as usize).in_ready);
         cycle(&mut mesh);
         mesh.input.local[src.1 as usize][src.0 as usize].in_valid = false;
@@ -219,6 +221,12 @@ mod tests {
                 assert_eq!(output.out_bits.source, src);
                 assert_eq!(output.out_bits.dest, dst);
                 assert_eq!(output.out_bits.load, 0x8765_4321);
+                cycle(&mut mesh); // the sink accepts the packet on this edge
+                for _ in 0..4 {
+                    assert!(!mesh.local_out(dst.0 as usize, dst.1 as usize).out_valid,
+                        "packet replayed after delivery");
+                    cycle(&mut mesh);
+                }
                 return;
             }
             cycle(&mut mesh);
@@ -241,7 +249,7 @@ mod tests {
         let mut mesh = Network::<u32>::new(2, 2);
         mesh.input.local[0][0].in_valid = true;
         mesh.input.local[0][0].in_bits.dest = (2, 0);
-        assert!(mesh.update_local().is_err());
+        assert!(mesh.tick().is_err());
     }
 
     #[test]
@@ -252,16 +260,97 @@ mod tests {
         mesh.input.local[0][0].in_bits.load = 123;
         cycle(&mut mesh);
         mesh.input.local[0][0].in_valid = false;
-        cycle(&mut mesh);
 
+        // The port must reflect the FIFO head IMMEDIATELY after tick(), not
+        // one cycle later. With stale arbiter input this assertion fails.
+        assert!(mesh.local_out(0, 0).out_valid);
         for _ in 0..4 {
             assert!(mesh.local_out(0, 0).out_valid);
             assert_eq!(mesh.local_out(0, 0).out_bits.load, 123);
             cycle(&mut mesh);
         }
         mesh.input.local[0][0].out_ready = true;
+        assert_eq!(mesh.local_out(0, 0).out_bits.load, 123);
         cycle(&mut mesh);
+        // After the consuming edge, the old packet must NOT remain valid.
+        assert!(!mesh.local_out(0, 0).out_valid);
         cycle(&mut mesh);
         assert!(!mesh.local_out(0, 0).out_valid);
+    }
+
+    #[test]
+    fn mesh_conserves_flits_under_contention_and_backpressure() {
+        use std::collections::VecDeque;
+
+        // Each node has many packets, including hotspot traffic and flows
+        // traversing opposite directions. Destination readiness is deliberately
+        // pulsed to create internal contention and full FIFOs.
+        let width = 3;
+        let height = 3;
+        let nodes = width * height;
+        let per_source = 16;
+        let total = nodes * per_source;
+        let mut mesh = Network::<usize>::new(width, height);
+        let mut pending: Vec<VecDeque<Packet<usize>>> =
+            (0..nodes).map(|_| VecDeque::new()).collect();
+        let mut destinations = vec![0; total];
+        for src in 0..nodes {
+            for seq in 0..per_source {
+                let id = src * per_source + seq;
+                let dest = match seq % 4 {
+                    0 | 1 => 4, // center hotspot
+                    2 => (src + nodes - 1) % nodes,
+                    _ => (src + 5) % nodes,
+                };
+                destinations[id] = dest;
+                pending[src].push_back(Packet {
+                    source: ((src % width) as u8, (src / width) as u8),
+                    dest: ((dest % width) as u8, (dest / width) as u8),
+                    load: id,
+                });
+            }
+        }
+
+        let mut seen = vec![false; total];
+        let mut delivered = 0;
+        for cycle_no in 0..20_000 {
+            for src in 0..nodes {
+                let port = &mut mesh.input.local[src / width][src % width];
+                port.out_ready = (cycle_no + src) % 5 >= 2;
+                if let Some(packet) = pending[src].front() {
+                    port.in_valid = true;
+                    port.in_bits = packet.clone();
+                } else {
+                    port.in_valid = false;
+                }
+            }
+
+            // Pre-edge valid && ready represents exactly one transfer.
+            let mut accepted = Vec::new();
+            for node in 0..nodes {
+                let output = mesh.local_out(node % width, node / width);
+                if output.in_ready && !pending[node].is_empty() {
+                    accepted.push(node);
+                }
+                if output.out_valid && mesh.input.local[node / width][node % width].out_ready {
+                    let id = output.out_bits.load;
+                    assert!(id < total, "invalid flit at cycle {cycle_no}");
+                    assert_eq!(destinations[id], node, "misrouted flit {id}");
+                    assert!(!seen[id], "duplicate flit {id} at cycle {cycle_no}");
+                    seen[id] = true;
+                    delivered += 1;
+                }
+            }
+
+            mesh.tick().unwrap();
+            for source in accepted {
+                pending[source].pop_front().unwrap();
+            }
+            if delivered == total {
+                assert!(pending.iter().all(VecDeque::is_empty));
+                return;
+            }
+        }
+        panic!("NoC stalled/lost flits: delivered {delivered} of {total}");
     }
 }
