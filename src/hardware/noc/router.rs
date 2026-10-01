@@ -2,6 +2,7 @@ use crate::hardware::common::arbiter::RArbiter;
 use crate::hardware::common::fifo::Fifo;
 use crate::hw_module::{HwInput, HwModule};
 
+#[derive(PartialEq)]
 enum Goto {
     North,
     South,
@@ -12,6 +13,14 @@ enum Goto {
 
 fn extract_bits<T: Clone + Default>(p: Option<&Packet<T>>) -> Packet<T> {
     p.unwrap_or(&Default::default()).clone()
+}
+
+fn port_to_buffer<T: Clone + Default, const N: usize, const P: bool>(
+    p: &RouterPortIn<T>,
+    b: &mut Fifo<Packet<T>, N, P>,
+) {
+    b.input.in_valid = p.in_valid;
+    b.input.din = p.in_bits.clone();
 }
 
 #[derive(Default, Clone)]
@@ -50,7 +59,7 @@ pub struct RouterInput<T: Clone + Default> {
     pub local: RouterPortIn<T>,
 }
 
-///  T is the type of the *payload* of the noc packets.
+/// T is the type of the *payload* of the noc packets.
 /// X and Y are the router's address in the 2-D mesh.
 pub struct Router<T: Clone + Default, const X: u8, const Y: u8> {
     pub input: RouterInput<T>,
@@ -139,19 +148,32 @@ impl<T: Clone + Default, const X: u8, const Y: u8> Router<T, X, Y> {
     }
 
     // X-first static routing
-    fn route_to(&self, (x, y): (u8, u8)) -> Goto {
+    fn route_to(&self, p: Option<&Packet<T>>) -> Option<Goto> {
         use Goto::*;
-        if x < X {
-            West
-        } else if x > X {
-            East
-        } else if y < Y {
-            South
-        } else if y > Y {
-            North
+        if let Some(packet) = p {
+            let (x, y) = packet.dest;
+            if x < X {
+                Some(West)
+            } else if x > X {
+                Some(East)
+            } else if y < Y {
+                Some(South)
+            } else if y > Y {
+                Some(North)
+            } else {
+                Some(Local)
+            }
         } else {
-            Local
+            None
         }
+    }
+
+    fn port_to_buffer_in(&mut self) {
+        port_to_buffer(&self.input.north, &mut self.in_north_buffer);
+        port_to_buffer(&self.input.south, &mut self.in_south_buffer);
+        port_to_buffer(&self.input.west, &mut self.in_west_buffer);
+        port_to_buffer(&self.input.east, &mut self.in_east_buffer);
+        port_to_buffer(&self.input.local, &mut self.in_local_buffer);
     }
 
     fn connect_arbiter_in_bits(&mut self) {
@@ -168,29 +190,87 @@ impl<T: Clone + Default, const X: u8, const Y: u8> Router<T, X, Y> {
         self.out_east_arbiter.input.in_bits = full_bundle.clone();
         self.out_local_arbiter.input.in_bits = full_bundle.clone();
     }
+
+    fn arbiter_out_ready(&mut self) {
+        self.out_north_arbiter.input.out_ready = self.input.north.out_ready;
+        self.out_south_arbiter.input.out_ready = self.input.south.out_ready;
+        self.out_west_arbiter.input.out_ready = self.input.west.out_ready;
+        self.out_east_arbiter.input.out_ready = self.input.east.out_ready;
+        self.out_local_arbiter.input.out_ready = self.input.local.out_ready;
+    }
+
+    fn arbiter_in_valid(&mut self, go_to_vec: &[Option<Goto>; 5]) {
+        self.out_north_arbiter.input.in_valid = go_to_vec
+            .iter()
+            .map(|goto| *goto == Some(Goto::North))
+            .collect();
+        self.out_south_arbiter.input.in_valid = go_to_vec
+            .iter()
+            .map(|goto| *goto == Some(Goto::South))
+            .collect();
+        self.out_west_arbiter.input.in_valid = go_to_vec
+            .iter()
+            .map(|goto| *goto == Some(Goto::West))
+            .collect();
+        self.out_east_arbiter.input.in_valid = go_to_vec
+            .iter()
+            .map(|goto| *goto == Some(Goto::East))
+            .collect();
+        self.out_local_arbiter.input.in_valid = go_to_vec
+            .iter()
+            .map(|goto| *goto == Some(Goto::Local))
+            .collect();
+    }
+
+    fn buffer_out_ready_xbar(&mut self) {
+        let north_arbiter_ready_vec = self.out_north_arbiter.in_ready_vec();
+        let south_arbiter_ready_vec = self.out_south_arbiter.in_ready_vec();
+        let west_arbiter_ready_vec = self.out_west_arbiter.in_ready_vec();
+        let east_arbiter_ready_vec = self.out_east_arbiter.in_ready_vec();
+        let local_arbiter_ready_vec = self.out_local_arbiter.in_ready_vec();
+
+        let ors = |i: usize| {
+            north_arbiter_ready_vec[i]
+                || south_arbiter_ready_vec[i]
+                || west_arbiter_ready_vec[i]
+                || east_arbiter_ready_vec[i]
+                || local_arbiter_ready_vec[i]
+        };
+
+        self.in_north_buffer.input.out_ready = ors(0);
+        self.in_south_buffer.input.out_ready = ors(1);
+        self.in_west_buffer.input.out_ready = ors(2);
+        self.in_east_buffer.input.out_ready = ors(3);
+        self.in_local_buffer.input.out_ready = ors(4);
+    }
 }
 
 impl<T: Clone + Default, const X: u8, const Y: u8> HwModule for Router<T, X, Y> {
     fn update_local(&mut self) -> Result<(), String> {
-        self.in_north_buffer.input.default_input();
-        self.in_south_buffer.input.default_input();
-        self.in_west_buffer.input.default_input();
-        self.in_east_buffer.input.default_input();
-        self.in_local_buffer.input.default_input();
+        // NOTE input assignment order of arbiters matters
 
+        let go_to_vec = [
+            self.route_to(self.in_north_buffer.dout()),
+            self.route_to(self.in_south_buffer.dout()),
+            self.route_to(self.in_west_buffer.dout()),
+            self.route_to(self.in_east_buffer.dout()),
+            self.route_to(self.in_local_buffer.dout()),
+        ];
+
+        // buffer in valid + bits
+        self.port_to_buffer_in();
+
+        // arbiter out ready
+        self.arbiter_out_ready();
+
+        // arbiter in bits
         self.connect_arbiter_in_bits();
 
-        if self.in_north_buffer.out_valid() {
-            if let Some(packet) = self.in_north_buffer.dout() {
-                match self.route_to(packet.dest) {
-                    Goto::North => todo!(),
-                    Goto::South => todo!(),
-                    Goto::West => todo!(),
-                    Goto::East => todo!(),
-                    Goto::Local => todo!(),
-                }
-            }
-        }
+        // arbiter in valid
+        self.arbiter_in_valid(&go_to_vec);
+
+        // buffer out ready
+        self.buffer_out_ready_xbar();
 
         Ok(())
     }

@@ -1,3 +1,5 @@
+use std::array::from_fn;
+
 use crate::hardware::common::Register;
 use crate::hw_module::{HwInput, HwModule};
 
@@ -37,6 +39,15 @@ impl<T: Clone + Default, const N: usize> RArbiter<T, N> {
             }
         } else {
             false
+        }
+    }
+
+    pub fn in_ready_vec(&self) -> [bool; N] {
+        let select = self.select();
+        if let Some(s) = select {
+            from_fn(|i| if i == s { self.input.out_ready } else { false })
+        } else {
+            [false; N]
         }
     }
 
