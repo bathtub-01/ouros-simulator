@@ -75,9 +75,8 @@ impl<T: Clone + Default, const N: usize> RArbiter<T, N> {
 
 impl<T: Clone + Default, const N: usize> HwModule for RArbiter<T, N> {
     fn update_local(&mut self) -> Result<(), String> {
-        self.select()
-            .map(|p| self.priority.connect(&((p + 1) % N)))
-            .ok_or("Could not select in RArbiter".to_string())
+        self.select().map(|p| self.priority.connect(&((p + 1) % N)));
+        Ok(())
     }
 
     fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {

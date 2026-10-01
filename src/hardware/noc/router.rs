@@ -60,9 +60,11 @@ pub struct RouterInput<T: Clone + Default> {
 }
 
 /// T is the type of the *payload* of the noc packets.
-/// X and Y are the router's address in the 2-D mesh.
-pub struct Router<T: Clone + Default, const X: u8, const Y: u8> {
+/// `x` and `y` are the router's address in the 2-D mesh.
+pub struct Router<T: Clone + Default> {
     pub input: RouterInput<T>,
+    x: u8,
+    y: u8,
     in_north_buffer: Fifo<Packet<T>, 2, false>,
     in_south_buffer: Fifo<Packet<T>, 2, false>,
     in_west_buffer: Fifo<Packet<T>, 2, false>,
@@ -75,10 +77,12 @@ pub struct Router<T: Clone + Default, const X: u8, const Y: u8> {
     out_local_arbiter: RArbiter<Packet<T>, 5>,
 }
 
-impl<T: Clone + Default, const X: u8, const Y: u8> Router<T, X, Y> {
-    pub fn new() -> Self {
+impl<T: Clone + Default> Router<T> {
+    pub fn new(x: u8, y: u8) -> Self {
         Self {
             input: Default::default(),
+            x,
+            y,
             in_north_buffer: Fifo::new(),
             in_south_buffer: Fifo::new(),
             in_west_buffer: Fifo::new(),
@@ -90,6 +94,10 @@ impl<T: Clone + Default, const X: u8, const Y: u8> Router<T, X, Y> {
             out_east_arbiter: RArbiter::new(),
             out_local_arbiter: RArbiter::new(),
         }
+    }
+
+    pub fn coordinates(&self) -> (u8, u8) {
+        (self.x, self.y)
     }
 
     pub fn north_out(&self) -> RouterPortOut<T> {
@@ -152,13 +160,13 @@ impl<T: Clone + Default, const X: u8, const Y: u8> Router<T, X, Y> {
         use Goto::*;
         if let Some(packet) = p {
             let (x, y) = packet.dest;
-            if x < X {
+            if x < self.x {
                 Some(West)
-            } else if x > X {
+            } else if x > self.x {
                 Some(East)
-            } else if y < Y {
+            } else if y < self.y {
                 Some(South)
-            } else if y > Y {
+            } else if y > self.y {
                 Some(North)
             } else {
                 Some(Local)
@@ -245,7 +253,7 @@ impl<T: Clone + Default, const X: u8, const Y: u8> Router<T, X, Y> {
     }
 }
 
-impl<T: Clone + Default, const X: u8, const Y: u8> HwModule for Router<T, X, Y> {
+impl<T: Clone + Default> HwModule for Router<T> {
     fn update_local(&mut self) -> Result<(), String> {
         // NOTE input assignment order of arbiters matters
 
