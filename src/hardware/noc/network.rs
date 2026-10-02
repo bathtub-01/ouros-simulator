@@ -354,3 +354,8 @@ mod tests {
         panic!("NoC stalled/lost flits: delivered {delivered} of {total}");
     }
 }
+
+// Randomized packet conservation, eventual-drain and per-flow FIFO checks.
+#[cfg(test)]
+#[path = "noc_property_tests.rs"]
+mod property_tests;

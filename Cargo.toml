@@ -23,3 +23,6 @@ dhat-heap = ["dep:dhat"]
 
 [package.metadata.verus]
 verify = true
+
+[dev-dependencies]
+proptest = "1"

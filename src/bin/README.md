@@ -62,3 +62,47 @@ separate experiment sets. No warm-up or steady-state window is applied, so the
 statistics include cold start and finite-run drain. For the classic curve,
 plot `offered_rate` against `mean_network_delay` (or `mean_end_to_end` if you
 want saturation-induced waiting at injection queues to be included).
+
+
+
+# Property-based NoC tests (add-on)
+
+This bundle adds `src/hardware/noc/noc_property_tests.rs` and a single
+`#[cfg(test)]` module declaration at the end of `network.rs`. There are **no
+production-behavior changes**.
+
+Add this development dependency to the repository root `Cargo.toml`:
+
+```toml
+[dev-dependencies]
+proptest = "1"
+```
+
+If `[dev-dependencies]` already exists, add just `proptest = "1"` to it.
+
+Run:
+
+```sh
+cargo test --bin noc_eval finite_delivery_and_fifo_order -- --nocapture
+cargo test --bin noc_eval sustained_hotspot_and_same_flow_contention
+```
+
+The standalone `noc_eval` launcher imports `network.rs`, so these tests are
+available with `cargo test --bin noc_eval` as well as any other target that
+includes `network.rs`.
+
+The generated cases cover 1x1 to 4x4 meshes; up to 64 packets; random or
+hotspot destinations; and a finite prefix of randomized sink backpressure.
+Every injected packet carries a unique positive ID. The test checks:
+
+1. A packet can only be received if it was accepted for injection.
+2. Every offered packet gets injected, and every accepted packet is received
+   **exactly once** before a generous bounded timeout.
+3. A packet arrives at its proper local port with unchanged source/dest.
+4. For a particular `(src,dest)` pair, delivered IDs match injection order.
+5. No extra packet appears during an additional idle-drain interval.
+
+As with all randomized testing, passing is evidence, not a formal liveness
+proof. Eventual delivery depends on assumptions such as finite injection,
+receivers eventually asserting ready, fair arbitration, and no router faults.
+The generated receivers all become continuously ready after the stall prefix.
