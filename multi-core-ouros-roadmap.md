@@ -1,0 +1,12 @@
+- [ ] Add `par` to the MicroHs Ouros backend and implement its semantics: create a spark for the first argument in the local spark pool, then continue evaluating the second argument.
+- [ ] Add the local spark-pool runtime model, including spark claiming, useful-spark checks, and spark fizzles.
+- [ ] Introduce multi-core graph references: `GlobalAddr`, local `FetchMe`/`Fetching` proxies, and the rule that ordinary `PTR`s always remain local.
+- [ ] Refactor the simulator into multiple processing elements, each with its own Ouros core state, private heap, spark pool, and network endpoint.
+- [ ] Implement remote demand and ownership transfer with `FETCH`/`PUT`: migrate unevaluated redexes, copy WHNFs, and register remote waiters for Apps already under evaluation.
+- [ ] Implement pull-based work stealing with `FISH`/`NO_WORK`, allowing only `par` sparks to migrate between processing elements.
+- [x] Add the 2-D mesh interconnect with deterministic routing, buffering/backpressure, and forward progress for dependency traffic.
+- [ ] Implement distributed garbage-collection support with `remoteRC`, `RELEASE`, remote-root barriers, and independent per-PE local collection.
+- [ ] Implement multi-core program completion semantics based on `main` reaching its required result on the initial PE.
+- [ ] Build multi-core correctness and stress tests covering sharing, repeated remote demand, migration chains, remote waiters, GC interactions, and stalled remote accesses.
+- [ ] Translate the validated multi-core simulator design into Chisel processing elements, routers, network endpoints, and remote-heap service logic.
+- [ ] Evaluate and tune multi-core Ouros with `par` benchmarks, including scaling, communication overhead, spark usefulness, work-stealing behaviour, and hardware cost.
