@@ -38,6 +38,7 @@ pub enum Atom {
     Prm(AluOp, RevCond),
     Y,
     Seq,
+    Par,
     Arg(usize, Unique),
     Try,
     Spe(AluOp, RevCond, SpeCell, SpeCell, usize),
@@ -54,6 +55,7 @@ impl fmt::Display for Atom {
             Atom::Prm(p, inv) => write!(f, "PRM({:?}, {})", p, inv),
             Atom::Y => write!(f, "Y"),
             Atom::Seq => write!(f, "SEQ"),
+            Atom::Par => write!(f, "PAR"),
             Atom::Arg(arg, _) => write!(f, "ARG({})", arg),
             Atom::E(e) => write!(f, "ERR({})", e),
             Atom::Try => write!(f, "TRY"),
@@ -97,6 +99,7 @@ pub fn arity_of(atom: &Atom) -> u8 {
         Int(_) => 1,
         Y => 1,
         Seq => 2,
+        Par => 2,
         Try => 2,
         _ => 0,
     }
@@ -197,9 +200,7 @@ pub fn is_int(atom: &Atom) -> bool {
 pub fn take_int(atom: &Atom) -> Result<i32, String> {
     match *atom {
         Atom::Int(i) => Ok(i),
-        _ => {
-            Err("atom not an INT: {:?}".to_string())
-        }
+        _ => Err("atom not an INT: {:?}".to_string()),
     }
 }
 

@@ -82,23 +82,6 @@ fn dash_app(app: &App) -> App {
     res
 }
 
-/// setup the evaluated flag in seq if the 1st arg is a literal
-fn mask_seq(app: &App) -> App {
-    // match app[0] {
-    //     Atom::Seq(false) => {
-    //         if is_lit_atom(&app[1]) {
-    //             let mut res: App = app.clone();
-    //             res[0] = Atom::Seq(true);
-    //             res
-    //         } else {
-    //             app.clone()
-    //         }
-    //     }
-    //     _ => app.clone(),
-    // }
-    *app
-}
-
 enum HeapPort {
     A,
     B,
@@ -602,7 +585,7 @@ impl DrfHeap {
     /// search for the addr of the App, which is currently being read by DHeap
     pub fn search(&self) -> Result<usize, String> {
         if self.port_a_fire() && self.get_consumes()? == CONSUMEs::InputIA {
-            let in_app = mask_seq(&self.input.port_a_bits.load);
+            let in_app = self.input.port_a_bits.load;
             // println!(
             //     "stack id : {} addr: {:?}",
             //     self.input.port_a_bits.stack_idx,
@@ -1045,7 +1028,7 @@ impl DrfHeap {
 
     /// consumes the next task; must not use heap port b!
     fn consume_next(&mut self) -> Result<(), String> {
-        let in_app = mask_seq(&self.input.port_a_bits.load);
+        let in_app = self.input.port_a_bits.load;
         self.holder_in.connect(&ActiveApp {
             stack_idx: self.input.port_a_bits.stack_idx,
             load: in_app,
