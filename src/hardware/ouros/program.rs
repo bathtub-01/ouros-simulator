@@ -36,6 +36,8 @@ pub enum Atom {
     Tab(usize, FreeVars),
     Int(i32),
     Prm(AluOp, RevCond),
+    /// AXI4-Lite primitive: false = read, true = write.
+    IO(bool),
     Y,
     Seq,
     Arg(usize, Unique),
@@ -52,6 +54,7 @@ impl fmt::Display for Atom {
             Atom::Com(arity, ptr) => write!(f, "COM({}, {})", arity, ptr),
             Atom::Int(n) => write!(f, "INT({})", n),
             Atom::Prm(p, inv) => write!(f, "PRM({:?}, {})", p, inv),
+            Atom::IO(is_write) => write!(f, "IO({})", is_write),
             Atom::Y => write!(f, "Y"),
             Atom::Seq => write!(f, "SEQ"),
             Atom::Arg(arg, _) => write!(f, "ARG({})", arg),
@@ -94,6 +97,7 @@ pub fn arity_of(atom: &Atom) -> u8 {
         Com(a, _) => *a,
         Con(a, _, _) => *a,
         Prm(_, _) => 2,
+        IO(is_write) => io_arity(*is_write) as u8,
         Int(_) => 1,
         Y => 1,
         Seq => 2,
@@ -213,4 +217,104 @@ pub fn is_try(atom: &Atom) -> bool {
 
 pub fn is_con(atom: &Atom) -> bool {
     matches!(atom, Atom::Con(_, _, _))
+}
+
+/// IO arguments use the existing INT representation (including World).
+/// The address and data are 32-bit bit patterns carried by `i32`; consumers
+/// interpret them as `u32` at the AXI4-Lite boundary. No new World Atom exists.
+/// Read  [IO(false), INT(addr), INT(world)]
+/// Write [IO(true),  INT(addr), INT(data), INT(world)]
+pub const fn io_arity(is_write: bool) -> usize {
+    if is_write { 3 } else { 2 }
+}
+
+pub fn is_io(atom: &Atom) -> bool {
+    matches!(atom, Atom::IO(_))
+}
+
+pub fn io_strict_positions(atom: &Atom) -> &'static [usize] {
+    match atom {
+        Atom::IO(false) => &[1, 2],
+        Atom::IO(true) => &[1, 2, 3],
+        _ => &[],
+    }
+}
+
+/// A partial IO application is a value, not a request. Over-applied requests
+/// are also saturated; trailing arguments must be preserved by the IO unit.
+pub fn io_is_saturated(app: &App) -> bool {
+    match app[0] {
+        Atom::IO(is_write) => app_length(app) > io_arity(is_write),
+        _ => false,
+    }
+}
+
+pub fn io_is_ready(app: &App) -> bool {
+    io_is_saturated(app)
+        && io_strict_positions(&app[0])
+            .iter()
+            .all(|&idx| is_int(&app[idx]))
+}
+
+/// The first as-yet-unboxed strict IO operand after `after`, if any.
+/// Used by DHeap without confusing IO's three possible arguments with PRM's two.
+pub fn io_next_pointer(app: &App, after: usize) -> Option<(usize, usize)> {
+    if !io_is_saturated(app) {
+        return None;
+    }
+    io_strict_positions(&app[0])
+        .iter()
+        .filter(|&&idx| idx > after)
+        .find_map(|&idx| match app[idx] {
+            Atom::Ptr(p, _, false) => Some((idx, p)),
+            _ => None,
+        })
+}
+
+#[cfg(test)]
+mod io_program_tests {
+    use super::*;
+
+    #[test]
+    fn io_arity_partial_and_ready() {
+        let mut app = [Atom::Nop; APP_LENGTH];
+        app[0] = Atom::IO(false);
+        assert_eq!(arity_of(&app[0]), 2);
+        assert!(is_whnf(&app));
+        app[1] = Atom::Int(10);
+        assert!(is_whnf(&app));
+        app[2] = Atom::Int(0);
+        assert!(io_is_saturated(&app));
+        assert!(io_is_ready(&app));
+        assert!(!is_whnf(&app));
+        assert_eq!(format!("{}", app[0]), "IO(false)");
+
+        app[0] = Atom::IO(true);
+        assert_eq!(arity_of(&app[0]), 3);
+        assert!(is_whnf(&app));
+        app[3] = Atom::Ptr(20, false, false);
+        assert!(io_is_saturated(&app));
+        assert!(!io_is_ready(&app));
+        assert_eq!(io_next_pointer(&app, 0), Some((3, 20)));
+        app[3] = Atom::Int(0);
+        assert!(io_is_ready(&app));
+    }
+
+    #[test]
+    fn io_operands_and_over_application() {
+        let mut app = [Atom::Nop; APP_LENGTH];
+        app[0] = Atom::IO(true);
+        app[1] = Atom::Ptr(7, false, false);
+        app[2] = Atom::Ptr(8, false, false);
+        app[3] = Atom::Ptr(9, false, false);
+        app[4] = Atom::Ptr(10, false, false); // non-strict extra argument
+        assert_eq!(io_next_pointer(&app, 0), Some((1, 7)));
+        assert_eq!(io_next_pointer(&app, 1), Some((2, 8)));
+        assert_eq!(io_next_pointer(&app, 2), Some((3, 9)));
+        assert_eq!(io_next_pointer(&app, 3), None);
+        app[1] = Atom::Int(-1);
+        app[2] = Atom::Int(0);
+        app[3] = Atom::Int(1);
+        assert!(io_is_ready(&app));
+    }
 }

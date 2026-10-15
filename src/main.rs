@@ -306,30 +306,23 @@ fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
     // write buffer utilisation
     writeln!(
         buffer_util,
-        "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3"
+        "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_a_4,io_0,io_1,dheap_b_0,dheap_b_1,reducer_0,reducer_1,reducer_2,reducer_3"
     ).map_err(error::InspectionMode::OutputIO)?;
     let buffer_util_data = stats
         .fifos_stat
         .map(|s| chunk_util(&s.length_per_cycle, chunk_size));
     for i in 0..buffer_util_data[0].len() {
+        let cols = buffer_util_data
+            .iter()
+            .map(|series| format!("{:.2}", series[i]))
+            .collect::<Vec<_>>()
+            .join(",");
         writeln!(
             buffer_util,
-            "{},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2}",
+            "{},{}",
             i * chunk_size + chunk_size / 2,
-            buffer_util_data[0][i],
-            buffer_util_data[1][i],
-            buffer_util_data[2][i],
-            buffer_util_data[3][i],
-            buffer_util_data[4][i],
-            buffer_util_data[5][i],
-            buffer_util_data[6][i],
-            buffer_util_data[7][i],
-            buffer_util_data[8][i],
-            buffer_util_data[9][i],
-            buffer_util_data[10][i],
-            buffer_util_data[11][i],
-        )
-        .map_err(error::InspectionMode::OutputIO)?;
+            cols
+        ).map_err(error::InspectionMode::OutputIO)?;
     }
 
     // write stm distributioin

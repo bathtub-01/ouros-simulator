@@ -19,6 +19,7 @@ enum DESTs {
     ToDHeap,
     ToALU,
     ToReducer,
+    ToIO,
 }
 
 // fn is_lit_seq(app: &App) -> bool {
@@ -29,7 +30,9 @@ enum DESTs {
 // }
 
 fn get_dests(app: &App) -> DESTs {
-    if is_prm(&app[0]) && is_int(&app[1]) && is_int(&app[2]) {
+    if io_is_ready(app) {
+        DESTs::ToIO
+    } else if is_prm(&app[0]) && is_int(&app[1]) && is_int(&app[2]) {
         DESTs::ToALU
     } else if !is_whnf(app) && (is_comb(&app[0]) || is_con(&app[0])) {
         DESTs::ToReducer
@@ -42,6 +45,12 @@ fn get_dests(app: &App) -> DESTs {
 #[derive(Default)]
 pub struct OurosCoreInput {
     pub start: bool,
+    /// Boundary to the future IO unit. A request is consumed only on
+    /// io_request_valid() && io_request_ready.
+    pub io_request_ready: bool,
+    /// The IO unit must return the completed Pair with the original stack_idx.
+    pub io_response_valid: bool,
+    pub io_response_bits: ActiveApp,
 }
 
 impl HwInput for OurosCoreInput {}
@@ -51,7 +60,7 @@ pub struct OurosCoreStat<'a> {
     pub dheap_stat: &'a DrfHeapStat,
     pub reducer_stat: &'a ReducerStat,
     pub alu_stat: &'a AluStat,
-    pub fifos_stat: [&'a FIFOStat; 13],
+    pub fifos_stat: [&'a FIFOStat; 16],
     pub mem_stat: &'a DualPortMemStat,
     pub gc_stat: &'a GbgCollectorStat,
     pub peak_workset_size: usize,
@@ -77,7 +86,12 @@ pub struct OurosCore {
     buffers_dheap_a_1: Fifo<ActiveApp, BUFFER_SIZE, false>,
     buffers_dheap_a_2: Fifo<ActiveApp, BUFFER_SIZE, false>,
     buffers_dheap_a_3: Fifo<ActiveApp, BUFFER_SIZE, false>,
-    arbiter_dheap_a: PArbiter<ActiveApp, 4>,
+    buffers_dheap_a_4: Fifo<ActiveApp, BUFFER_SIZE, false>, // completed IO
+    arbiter_dheap_a: PArbiter<ActiveApp, 5>,
+
+    buffers_io_0: Fifo<ActiveApp, BUFFER_SIZE, false>, // DHeap normal output
+    buffers_io_1: Fifo<ActiveApp, BUFFER_SIZE, false>, // DHeap ready request
+    arbiter_io: PArbiter<ActiveApp, 2>,
 
     buffers_dheap_b_0: Fifo<FrozenApp, BUFFER_SIZE, false>,
     buffers_dheap_b_1: Fifo<FrozenApp, BUFFER_SIZE, false>,
@@ -127,7 +141,12 @@ impl OurosCore {
             buffers_dheap_a_1: Fifo::new().record_stat(buffer_usage),
             buffers_dheap_a_2: Fifo::new().record_stat(buffer_usage),
             buffers_dheap_a_3: Fifo::new().record_stat(buffer_usage),
+            buffers_dheap_a_4: Fifo::new().record_stat(buffer_usage),
             arbiter_dheap_a: PArbiter::new(),
+
+            buffers_io_0: Fifo::new().record_stat(buffer_usage),
+            buffers_io_1: Fifo::new().record_stat(buffer_usage),
+            arbiter_io: PArbiter::new(),
 
             buffers_dheap_b_0: Fifo::new().record_stat(buffer_usage),
             buffers_dheap_b_1: Fifo::new().record_stat(buffer_usage),
@@ -149,6 +168,22 @@ impl OurosCore {
         }
     }
 
+    /// Ready/valid interface to the not-yet-implemented IO unit.
+    /// Unlike a Reducer-to-IO bypass, every request has passed DHeap.
+    pub fn io_request_valid(&self) -> bool {
+        self.buffers_io_0.out_valid() || self.buffers_io_1.out_valid()
+    }
+
+    pub fn io_request_bits(&self) -> Option<&ActiveApp> {
+        // Observe the current FIFO state, not the arbiter's combinational
+        // inputs captured during the previous tick. Same priority as arbiter_io.
+        self.buffers_io_0.dout().or_else(|| self.buffers_io_1.dout())
+    }
+
+    pub fn io_response_ready(&self) -> bool {
+        self.buffers_dheap_a_4.in_ready()
+    }
+
     pub fn done(&self) -> bool {
         self.dheap.done()
     }
@@ -166,6 +201,9 @@ impl OurosCore {
                 self.buffers_dheap_a_1.get_stat(),
                 self.buffers_dheap_a_2.get_stat(),
                 self.buffers_dheap_a_3.get_stat(),
+                self.buffers_dheap_a_4.get_stat(),
+                self.buffers_io_0.get_stat(),
+                self.buffers_io_1.get_stat(),
                 self.buffers_dheap_b_0.get_stat(),
                 self.buffers_dheap_b_1.get_stat(),
                 self.buffers_reducer_0.get_stat(),
@@ -220,6 +258,9 @@ impl HwModule for OurosCore {
         self.buffers_dheap_a_1.input.default_input();
         self.buffers_dheap_a_2.input.default_input();
         self.buffers_dheap_a_3.input.default_input();
+        self.buffers_dheap_a_4.input.default_input();
+        self.buffers_io_0.input.default_input();
+        self.buffers_io_1.input.default_input();
         self.buffers_reducer_0.input.default_input();
         self.buffers_reducer_1.input.default_input();
         self.buffers_reducer_2.input.default_input();
@@ -230,6 +271,8 @@ impl HwModule for OurosCore {
 
         // connect start signal
         self.dheap.input.start = self.input.start;
+        self.buffers_dheap_a_4.input.in_valid = self.input.io_response_valid;
+        self.buffers_dheap_a_4.input.din = self.input.io_response_bits.clone();
 
         // this 'kind of' fixes the ring problem
         for _ in 0..2 {
@@ -287,6 +330,7 @@ impl HwModule for OurosCore {
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
+            self.arbiter_io.input.out_ready = self.input.io_request_ready;
             self.arbiter_dheap_b.input.out_ready = self.dheap.port_b_ready();
             self.arbiter_reducer.input.out_ready = self.reducer.in_ready();
             self.arbiter_alu.input.out_ready = self.alu.input_ready();
@@ -298,8 +342,13 @@ impl HwModule for OurosCore {
                     &mut self.buffers_dheap_a_1,
                     &mut self.buffers_dheap_a_2,
                     &mut self.buffers_dheap_a_3,
+                    &mut self.buffers_dheap_a_4,
                 ],
                 &mut self.arbiter_dheap_a,
+            );
+            buffers_arbiter(
+                [&mut self.buffers_io_0, &mut self.buffers_io_1],
+                &mut self.arbiter_io,
             );
             buffers_arbiter(
                 [&mut self.buffers_dheap_b_0, &mut self.buffers_dheap_b_1],
@@ -360,8 +409,24 @@ impl HwModule for OurosCore {
                 }
             });
 
+            // Saturated requests leave DHeap through one of two output paths.
+            // Buffering decouples strict argument processing from the IO unit.
+            self.buffers_io_1.input.in_valid = self.dheap.out_io_valid();
+            self.buffers_io_1.input.din = self.dheap.out_io_bits().clone();
+            self.dheap.input.out_io_ready = self.buffers_io_1.in_ready();
+
             if self.dheap.out_main_valid() {
-                match get_dests(&self.dheap.out_main_bits()?.load) {
+                let dest = if self.dheap.out_main_from_startup() {
+                    DESTs::ToDHeap
+                } else {
+                    get_dests(&self.dheap.out_main_bits()?.load)
+                };
+                match dest {
+                    DESTs::ToIO => {
+                        self.buffers_io_0.input.in_valid = true;
+                        self.buffers_io_0.input.din = self.dheap.out_main_bits()?.clone();
+                        self.dheap.input.out_main_ready = self.buffers_io_0.in_ready();
+                    }
                     DESTs::ToDHeap => {
                         self.buffers_dheap_a_0.input.in_valid = true;
                         self.buffers_dheap_a_0.input.din = self.dheap.out_main_bits()?.clone();
@@ -382,6 +447,13 @@ impl HwModule for OurosCore {
 
             if self.dheap.out_sub_valid() {
                 match get_dests(&self.dheap.out_sub_bits().load) {
+                    DESTs::ToIO => {
+                        // out_sub is produced by a fresh frozen App becoming
+                        // demanded; route this active app through DHeap first.
+                        self.buffers_dheap_a_3.input.in_valid = true;
+                        self.buffers_dheap_a_3.input.din = self.dheap.out_sub_bits().clone();
+                        self.dheap.input.out_sub_ready = self.buffers_dheap_a_3.in_ready();
+                    }
                     DESTs::ToDHeap => {
                         self.buffers_dheap_a_3.input.in_valid = true;
                         self.buffers_dheap_a_3.input.din = self.dheap.out_sub_bits().clone();
@@ -410,6 +482,12 @@ impl HwModule for OurosCore {
             let out_spine = &self.reducer.spine_bits();
             if self.reducer.spine_valid() {
                 match get_dests(&out_spine.load) {
+                    DESTs::ToIO => {
+                        // No Reducer-to-IO shortcut: DHeap must check strictness.
+                        self.buffers_dheap_a_1.input.in_valid = true;
+                        self.buffers_dheap_a_1.input.din = out_spine.clone();
+                        self.reducer.input.spine_ready = self.buffers_dheap_a_1.in_ready();
+                    }
                     DESTs::ToDHeap => {
                         self.buffers_dheap_a_1.input.in_valid = true;
                         self.buffers_dheap_a_1.input.din = out_spine.clone();
@@ -493,7 +571,12 @@ impl HwModule for OurosCore {
         self.buffers_dheap_a_1.tick()?;
         self.buffers_dheap_a_2.tick()?;
         self.buffers_dheap_a_3.tick()?;
+        self.buffers_dheap_a_4.tick()?;
         self.arbiter_dheap_a.tick()?;
+
+        self.buffers_io_0.tick()?;
+        self.buffers_io_1.tick()?;
+        self.arbiter_io.tick()?;
 
         self.buffers_dheap_b_0.tick()?;
         self.buffers_dheap_b_1.tick()?;
@@ -603,3 +686,85 @@ fn traverse(
 //         eprintln! {"passed!"};
 //     }
 // }
+
+#[cfg(test)]
+mod io_routing_tests {
+    use super::*;
+
+    #[test]
+    fn ready_io_has_its_own_destination() {
+        let mut app = [Atom::Nop; APP_LENGTH];
+        app[0] = Atom::IO(false);
+        app[1] = Atom::Int(13);
+        assert!(matches!(get_dests(&app), DESTs::ToDHeap));
+        app[2] = Atom::Ptr(100, false, false);
+        assert!(matches!(get_dests(&app), DESTs::ToDHeap));
+        app[2] = Atom::Int(0);
+        assert!(matches!(get_dests(&app), DESTs::ToIO));
+    }
+
+    #[test]
+    fn io_request_survives_backpressure_and_response_reenters_dheap() {
+        use crate::hw_module::HwModule;
+
+        // A standalone saturated IO App at the root exercises the initial
+        // DHeap input path as well as the ready/valid boundary. This uses an
+        // INT as a synthetic completion solely to test transport; the real
+        // IO unit must return the Pair specified in the roadmap.
+        let prog = Program {
+            heap_img: vec![vec![Atom::IO(false), Atom::Int(13), Atom::Int(0)]],
+            comb_img: vec![],
+        };
+        let mut core = OurosCore::new(&prog, 0, 128, 0.0);
+        core.tick().unwrap();
+        core.input.start = true;
+        core.tick().unwrap();
+        core.input.start = false;
+        for _ in 0..100 {
+            if core.io_request_valid() { break; }
+            core.tick().unwrap();
+        }
+        assert!(core.io_request_valid());
+        let request = core.io_request_bits().unwrap();
+        assert_eq!(request.stack_idx, 0);
+        assert_eq!(request.load[0], Atom::IO(false));
+        assert_eq!(request.load[1], Atom::Int(13));
+        assert_eq!(request.load[2], Atom::Int(0));
+        for _ in 0..8 {
+            core.tick().unwrap(); // not ready; request must be stable
+            assert!(core.io_request_valid());
+        }
+        core.input.io_request_ready = true;
+        core.tick().unwrap();
+        core.input.io_request_ready = false;
+        assert!(!core.io_request_valid()); // exactly one request was consumed
+
+        core.input.io_response_bits = ActiveApp {
+            stack_idx: 0,
+            load: [Atom::Int(42), Atom::Nop, Atom::Nop, Atom::Nop,
+                   Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop],
+        };
+        core.input.io_response_valid = true;
+        assert!(core.io_response_ready());
+        core.tick().unwrap();
+        core.input.io_response_valid = false;
+        for _ in 0..100 {
+            if core.done() { break; }
+            core.tick().unwrap();
+        }
+        assert!(core.done());
+        assert!(!core.io_request_valid());
+    }
+
+    #[test]
+    fn io_response_port_starts_empty() {
+        let prog = Program {
+            heap_img: vec![vec![Atom::Int(10)]],
+            comb_img: vec![],
+        };
+        let core = OurosCore::new(&prog, 0, 128, 0.2);
+        assert!(!core.io_request_valid());
+        assert!(core.io_request_bits().is_none());
+        assert!(core.io_response_ready());
+    }
+}
