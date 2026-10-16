@@ -10,17 +10,17 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
-use std::io::{Error, Write, Read};
+use std::io::{Error, Read, Write};
+use std::path::Path;
 use std::sync::mpsc::{self, TryRecvError};
+use std::sync::LazyLock;
 use std::thread;
 use std::time::Duration;
-use std::path::Path;
-use std::sync::LazyLock;
 
 use hardware::ouros::config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE};
+use hardware::ouros::io_unit::{AxiTiming, UART_RX_DATA, UART_STATUS, UART_TX_DATA};
 use hardware::ouros::ouros_core::OurosCore;
-use hardware::ouros::io_unit::{AxiTiming, UART_RX_DATA, UART_TX_DATA, UART_STATUS};
-use hardware::ouros::program::{ActiveApp, App, Program, app_length};
+use hardware::ouros::program::{app_length, ActiveApp, App, Program};
 
 use hardware::ouros::benchmarks::{self, *};
 use hw_module::HwModule;
@@ -72,13 +72,19 @@ fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
         let stdin = std::io::stdin();
         for next in stdin.lock().bytes() {
             match next {
-                Ok(byte) => { if sender.send(byte).is_err() { break; } }
+                Ok(byte) => {
+                    if sender.send(byte).is_err() {
+                        break;
+                    }
+                }
                 Err(_) => break,
             }
         }
     });
-    eprintln!("Ouros terminal: RX=0x{:02x}, TX=0x{:02x}, STATUS=0x{:02x}; enter text then Return.",
-              UART_RX_DATA, UART_TX_DATA, UART_STATUS);
+    eprintln!(
+        "Ouros terminal: RX=0x{:02x}, TX=0x{:02x}, STATUS=0x{:02x}; enter text then Return.",
+        UART_RX_DATA, UART_TX_DATA, UART_STATUS
+    );
     eprintln!("Simulation stops when heap address 0 reaches WHNF.");
 
     core.tick().map_err(error::TerminalMode::Simulation)?;
@@ -90,7 +96,9 @@ fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
     let mut stdin_closed = false;
     while !core.done() {
         if cycles >= 1_000_000_000 {
-            return Err(error::TerminalMode::Simulation("exceeded cycle limit".into()));
+            return Err(error::TerminalMode::Simulation(
+                "exceeded cycle limit".into(),
+            ));
         }
         // Poll input each simulated cycle; incoming bytes are buffered in
         // the peripheral even when an RX transaction is not outstanding.
@@ -98,14 +106,19 @@ fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
             match receiver.try_recv() {
                 Ok(byte) => core.io_unit_mut().unwrap().controller.push_rx(byte),
                 Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => { stdin_closed = true; break; }
+                Err(TryRecvError::Disconnected) => {
+                    stdin_closed = true;
+                    break;
+                }
             }
         }
         core.tick().map_err(error::TerminalMode::Simulation)?;
         cycles += 1;
         if let Some(first) = core.io_unit_mut().unwrap().controller.pop_tx() {
             let mut stdout = std::io::stdout().lock();
-            stdout.write_all(&[first]).map_err(error::TerminalMode::IO)?;
+            stdout
+                .write_all(&[first])
+                .map_err(error::TerminalMode::IO)?;
             while let Some(byte) = core.io_unit_mut().unwrap().controller.pop_tx() {
                 stdout.write_all(&[byte]).map_err(error::TerminalMode::IO)?;
             }
@@ -113,10 +126,15 @@ fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
         }
         // While waiting for a human at the RX register, relinquish the host
         // CPU periodically. The hardware continues to advance each cycle.
-        if cycles % 10_000 == 0 { thread::sleep(Duration::from_millis(1)); }
+        if cycles % 10_000 == 0 {
+            thread::sleep(Duration::from_millis(1));
+        }
     }
-    eprintln!("\nOuros finished normally after {} cycles ({} IO completions).", cycles,
-              core.io_unit().unwrap().completed);
+    eprintln!(
+        "\nOuros finished normally after {} cycles ({} IO completions).",
+        cycles,
+        core.io_unit().unwrap().completed
+    );
     Ok(())
 }
 
@@ -383,12 +401,8 @@ fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
             .map(|series| format!("{:.2}", series[i]))
             .collect::<Vec<_>>()
             .join(",");
-        writeln!(
-            buffer_util,
-            "{},{}",
-            i * chunk_size + chunk_size / 2,
-            cols
-        ).map_err(error::InspectionMode::OutputIO)?;
+        writeln!(buffer_util, "{},{}", i * chunk_size + chunk_size / 2, cols)
+            .map_err(error::InspectionMode::OutputIO)?;
     }
 
     // write stm distributioin
@@ -665,6 +679,7 @@ fn run() -> Result<(), error::Ouros> {
                 // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
                 // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
                 ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
+                UART
             ); // ignoring TREESUM as it does not have much garbage..
 
             match parsed_args {
@@ -673,19 +688,22 @@ fn run() -> Result<(), error::Ouros> {
                     prog_name: Some(program_name),
                     ..
                 } => run_terminal(
-                    progs.get(program_name.as_str())
+                    progs
+                        .get(program_name.as_str())
                         .ok_or(error::Initialisation::ProgramNotFound {
                             program_name: program_name.to_string(),
                         })
                         .map_err(error::Ouros::from)?,
-                ).map_err(error::Ouros::TerminalMode),
+                )
+                .map_err(error::Ouros::TerminalMode),
                 Args {
                     mode: Some(Mode::Terminal),
                     prog_name: None,
                     ..
                 } => Err(error::Initialisation::InvalidCliArgs {
                     reason: "--mode=terminal requires --prog-name=<compiled-program>".into(),
-                }).map_err(error::Ouros::from),
+                })
+                .map_err(error::Ouros::from),
                 Args {
                     prog_name: Some(program_name),
                     ..

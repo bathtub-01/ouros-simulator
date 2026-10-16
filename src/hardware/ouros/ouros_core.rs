@@ -89,7 +89,7 @@ pub struct OurosCore {
     buffers_dheap_a_1: Fifo<ActiveApp, BUFFER_SIZE, false>,
     buffers_dheap_a_2: Fifo<ActiveApp, BUFFER_SIZE, false>,
     buffers_dheap_a_3: Fifo<ActiveApp, BUFFER_SIZE, false>,
-    buffers_dheap_a_4: Fifo<ActiveApp, BUFFER_SIZE, false>, // completed IO
+    buffers_dheap_a_4: Fifo<ActiveApp, BUFFER_SIZE, false>, // WHNF IO completion
     arbiter_dheap_a: PArbiter<ActiveApp, 5>,
 
     buffers_io_0: Fifo<ActiveApp, BUFFER_SIZE, false>, // DHeap normal output
@@ -107,7 +107,8 @@ pub struct OurosCore {
     buffers_reducer_1: Fifo<ActiveApp, BUFFER_SIZE, false>,
     buffers_reducer_2: Fifo<ActiveApp, BUFFER_SIZE, false>,
     buffers_reducer_3: Fifo<ActiveApp, BUFFER_SIZE, false>,
-    arbiter_reducer: PArbiter<ActiveApp, 4>,
+    buffers_reducer_4: Fifo<ActiveApp, BUFFER_SIZE, false>, // reducible IO completion
+    arbiter_reducer: PArbiter<ActiveApp, 5>,
 
     buffers_alu_0: Fifo<ActiveApp, BUFFER_SIZE, false>,
     buffers_alu_1: Fifo<ActiveApp, BUFFER_SIZE, false>,
@@ -163,6 +164,7 @@ impl OurosCore {
             buffers_reducer_1: Fifo::new().record_stat(buffer_usage),
             buffers_reducer_2: Fifo::new().record_stat(buffer_usage),
             buffers_reducer_3: Fifo::new().record_stat(buffer_usage),
+            buffers_reducer_4: Fifo::new(),
             arbiter_reducer: PArbiter::new(),
 
             buffers_alu_0: Fifo::new().record_stat(buffer_usage),
@@ -200,8 +202,26 @@ impl OurosCore {
             .or_else(|| self.buffers_io_1.dout())
     }
 
+    /// A completed IO reduction returns a Pair application. It may still be
+    /// reducible (e.g. its case continuation is already applied), so choose
+    /// the same destination as any other App instead of always using DHeap.
+    fn io_response_to_reducer(&self) -> bool {
+        let response = if let Some(io) = &self.io_unit {
+            io.response_bits()
+        } else if self.input.io_response_valid {
+            Some(&self.input.io_response_bits)
+        } else {
+            None
+        };
+        response.is_some_and(|app| matches!(get_dests(&app.load), DESTs::ToReducer))
+    }
+
     pub fn io_response_ready(&self) -> bool {
-        self.buffers_dheap_a_4.in_ready()
+        if self.io_response_to_reducer() {
+            self.buffers_reducer_4.in_ready()
+        } else {
+            self.buffers_dheap_a_4.in_ready()
+        }
     }
 
     pub fn done(&self) -> bool {
@@ -230,6 +250,8 @@ impl OurosCore {
                 self.buffers_reducer_1.get_stat(),
                 self.buffers_reducer_2.get_stat(),
                 self.buffers_reducer_3.get_stat(),
+                // Keep the existing 16-column profiling CSV interface stable.
+                // The new IO->Reducer FIFO is not included in these stats.
             ],
             mem_stat: self.dheap.get_mem_stat(),
             gc_stat: self.gc.get_stat(),
@@ -285,18 +307,31 @@ impl HwModule for OurosCore {
         self.buffers_reducer_1.input.default_input();
         self.buffers_reducer_2.input.default_input();
         self.buffers_reducer_3.input.default_input();
+        self.buffers_reducer_4.input.default_input();
         self.buffers_alu_0.input.default_input();
         self.buffers_alu_1.input.default_input();
         self.buffers_alu_2.input.default_input();
 
         // connect start signal
         self.dheap.input.start = self.input.start;
-        if let Some(io) = &self.io_unit {
-            self.buffers_dheap_a_4.input.in_valid = io.response_valid();
-            self.buffers_dheap_a_4.input.din = io.response_bits().cloned().unwrap_or_default();
+        // The IO response is held until the chosen destination FIFO accepts
+        // it. A fully applied Pair is a Reducer input; a WHNF Pair must go
+        // through DHeap to finish (or wake) the current thread.
+        let response = if let Some(io) = &self.io_unit {
+            if io.response_valid() { io.response_bits() } else { None }
+        } else if self.input.io_response_valid {
+            Some(&self.input.io_response_bits)
         } else {
-            self.buffers_dheap_a_4.input.in_valid = self.input.io_response_valid;
-            self.buffers_dheap_a_4.input.din = self.input.io_response_bits.clone();
+            None
+        };
+        if let Some(response) = response {
+            if matches!(get_dests(&response.load), DESTs::ToReducer) {
+                self.buffers_reducer_4.input.in_valid = true;
+                self.buffers_reducer_4.input.din = response.clone();
+            } else {
+                self.buffers_dheap_a_4.input.in_valid = true;
+                self.buffers_dheap_a_4.input.din = response.clone();
+            }
         }
 
         // this 'kind of' fixes the ring problem
@@ -388,6 +423,7 @@ impl HwModule for OurosCore {
                     &mut self.buffers_reducer_1,
                     &mut self.buffers_reducer_2,
                     &mut self.buffers_reducer_3,
+                    &mut self.buffers_reducer_4,
                 ],
                 &mut self.arbiter_reducer,
             );
@@ -566,6 +602,7 @@ impl HwModule for OurosCore {
 
         // The transaction sees the same old-state handshake as arbiter_io.
         // tick_children advances both the FIFO and IO-unit states together.
+        let io_response_ready = self.io_response_ready();
         if let Some(io) = self.io_unit.as_mut() {
             io.input.request_valid = self.arbiter_io.out_valid();
             io.input.request_bits = self
@@ -573,7 +610,7 @@ impl HwModule for OurosCore {
                 .out_bits(self.arbiter_io.select())
                 .cloned()
                 .unwrap_or_default();
-            io.input.response_ready = self.buffers_dheap_a_4.in_ready();
+            io.input.response_ready = io_response_ready;
         }
 
         // Pending IO Apps (and completed Apps under response backpressure)
@@ -587,6 +624,7 @@ impl HwModule for OurosCore {
             self.buffers_io_0.dout(),
             self.buffers_io_1.dout(),
             self.buffers_dheap_a_4.dout(),
+            self.buffers_reducer_4.dout(),
         ] {
             if let Some(app) = pending {
                 io_roots.push(app.clone());
@@ -666,6 +704,7 @@ impl HwModule for OurosCore {
         self.buffers_reducer_1.tick()?;
         self.buffers_reducer_2.tick()?;
         self.buffers_reducer_3.tick()?;
+        self.buffers_reducer_4.tick()?;
         self.arbiter_reducer.tick()?;
 
         self.buffers_alu_0.tick()?;
@@ -778,6 +817,70 @@ mod io_routing_tests {
         assert!(matches!(get_dests(&app), DESTs::ToDHeap));
         app[2] = Atom::Int(0);
         assert!(matches!(get_dests(&app), DESTs::ToIO));
+    }
+
+    #[test]
+    fn io_completion_selects_reducer_or_dheap_by_shape() {
+        use crate::hw_module::HwModule;
+
+        let prog = Program {
+            heap_img: vec![vec![Atom::Int(0)]],
+            comb_img: vec![],
+        };
+        // A read result with an already-applied continuation: the exact
+        // over-applied COM that previously caused select_1st_arg to fail.
+        let active_pair = ActiveApp {
+            stack_idx: 2,
+            load: [
+                Atom::Com(3, 2), Atom::Int(106), Atom::Int(1993),
+                Atom::Ptr(11, true, false), Atom::Ptr(9, true, false),
+                Atom::Nop, Atom::Nop, Atom::Nop,
+            ],
+        };
+        let mut core = OurosCore::new(&prog, 0, 128, 0.0);
+        core.input.io_response_bits = active_pair.clone();
+        core.input.io_response_valid = true;
+        assert!(core.io_response_to_reducer());
+        assert!(core.io_response_ready());
+        core.tick().unwrap();
+        assert_eq!(core.buffers_reducer_4.dout().unwrap().stack_idx, 2);
+        assert_eq!(core.buffers_reducer_4.dout().unwrap().load, active_pair.load);
+        assert!(!core.buffers_dheap_a_4.out_valid());
+
+        // The same Pair without a continuation is WHNF, and must return to
+        // DHeap to complete its thread instead of entering the Reducer.
+        let mut core = OurosCore::new(&prog, 0, 128, 0.0);
+        core.input.io_response_bits = ActiveApp {
+            stack_idx: 0,
+            load: [Atom::Com(3, 2), Atom::Int(106), Atom::Int(1993),
+                   Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop],
+        };
+        core.input.io_response_valid = true;
+        assert!(!core.io_response_to_reducer());
+        assert!(core.io_response_ready());
+        core.tick().unwrap();
+        assert!(core.buffers_dheap_a_4.out_valid());
+        assert!(!core.buffers_reducer_4.out_valid());
+    }
+
+    #[test]
+    fn io_completion_uses_selected_fifo_backpressure() {
+        let prog = Program {
+            heap_img: vec![vec![Atom::Int(0)]],
+            comb_img: vec![],
+        };
+        let mut core = OurosCore::new(&prog, 0, 128, 0.0);
+        core.input.io_response_bits = ActiveApp {
+            stack_idx: 0,
+            load: [Atom::Com(3, 2), Atom::Int(10), Atom::Int(20),
+                   Atom::Int(30), Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop],
+        };
+        core.input.io_response_valid = true;
+        for _ in 0..BUFFER_SIZE {
+            core.buffers_reducer_4.queue.push_back(ActiveApp::default());
+        }
+        assert!(!core.io_response_ready());
+        assert!(core.buffers_dheap_a_4.in_ready());
     }
 
     #[test]
@@ -908,7 +1011,7 @@ mod integrated_io_tests {
         assert_eq!(
             &result[..3],
             &[
-                Atom::Con(3, 2, 0),
+                Atom::Com(3, 2),
                 Atom::Int(0x9876_1234u32 as i32),
                 Atom::Int(7)
             ]
@@ -931,7 +1034,7 @@ mod integrated_io_tests {
         assert_eq!(core.io_unit().unwrap().controller.register(0x20), u32::MAX);
         assert_eq!(
             &core.dheap.input.port_a_bits.load[..3],
-            &[Atom::Con(3, 2, 0), Atom::Int(0), Atom::Int(17)]
+            &[Atom::Com(3, 2), Atom::Com(1, 0), Atom::Int(17)]
         );
     }
 
@@ -998,6 +1101,38 @@ mod integrated_io_tests {
         let monitor = &core.gc.reg_monitors.value()[0];
         assert!(monitor.0);
         assert_eq!(monitor.1[3], Atom::Ptr(1, false, false));
+    }
+
+    #[test]
+    fn over_applied_read_completion_reaches_reducer() {
+        // Full IO-unit path (not just externally injected response bits).
+        // Stop as soon as the completed application is buffered for Reducer;
+        // no compiler-generated combinator table is needed for this test.
+        let mut heap_img = vec![vec![Atom::Int(0)]; 12];
+        heap_img[0] = vec![
+            Atom::IO(false), Atom::Int(0x20), Atom::Int(1993),
+            Atom::Ptr(11, true, false), Atom::Ptr(9, true, false),
+        ];
+        let prog = Program { heap_img, comb_img: vec![] };
+        let mut core = OurosCore::new(&prog, 0, 256, 0.0);
+        core.enable_io(AxiTiming::default());
+        core.io_unit_mut().unwrap().controller.set_register(0x20, 106);
+        core.tick().unwrap();
+        core.input.start = true;
+        core.tick().unwrap();
+        core.input.start = false;
+        for _ in 0..500 {
+            core.tick().unwrap();
+            if core.buffers_reducer_4.out_valid() { break; }
+        }
+        let forwarded = core.buffers_reducer_4.dout()
+            .expect("over-applied IO result never reached Reducer FIFO");
+        assert_eq!(forwarded.stack_idx, 0);
+        assert_eq!(&forwarded.load[..5], &[
+            Atom::Com(3, 2), Atom::Int(106), Atom::Int(1993),
+            Atom::Ptr(11, true, false), Atom::Ptr(9, true, false),
+        ]);
+        assert!(!core.buffers_dheap_a_4.out_valid());
     }
 
     #[test]

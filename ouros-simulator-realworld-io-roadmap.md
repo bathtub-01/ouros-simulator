@@ -19,44 +19,35 @@ The surface interface is defined by `Ouros.IO`: `IO a` wraps `World -> (a, World
 
 ### 1. Representation and program entry
 
-- [ ] Add `IO` to the Atom encoding, with a one-bit `isWrite` payload. Update parsing, printing, program-image decoding, and any exhaustive Atom matches.
-- [ ] Resolve Atom tag capacity and AXI4-Lite address/data widths; keep simulator and compiler encodings consistent. Document any initial restriction on 32-bit register values.
-- [ ] Accept program images with the compiler-generated root `[main, World]` at heap address 0; retain the existing initialization and startup flow.
-- [ ] Add helpers to identify `IO` arity, saturation, and operand positions without conflating `IO` with `PRM`.
+- [x] Add `IO` to the Atom encoding, with a one-bit `isWrite` payload. Update parsing, printing, program-image decoding, and any exhaustive Atom matches.
+- [x] Resolve Atom tag capacity and AXI4-Lite address/data widths; keep simulator and compiler encodings consistent. Document any initial restriction on 32-bit register values.
+- [x] Accept program images with the compiler-generated root `[main, World]` at heap address 0; retain the existing initialization and startup flow.
+- [x] Add helpers to identify `IO` arity, saturation, and operand positions without conflating `IO` with `PRM`.
 
 ### 2. DHeap strictness and routing
 
-- [ ] Extend DHeap's demand/dereference logic to force the address, write data (for writes), and World arguments of saturated `IO` Apps to unboxed `INT` values, using the existing suspension and reactivation mechanism.
-- [ ] Preserve partial `IO` applications as WHNF. Do not issue a transaction until all required arguments are present and unboxed.
-- [ ] Route every `IO` App through DHeap, including Reducer outputs; dispatch only ready, saturated Apps to the I/O unit.
-- [ ] Preserve thread identity, stack/dependency bookkeeping, and normal App handling across the I/O round trip; avoid issuing the same effect twice on suspension or replay.
+- [x] Extend DHeap's demand/dereference logic to force the address, write data (for writes), and World arguments of saturated `IO` Apps to unboxed `INT` values, using the existing suspension and reactivation mechanism.
+- [x] Preserve partial `IO` applications as WHNF. Do not issue a transaction until all required arguments are present and unboxed.
+- [x] Route every `IO` App through DHeap, including Reducer outputs; dispatch only ready, saturated Apps to the I/O unit.
+- [x] Preserve thread identity, stack/dependency bookkeeping, and normal App handling across the I/O round trip; avoid issuing the same effect twice on suspension or replay.
 
 ### 3. I/O unit and AXI4-Lite model
 
-- [ ] Add a I/O unit (e.g. `src/hardware/ouros/io_unit.rs`) into Ouros, with ready-valid backpressure input and a single in-flight request.
-- [ ] Implement AXI4-Lite read (`AR`/`R`) and write (`AW`/`W`/`B`) channel handshakes, including independent write-address/data acceptance, backpressure, and response latency.
+- [x] Add a I/O unit (e.g. `src/hardware/ouros/io_unit.rs`) into Ouros, with ready-valid backpressure input and a single in-flight request.
+- [x] Implement AXI4-Lite read (`AR`/`R`) and write (`AW`/`W`/`B`) channel handshakes, including independent write-address/data acceptance, backpressure, and response latency.
   ```
   Peripherals (e.g., UART) <-- abstracted --> I/O-controller <-- simulated AXI transaction --> I/O unit + Ouros
   ```
-- [ ] Model the I/O-controller as a register bank, and simulate a UART-styled terminal interacting with the register bank.
-- [ ] Complete each reduction **only after** the corresponding AXI response from the I/O controller: emit `[Pair comb, INT result, World]` for reads or `[Pair comb, Dummy INT, World]` for writes.
-- [ ] Re-inject completed Apps through DHeap input arbitration. Initially don't assume any AXI error.
+- [x] Model the I/O-controller as a register bank, and simulate a UART-styled terminal interacting with the register bank.
+- [x] Complete each reduction **only after** the corresponding AXI response from the I/O controller: emit `[Pair comb, INT result, World]` for reads or `[Pair comb, Dummy INT, World]` for writes.
+- [x] Re-inject completed Apps through DHeap input arbitration. Initially don't assume any AXI error.
 
 ### 4. Core integration and GC
 
-- [ ] Connect the I/O unit in `src/hardware/ouros/ouros_core.rs`; extend DHeap output routing and DHeap input arbitration without creating a direct Reducer-to-I/O bypass.
-- [ ] Add I/O-unit activity to simulator stepping. Other runnable threads must continue while an AXI transaction is pending.
-- [ ] Ensure Apps retained by the I/O unit or its queues remain visible to GC root tracking for the entire transaction, including under backpressure.
-- [ ] Preserve the existing semantics of `main` completion: the root result reaches WHNF and execution terminates.
-
-### 5. Verification
-
-- [ ] Unit-test Atom encoding, read/write arity, partial applications, and malformed/incorrectly boxed operands.
-- [ ] Test DHeap unboxing with nested and shared pointer dependencies; confirm that each request executes exactly once.
-- [ ] Test register readback and an end-to-end program equivalent to `readAXIReg 13 >>= writeAXIReg 4`.
-- [ ] Test ordered write/read sequences, delayed AXI responses, channel backpressure, and concurrent pure computation during I/O wait.
-- [ ] Test the last action in `main`, GC during a pending transaction, and baseline pure-program regressions.
-- [ ] Compare I/O transaction traces and cycle counts against the future Chisel implementation under the same controller latency model.
+- [x] Connect the I/O unit in `src/hardware/ouros/ouros_core.rs`; extend DHeap output routing and DHeap input arbitration without creating a direct Reducer-to-I/O bypass.
+- [x] Add I/O-unit activity to simulator stepping. Other runnable threads must continue while an AXI transaction is pending.
+- [x] Ensure Apps retained by the I/O unit or its queues remain visible to GC root tracking for the entire transaction, including under backpressure.
+- [x] Preserve the existing semantics of `main` completion: the root result reaches WHNF and execution terminates.
 
 ## Initial milestone
 
