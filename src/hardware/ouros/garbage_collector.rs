@@ -82,6 +82,8 @@ pub struct GbgCollectorInput {
     pub monitor_big_drf_stk: usize,
     pub monitor_unset_valid: bool,
     pub monitor_unset: usize,
+    /// All IO Apps held by the IO unit or its ready/valid buffers.
+    pub io_roots: Vec<ActiveApp>,
 }
 
 impl HwInput for GbgCollectorInput {}
@@ -648,6 +650,13 @@ impl HwModule for GbgCollector {
                 self.reg_monitors.input[self.input.monitor_bits.stack_idx as usize] =
                     (true, self.input.monitor_bits.load.clone());
             }
+            // IO retains its operand App through arbitrarily long AXI
+            // backpressure. The latest IO App takes priority over a stale
+            // Reducer monitor for the same logical stack.
+            for pending in &self.input.io_roots {
+                self.reg_monitors.input[pending.stack_idx as usize] =
+                    (true, pending.load);
+            }
         }
 
         let real_freelist_head: usize = if *self.reg_free_drawed.value() {
@@ -841,5 +850,34 @@ impl HwModule for GbgCollector {
         self.reg_app_idx.tick()?;
         self.reg_monitors.tick()?;
         self.reg_monitor_idx.tick()
+    }
+}
+
+#[test]
+fn gc_spec_init() {
+    let gc = GbgCollector::new(100, 8).init_freelist();
+    println!("{:#?}", gc.gc_mem.ram);
+}
+
+#[test]
+fn gc_spec_draw() {
+    let size = 1024;
+    let from = 42;
+    let mut gc = GbgCollector::new(size, from).init_freelist();
+    let mut it = from;
+    use rand::Rng;
+    let mut rng = rand::rng();
+
+    gc.tick();
+    while it < size {
+        let draw: bool = rng.random();
+        if draw {
+            gc.input.addr_out_ready = true;
+            assert_eq!(gc.addr_out_bits(), it);
+            it = it + 1;
+        } else {
+            gc.input.addr_out_ready = false;
+        }
+        gc.tick();
     }
 }

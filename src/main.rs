@@ -10,12 +10,16 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
-use std::io::{Error, Write};
+use std::io::{Error, Write, Read};
+use std::sync::mpsc::{self, TryRecvError};
+use std::thread;
+use std::time::Duration;
 use std::path::Path;
 use std::sync::LazyLock;
 
 use hardware::ouros::config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE};
 use hardware::ouros::ouros_core::OurosCore;
+use hardware::ouros::io_unit::{AxiTiming, UART_RX_DATA, UART_TX_DATA, UART_STATUS};
 use hardware::ouros::program::{ActiveApp, App, Program, app_length};
 
 use hardware::ouros::benchmarks::{self, *};
@@ -52,6 +56,68 @@ fn simulate(
     }
 
     Ok((ouros, cycle))
+}
+
+/// Run any compiled program through the normal graph-reduction engine with
+/// the built-in AXI4-Lite controller enabled. The UART is an independent
+/// peripheral; pure programs execute and terminate normally in this mode.
+/// Input is delivered by a blocking stdin worker rather than blocking the
+/// simulator or any of its fine-grained Ouros threads. With a canonical
+/// terminal, bytes become available after Return is pressed.
+fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
+    let mut core = OurosCore::new(prog, 0, BIG_HEAP, GC_AT);
+    core.enable_io(AxiTiming::default());
+    let (sender, receiver) = mpsc::channel::<u8>();
+    thread::spawn(move || {
+        let stdin = std::io::stdin();
+        for next in stdin.lock().bytes() {
+            match next {
+                Ok(byte) => { if sender.send(byte).is_err() { break; } }
+                Err(_) => break,
+            }
+        }
+    });
+    eprintln!("Ouros terminal: RX=0x{:02x}, TX=0x{:02x}, STATUS=0x{:02x}; enter text then Return.",
+              UART_RX_DATA, UART_TX_DATA, UART_STATUS);
+    eprintln!("Simulation stops when heap address 0 reaches WHNF.");
+
+    core.tick().map_err(error::TerminalMode::Simulation)?;
+    core.input.start = true;
+    core.tick().map_err(error::TerminalMode::Simulation)?;
+    core.input.start = false;
+
+    let mut cycles: u64 = 0;
+    let mut stdin_closed = false;
+    while !core.done() {
+        if cycles >= 1_000_000_000 {
+            return Err(error::TerminalMode::Simulation("exceeded cycle limit".into()));
+        }
+        // Poll input each simulated cycle; incoming bytes are buffered in
+        // the peripheral even when an RX transaction is not outstanding.
+        while !stdin_closed {
+            match receiver.try_recv() {
+                Ok(byte) => core.io_unit_mut().unwrap().controller.push_rx(byte),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => { stdin_closed = true; break; }
+            }
+        }
+        core.tick().map_err(error::TerminalMode::Simulation)?;
+        cycles += 1;
+        if let Some(first) = core.io_unit_mut().unwrap().controller.pop_tx() {
+            let mut stdout = std::io::stdout().lock();
+            stdout.write_all(&[first]).map_err(error::TerminalMode::IO)?;
+            while let Some(byte) = core.io_unit_mut().unwrap().controller.pop_tx() {
+                stdout.write_all(&[byte]).map_err(error::TerminalMode::IO)?;
+            }
+            stdout.flush().map_err(error::TerminalMode::IO)?;
+        }
+        // While waiting for a human at the RX register, relinquish the host
+        // CPU periodically. The hardware continues to advance each cycle.
+        if cycles % 10_000 == 0 { thread::sleep(Duration::from_millis(1)); }
+    }
+    eprintln!("\nOuros finished normally after {} cycles ({} IO completions).", cycles,
+              core.io_unit().unwrap().completed);
+    Ok(())
 }
 
 fn compress(oapp: &Option<ActiveApp>) -> String {
@@ -551,6 +617,8 @@ enum Mode {
     #[default]
     All,
     Gc,
+    /// Execute a selected program with a simulated AXI UART terminal.
+    Terminal,
 }
 
 // FIX: move rest of code above into lib.rs
@@ -574,11 +642,13 @@ fn run() -> Result<(), error::Ouros> {
     #[cfg(feature = "dhat-heap")]
     let _profiler = dhat::Profiler::new_heap();
 
-    println!("examples of command to run:");
-    println!("cargo run -- --mode=all");
-    println!("cargo run -- --prog-name=FIB");
-
     let ref parsed_args @ Args { num_threads, .. } = Args::parse();
+    if !matches!(parsed_args.mode.as_ref(), Some(Mode::Terminal)) {
+        println!("examples of command to run:");
+        println!("cargo run -- --mode=all");
+        println!("cargo run -- --prog-name=FIB");
+        println!("cargo run -- --mode=terminal --prog-name=FIB");
+    }
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
@@ -598,6 +668,24 @@ fn run() -> Result<(), error::Ouros> {
             ); // ignoring TREESUM as it does not have much garbage..
 
             match parsed_args {
+                Args {
+                    mode: Some(Mode::Terminal),
+                    prog_name: Some(program_name),
+                    ..
+                } => run_terminal(
+                    progs.get(program_name.as_str())
+                        .ok_or(error::Initialisation::ProgramNotFound {
+                            program_name: program_name.to_string(),
+                        })
+                        .map_err(error::Ouros::from)?,
+                ).map_err(error::Ouros::TerminalMode),
+                Args {
+                    mode: Some(Mode::Terminal),
+                    prog_name: None,
+                    ..
+                } => Err(error::Initialisation::InvalidCliArgs {
+                    reason: "--mode=terminal requires --prog-name=<compiled-program>".into(),
+                }).map_err(error::Ouros::from),
                 Args {
                     prog_name: Some(program_name),
                     ..

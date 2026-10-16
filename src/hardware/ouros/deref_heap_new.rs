@@ -140,6 +140,8 @@ enum CONSUMEs {
     InputIA,
     /// saturated IO with unboxed strict operands; issue only once.
     InputIOReady,
+    /// completed IO Pair with a case-table/extra application must reduce.
+    InputForwardReducer,
     /// input is an WHNF; demander found in any stacks
     InputWHNFWithDmder,
     /// input is an WHNF; no demander is found; different frame under the WHNF
@@ -397,6 +399,7 @@ pub struct DrfHeap {
     pub heap_mem: DualPortMem<App>,
     working_heap: DualPortMem<bool>,
     holder_out: (bool, ActiveApp), // output-reg: (valid, app)
+    holder_out_startup: bool,
     io_holder: (bool, ActiveApp), // ready IO request, held until accepted
     working: Register<bool>,       // track whether the machine is working
     arg_id: Register<usize>,
@@ -420,6 +423,7 @@ impl DrfHeap {
             heap_mem: DualPortMem::new(heap_size),
             working_heap: DualPortMem::new(heap_size),
             holder_out: Default::default(),
+            holder_out_startup: false,
             io_holder: Default::default(),
             working: Default::default(),
             stat: Default::default(),
@@ -528,7 +532,7 @@ impl DrfHeap {
     /// Only the initial root bypasses DHeap's input processing. It must not
     /// issue an IO request directly from this startup holder.
     pub fn out_main_from_startup(&self) -> bool {
-        self.holder_out.0
+        self.holder_out.0 && self.holder_out_startup
     }
 
     pub fn out_main_valid(&self) -> bool {
@@ -702,6 +706,11 @@ impl DrfHeap {
             Ok(CONSUMEs::NoInput)
         } else if io_is_ready(&self.input.port_a_bits.load) {
             Ok(CONSUMEs::InputIOReady)
+        } else if is_con(&self.input.port_a_bits.load[0])
+            && !is_whnf(&self.input.port_a_bits.load) {
+            // An over-applied IO result arrives from the IO unit through
+            // port A. Reducer-ready constructors have no strict operands.
+            Ok(CONSUMEs::InputForwardReducer)
         } else {
             let stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
             if is_whnf(&self.input.port_a_bits.load) {
@@ -866,6 +875,7 @@ impl DrfHeap {
         // clear holder when output fires
         if self.output_fire() {
             self.holder_out.0 = false;
+            self.holder_out_startup = false;
         }
         if self.out_io_fire() {
             self.io_holder.0 = false;
@@ -1132,6 +1142,12 @@ impl DrfHeap {
                 self.io_holder = (true, self.input.port_a_bits.clone());
                 self.stm.connect(&Stm::Idle);
             }
+            CONSUMEs::InputForwardReducer => {
+                debug_assert!(!self.holder_out.0);
+                self.holder_out = (true, self.input.port_a_bits.clone());
+                self.holder_out_startup = false;
+                self.stm.connect(&Stm::Idle);
+            }
             CONSUMEs::InputIA => {
                 self.select_1st_arg_read(&in_app)?;
                 self.ia_addr.connect(
@@ -1356,6 +1372,7 @@ impl HwModule for DrfHeap {
                 self.thread_stack[0].push((false, 0));
                 self.frame_stack[0].push(Default::default());
                 // put output register
+                self.holder_out_startup = true;
                 self.holder_out = (
                     true,
                     ActiveApp {

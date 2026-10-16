@@ -12,6 +12,7 @@ use super::alu::{Alu, AluStat};
 use super::config::*;
 use super::deref_heap_new::{DrfHeap, DrfHeapStat};
 use super::garbage_collector::{GbgCollector, GbgCollectorStat};
+use super::io_unit::{AxiTiming, IoUnit};
 use super::program::*;
 use super::reducer::{Reducer, ReducerStat};
 
@@ -77,6 +78,8 @@ pub struct OurosCore {
     abox: AddrBox,
     reducer: Reducer,
     alu: Alu,
+    /// Optional built-in simulated AXI4-Lite master and peripherals.
+    io_unit: Option<IoUnit>,
 
     buffers_dealloc: Fifo<usize, 2, false>,
     buffers_free_addr: Fifo<usize, 2, false>,
@@ -132,6 +135,7 @@ impl OurosCore {
                 .program(&prog.comb_img)
                 .detail(detail_lv),
             alu: Alu::new().detail(detail_lv),
+            io_unit: None,
 
             buffers_dealloc: Fifo::new(),
             buffers_free_addr: Fifo::new(),
@@ -168,7 +172,21 @@ impl OurosCore {
         }
     }
 
-    /// Ready/valid interface to the not-yet-implemented IO unit.
+    /// Enable automatic execution of IO reductions. When disabled, the
+    /// original external ready/valid boundary remains usable (and pure
+    /// benchmark simulation behaves exactly as before).
+    pub fn enable_io(&mut self, timing: AxiTiming) {
+        self.io_unit = Some(IoUnit::new(timing));
+    }
+
+    pub fn io_unit(&self) -> Option<&IoUnit> {
+        self.io_unit.as_ref()
+    }
+    pub fn io_unit_mut(&mut self) -> Option<&mut IoUnit> {
+        self.io_unit.as_mut()
+    }
+
+    /// Ready/valid interface to the optional IO unit.
     /// Unlike a Reducer-to-IO bypass, every request has passed DHeap.
     pub fn io_request_valid(&self) -> bool {
         self.buffers_io_0.out_valid() || self.buffers_io_1.out_valid()
@@ -177,7 +195,9 @@ impl OurosCore {
     pub fn io_request_bits(&self) -> Option<&ActiveApp> {
         // Observe the current FIFO state, not the arbiter's combinational
         // inputs captured during the previous tick. Same priority as arbiter_io.
-        self.buffers_io_0.dout().or_else(|| self.buffers_io_1.dout())
+        self.buffers_io_0
+            .dout()
+            .or_else(|| self.buffers_io_1.dout())
     }
 
     pub fn io_response_ready(&self) -> bool {
@@ -271,8 +291,13 @@ impl HwModule for OurosCore {
 
         // connect start signal
         self.dheap.input.start = self.input.start;
-        self.buffers_dheap_a_4.input.in_valid = self.input.io_response_valid;
-        self.buffers_dheap_a_4.input.din = self.input.io_response_bits.clone();
+        if let Some(io) = &self.io_unit {
+            self.buffers_dheap_a_4.input.in_valid = io.response_valid();
+            self.buffers_dheap_a_4.input.din = io.response_bits().cloned().unwrap_or_default();
+        } else {
+            self.buffers_dheap_a_4.input.in_valid = self.input.io_response_valid;
+            self.buffers_dheap_a_4.input.din = self.input.io_response_bits.clone();
+        }
 
         // this 'kind of' fixes the ring problem
         for _ in 0..2 {
@@ -330,7 +355,10 @@ impl HwModule for OurosCore {
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
-            self.arbiter_io.input.out_ready = self.input.io_request_ready;
+            self.arbiter_io.input.out_ready = self
+                .io_unit
+                .as_ref()
+                .map_or(self.input.io_request_ready, IoUnit::request_ready);
             self.arbiter_dheap_b.input.out_ready = self.dheap.port_b_ready();
             self.arbiter_reducer.input.out_ready = self.reducer.in_ready();
             self.arbiter_alu.input.out_ready = self.alu.input_ready();
@@ -416,10 +444,12 @@ impl HwModule for OurosCore {
             self.dheap.input.out_io_ready = self.buffers_io_1.in_ready();
 
             if self.dheap.out_main_valid() {
-                let dest = if self.dheap.out_main_from_startup() {
+                let app = &self.dheap.out_main_bits()?.load;
+
+                let dest = if self.dheap.out_main_from_startup() && is_io(&app[0]) {
                     DESTs::ToDHeap
                 } else {
-                    get_dests(&self.dheap.out_main_bits()?.load)
+                    get_dests(app)
                 };
                 match dest {
                     DESTs::ToIO => {
@@ -534,6 +564,50 @@ impl HwModule for OurosCore {
                 || self.rings_dheap_b_1.found();
         }
 
+        // The transaction sees the same old-state handshake as arbiter_io.
+        // tick_children advances both the FIFO and IO-unit states together.
+        if let Some(io) = self.io_unit.as_mut() {
+            io.input.request_valid = self.arbiter_io.out_valid();
+            io.input.request_bits = self
+                .arbiter_io
+                .out_bits(self.arbiter_io.select())
+                .cloned()
+                .unwrap_or_default();
+            io.input.response_ready = self.buffers_dheap_a_4.in_ready();
+        }
+
+        // Pending IO Apps (and completed Apps under response backpressure)
+        // remain visible as roots alongside the ordinary per-thread monitors.
+        // The GC updates these monitors until the mark phase freezes them.
+        let mut io_roots = Vec::new();
+        if self.dheap.out_io_valid() {
+            io_roots.push(self.dheap.out_io_bits().clone());
+        }
+        for pending in [
+            self.buffers_io_0.dout(),
+            self.buffers_io_1.dout(),
+            self.buffers_dheap_a_4.dout(),
+        ] {
+            if let Some(app) = pending {
+                io_roots.push(app.clone());
+            }
+        }
+        if let Some(io) = &self.io_unit {
+            if let Some(app) = io.pending_app() {
+                // Pending root and response share the same thread index.
+                // The request retains its original pointer-bearing tail.
+                if let Some(resp) = io.response_bits() {
+                    io_roots.push(resp.clone());
+                } else {
+                    io_roots.push(ActiveApp {
+                        stack_idx: io.pending_active_app().unwrap().stack_idx,
+                        load: *app,
+                    });
+                }
+            }
+        }
+        self.gc.input.io_roots = io_roots;
+
         self.cycle_ctr += 1;
         if self.cycle_ctr == 500 {
             let work_set = traverse(
@@ -560,6 +634,9 @@ impl HwModule for OurosCore {
         self.dheap.tick()?;
         self.reducer.tick()?;
         self.alu.tick()?;
+        if let Some(io) = self.io_unit.as_mut() {
+            io.tick()?;
+        }
         self.gc.tick()?;
         self.abox.tick()?;
 
@@ -721,7 +798,9 @@ mod io_routing_tests {
         core.tick().unwrap();
         core.input.start = false;
         for _ in 0..100 {
-            if core.io_request_valid() { break; }
+            if core.io_request_valid() {
+                break;
+            }
             core.tick().unwrap();
         }
         assert!(core.io_request_valid());
@@ -741,15 +820,25 @@ mod io_routing_tests {
 
         core.input.io_response_bits = ActiveApp {
             stack_idx: 0,
-            load: [Atom::Int(42), Atom::Nop, Atom::Nop, Atom::Nop,
-                   Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop],
+            load: [
+                Atom::Int(42),
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+            ],
         };
         core.input.io_response_valid = true;
         assert!(core.io_response_ready());
         core.tick().unwrap();
         core.input.io_response_valid = false;
         for _ in 0..100 {
-            if core.done() { break; }
+            if core.done() {
+                break;
+            }
             core.tick().unwrap();
         }
         assert!(core.done());
@@ -766,5 +855,164 @@ mod io_routing_tests {
         assert!(!core.io_request_valid());
         assert!(core.io_request_bits().is_none());
         assert!(core.io_response_ready());
+    }
+}
+
+#[cfg(test)]
+mod integrated_io_tests {
+    use super::super::io_unit::{AxiTiming, UART_TX_DATA};
+    use super::*;
+    use crate::hw_module::HwModule;
+
+    fn execute_root(atoms: &[Atom], initial_reg: Option<(u32, u32)>) -> OurosCore {
+        let prog = Program {
+            heap_img: vec![atoms.to_vec()],
+            comb_img: vec![],
+        };
+        let mut core = OurosCore::new(&prog, 0, 256, 0.5);
+        core.enable_io(AxiTiming {
+            response_latency: 8,
+            aw_delay: 3,
+            w_delay: 5,
+            ar_delay: 4,
+        });
+        if let Some((addr, value)) = initial_reg {
+            core.io_unit_mut()
+                .unwrap()
+                .controller
+                .set_register(addr, value);
+        }
+        core.tick().unwrap();
+        core.input.start = true;
+        core.tick().unwrap();
+        core.input.start = false;
+        for _ in 0..1000 {
+            if core.done() {
+                break;
+            }
+            core.tick().unwrap();
+        }
+        assert!(core.done(), "IO root did not return to WHNF");
+        core
+    }
+
+    #[test]
+    fn ready_read_reenters_dheap_as_pair_and_terminates() {
+        let core = execute_root(
+            &[Atom::IO(false), Atom::Int(0x20), Atom::Int(7)],
+            Some((0x20, 0x9876_1234)),
+        );
+        assert_eq!(core.io_unit().unwrap().completed, 1);
+        assert_eq!(core.io_unit().unwrap().controller.reads, 1);
+        let result = &core.dheap.input.port_a_bits.load;
+        assert_eq!(
+            &result[..3],
+            &[
+                Atom::Con(3, 2, 0),
+                Atom::Int(0x9876_1234u32 as i32),
+                Atom::Int(7)
+            ]
+        );
+    }
+
+    #[test]
+    fn ready_write_reenters_dheap_and_terminates() {
+        let core = execute_root(
+            &[
+                Atom::IO(true),
+                Atom::Int(0x20),
+                Atom::Int(-1),
+                Atom::Int(17),
+            ],
+            None,
+        );
+        assert_eq!(core.io_unit().unwrap().completed, 1);
+        assert_eq!(core.io_unit().unwrap().controller.writes, 1);
+        assert_eq!(core.io_unit().unwrap().controller.register(0x20), u32::MAX);
+        assert_eq!(
+            &core.dheap.input.port_a_bits.load[..3],
+            &[Atom::Con(3, 2, 0), Atom::Int(0), Atom::Int(17)]
+        );
+    }
+
+    #[test]
+    fn pure_program_still_finishes_when_io_is_enabled() {
+        let core = execute_root(&[Atom::Int(42)], None);
+        assert_eq!(core.io_unit().unwrap().completed, 0);
+        assert_eq!(core.dheap.input.port_a_bits.load[0], Atom::Int(42));
+    }
+
+    #[test]
+    fn blocked_uart_read_resumes_when_terminal_input_arrives() {
+        let prog = Program {
+            heap_img: vec![vec![Atom::IO(false), Atom::Int(0), Atom::Int(11)]],
+            comb_img: vec![],
+        };
+        let mut core = OurosCore::new(&prog, 0, 256, 0.5);
+        core.enable_io(AxiTiming::default());
+        core.tick().unwrap();
+        core.input.start = true;
+        core.tick().unwrap();
+        core.input.start = false;
+        for _ in 0..100 {
+            core.tick().unwrap();
+        }
+        assert!(!core.done());
+        assert!(core.io_unit().unwrap().pending_app().is_some());
+        core.io_unit_mut().unwrap().controller.push_rx(b'K');
+        for _ in 0..100 {
+            if core.done() {
+                break;
+            }
+            core.tick().unwrap();
+        }
+        assert!(core.done());
+        assert_eq!(core.dheap.input.port_a_bits.load[1], Atom::Int(b'K' as i32));
+        assert_eq!(core.io_unit().unwrap().completed, 1);
+    }
+
+    #[test]
+    fn io_root_remains_monitored_while_axi_response_is_pending() {
+        let prog = Program {
+            heap_img: vec![
+                vec![
+                    Atom::IO(false),
+                    Atom::Int(0),
+                    Atom::Int(0),
+                    Atom::Ptr(1, false, false),
+                ],
+                vec![Atom::Int(123)],
+            ],
+            comb_img: vec![],
+        };
+        let mut core = OurosCore::new(&prog, 0, 256, 0.5);
+        core.enable_io(AxiTiming::default());
+        core.tick().unwrap();
+        core.input.start = true;
+        core.tick().unwrap();
+        core.input.start = false;
+        for _ in 0..100 {
+            core.tick().unwrap();
+        }
+        assert!(core.io_unit().unwrap().pending_app().is_some());
+        let monitor = &core.gc.reg_monitors.value()[0];
+        assert!(monitor.0);
+        assert_eq!(monitor.1[3], Atom::Ptr(1, false, false));
+    }
+
+    #[test]
+    fn terminal_write_appears_on_uart_tx() {
+        let mut core = execute_root(
+            &[
+                Atom::IO(true),
+                Atom::Int(UART_TX_DATA as i32),
+                Atom::Int(b'X' as i32),
+                Atom::Int(0),
+            ],
+            None,
+        );
+        // UART is abstracted as a byte FIFO which the CLI drains to stdout.
+        assert_eq!(core.io_unit().unwrap().controller.writes, 1);
+        assert_eq!(core.io_unit_mut().unwrap().controller.pop_tx(), Some(b'X'));
     }
 }
