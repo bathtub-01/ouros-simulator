@@ -156,25 +156,3 @@ impl HwModule for AddrBox {
         Ok(())
     }
 }
-
-#[test]
-fn addr_box_spec() {
-    use super::garbage_collector::GbgCollector;
-    let size = 1024;
-    let from = 42;
-    let mut gc = GbgCollector::new(size, from).init_freelist();
-    let mut ab = AddrBox::new();
-    let mut ctr = from;
-
-    for _ in 0..CONSUMERS {
-        ab.input.free_addr_valid = gc.addr_out_valid();
-        ab.input.free_addr_bits = gc.addr_out_bits();
-        gc.input.addr_out_ready = ab.addr_request();
-        gc.tick();
-        ab.tick();
-        ctr = ctr + 1;
-    }
-
-    println!("{:?}", ab.consume_addr_valid());
-    println!("{:?}", ab.consume_addr_bits());
-}

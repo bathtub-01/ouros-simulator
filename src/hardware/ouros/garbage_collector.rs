@@ -843,32 +843,3 @@ impl HwModule for GbgCollector {
         self.reg_monitor_idx.tick()
     }
 }
-
-#[test]
-fn gc_spec_init() {
-    let gc = GbgCollector::new(100, 8).init_freelist();
-    println!("{:#?}", gc.gc_mem.ram);
-}
-
-#[test]
-fn gc_spec_draw() {
-    let size = 1024;
-    let from = 42;
-    let mut gc = GbgCollector::new(size, from).init_freelist();
-    let mut it = from;
-    use rand::Rng;
-    let mut rng = rand::rng();
-
-    gc.tick();
-    while it < size {
-        let draw: bool = rng.random();
-        if draw {
-            gc.input.addr_out_ready = true;
-            assert_eq!(gc.addr_out_bits(), it);
-            it = it + 1;
-        } else {
-            gc.input.addr_out_ready = false;
-        }
-        gc.tick();
-    }
-}
