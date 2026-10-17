@@ -2,6 +2,7 @@
 
 use std::cmp::max;
 
+use crate::error;
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{Fifo, PArbiter, RArbiter, Ring};
@@ -208,7 +209,7 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: 
 }
 
 impl HwModule for OurosCore {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         let _span = tracy_client::span!("ouros: update_local");
         /*
         NOTE: there is an assignment ring in the circuit, the order of
@@ -280,8 +281,20 @@ impl HwModule for OurosCore {
             self.gc.input.monitor_valid = self.reducer.spine_valid();
             self.gc.input.monitor_bits = self.reducer.spine_bits();
             self.gc.input.monitor_big_drf_valid = self.dheap.out_big_drf_valid();
-            self.gc.input.monitor_big_drf_stk = self.dheap.out_main_bits()?.stack_idx as usize;
-            self.gc.input.monitor_big_drf_bits = self.dheap.out_main_bits()?.load[0];
+            self.gc.input.monitor_big_drf_stk = self
+                .dheap
+                .out_main_bits()
+                .map_err(|out_bits_error| {
+                    error::sim::TickHw::Local(out_bits_error, error::sim::SimState)
+                })?
+                .stack_idx as usize;
+            self.gc.input.monitor_big_drf_bits = self
+                .dheap
+                .out_main_bits()
+                .map_err(|out_bits_error| {
+                    error::sim::TickHw::Local(out_bits_error, error::sim::SimState)
+                })?
+                .load[0];
             self.gc.input.monitor_unset_valid = self.dheap.port_a_fire();
             self.gc.input.monitor_unset = self.dheap.input.port_a_bits.stack_idx as usize;
 
@@ -477,7 +490,7 @@ impl HwModule for OurosCore {
         Ok(())
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         let _span = tracy_client::span!("ouros_core: tick_children");
         self.dheap.tick()?;
         self.reducer.tick()?;
@@ -545,6 +558,7 @@ fn traverse(
     }
 
     while !traverse_stk.is_empty() {
+        // TODO: add error result here
         let work_on = traverse_stk.pop().unwrap();
         let app = &ram[work_on];
         res.push(work_on);

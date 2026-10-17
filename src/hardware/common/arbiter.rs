@@ -67,7 +67,10 @@ impl<T: Clone + Default, const N: usize> HwModule for RArbiter<T, N> {
     fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         self.select()
             .map(|p| self.priority.connect(&((p + 1) % N)))
-            .ok_or("Could not select in RArbiter".to_string())
+            .ok_or(error::sim::TickHw::Local(
+                "Could not select in RArbiter".to_string(),
+                error::sim::SimState,
+            ))
     }
 
     fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {

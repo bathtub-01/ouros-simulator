@@ -1,10 +1,11 @@
 use std::cmp::max;
 
+use crate::error;
 use crate::hardware::common::{DualPortMem, Register};
 use crate::hw_module::{HwInput, HwModule};
 
 use super::config::{APP_LENGTH, CACHE_SIZE, DLV_GC, DLV_GC1, MAX_THREADS};
-use super::program::{get_ptr, is_ptr, ActiveApp, App, Atom};
+use super::program::{ActiveApp, App, Atom, get_ptr, is_ptr};
 use std::collections::VecDeque;
 
 struct FixedFifo<T> {
@@ -334,6 +335,7 @@ impl GbgCollector {
             .iter()
             .skip(idx)
             .position(|a| is_ptr(a) && !self.gc_cache.contains(&get_ptr(a)))
+            // TODO: add result here
             .unwrap()
     }
 
@@ -466,6 +468,7 @@ impl GbgCollector {
                 self.reg_heap_reader.connect(in_app);
                 self.reg_move.connect(&2);
                 // pre read for move-2
+                // TODO: add result here
                 let found = in_app.iter().position(is_ptr).unwrap();
                 // println!("go to move-2, read on: {}", get_ptr(&in_app[found]));
                 self.mark_read(get_ptr(&in_app[found]));
@@ -516,6 +519,7 @@ impl GbgCollector {
                     .iter()
                     .skip(*self.reg_monitor_idx.value())
                     .position(|r| r.0)
+                    // TODO: add error result here
                     .unwrap()
                     + *self.reg_monitor_idx.value();
                 // self.reg_monitors.input[pick_monitor].0 = false;
@@ -629,7 +633,7 @@ impl GbgCollector {
 }
 
 impl HwModule for GbgCollector {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         if *self.reg_collector.value() != CollectorState::Mark {
             // if self.input.monitor_unset_valid {
             //     self.reg_monitors.input[self.input.monitor_unset] = (false, Default::default());
@@ -727,6 +731,7 @@ impl HwModule for GbgCollector {
                 //     let mut fl: Vec<usize> = Vec::new();
                 //     fl.push(real_freelist_head);
                 //     for _ in 0..*self.reg_free_len.value() {
+                //          TODO: add result here
                 //         let fst = fl.last().unwrap();
                 //         assert!(self.gc_mem.ram[*fst].state == CellState::FreeList);
                 //         fl.push(self.gc_mem.ram[*fst].ptr);
@@ -750,15 +755,16 @@ impl HwModule for GbgCollector {
             CollectorState::Idle => self.step_idle(),
             CollectorState::Root => self.step_root(),
             CollectorState::Mark => self.step_mark(),
-            CollectorState::Sweep => self.step_sweep()?,
+            CollectorState::Sweep => self.step_sweep().map_err(|step_sweep_error| {
+                error::sim::TickHw::Local(step_sweep_error, error::sim::SimState)
+            })?,
         }
 
-        if self.stat_detail_lv >= DLV_GC {
-            if *self.reg_collector.value() == CollectorState::Idle
-                && self.reg_collector.input == CollectorState::Root
-            {
-                self.stat.gc_rounds += 1;
-            }
+        if self.stat_detail_lv >= DLV_GC
+            && *self.reg_collector.value() == CollectorState::Idle
+            && self.reg_collector.input == CollectorState::Root
+        {
+            self.stat.gc_rounds += 1;
         }
 
         // print!("collector: {:?}", self.reg_collector.value());
@@ -789,7 +795,7 @@ impl HwModule for GbgCollector {
         Ok(())
     }
 
-    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
+    fn update_stat(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         // println!(
         //     "collector state: {:?}, worklist len: {}, worklist head: {}, freelist len: {}, freelist head: {}, monitor idx: {}",
         //     self.reg_collector.value(),
@@ -823,7 +829,7 @@ impl HwModule for GbgCollector {
         })
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         self.reg_collector.tick()?;
         self.gc_mem.tick()?;
         self.reg_free_head.tick()?;

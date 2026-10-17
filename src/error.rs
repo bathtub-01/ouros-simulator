@@ -80,27 +80,24 @@ pub mod sim {
     #[derive(Debug, thiserror::Error)]
     pub enum TickHw {
         #[error("Tick leafs: {0}")]
-        TickLeafs(String),
+        TickLeafs(String, SimState),
         #[error("Local: {0}")]
-        Local(String),
+        Local(String, SimState),
         #[error("Stat: {0}")]
-        Stat(String),
-        #[error("Root: ({origin_error}) {rec}")]
-        Rec {
-            rec: Box<TickHw>,
-            origin_error: String,
-        },
+        Stat(String, SimState),
     }
 
     /// This is the snaphot of the state of the App_State that we are running
     #[derive(Debug, Copy, Clone)]
-    struct State;
+    pub struct SimState;
 
     impl TickHw {
         /// just to ensure that we always return a state
-        fn get_state(&self) -> State {
+        fn get_state(self) -> SimState {
             match self {
-                TickHw::DELETE_ME(state) => *state,
+                TickHw::TickLeafs(_, state) => state,
+                TickHw::Local(_, state) => state,
+                TickHw::Stat(_, state) => state,
             }
         }
     }

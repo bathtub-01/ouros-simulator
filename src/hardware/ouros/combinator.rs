@@ -118,20 +118,20 @@ pub fn parse_pat(p: &Pat) -> Result<ParseRes, String> {
 }
 
 pub static DECODE_TABLE: LazyLock<[ParseRes; 64]> = LazyLock::new(|| {
-    let parsed: Vec<ParseRes> = ALL_PATTERNS
+    let parsed = ALL_PATTERNS
         .iter()
         .map(parse_pat)
-        .collect::<Result<_, _>>()
-        .unwrap_or_default();
-    let res: [ParseRes; 64] = parsed
+        .collect::<Result<Vec<ParseRes>, _>>()
+        .expect("could not parse the given patterns");
+
+    parsed
         .try_into()
-        .expect("pattern decode table size should match");
-    res
+        .expect("pattern decode table size should match")
 });
 
 #[test]
 fn parse_pat_spec() {
-    for (pat, res) in ALL_PATTERNS.iter().zip(DECODE_TABLE.iter()).into_iter() {
+    for (pat, res) in ALL_PATTERNS.iter().zip(DECODE_TABLE.iter()) {
         println!("{},{:?}", pat, res);
     }
 }
@@ -142,7 +142,7 @@ fn parse(
     arg_count: &mut u8,
     ptr_count: &mut u8,
     acc: &mut ParseRes,
-) -> Result<(), String> {
+) -> Result<(), crate::error::> {
     let mut stack: Vec<Pat> = Vec::new();
     let mut p_it = p;
     let mut res: Vec<Hole> = Vec::new();

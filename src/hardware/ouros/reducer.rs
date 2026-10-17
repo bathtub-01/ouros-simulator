@@ -10,6 +10,7 @@ use std::cmp::max;
 
 use super::alu::compute;
 use super::program::*;
+use crate::error;
 use crate::hardware::common::{Register, SinglePortMem};
 use crate::hardware::ouros::config::*;
 use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
@@ -378,6 +379,7 @@ impl Reducer {
             .iter()
             .skip(idx)
             .position(|a| self.is_nested(a))
+            // TODO: add error result here
             .unwrap()
     }
 
@@ -468,7 +470,7 @@ impl Reducer {
 }
 
 impl HwModule for Reducer {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
             Stm::Idle => {
@@ -541,7 +543,10 @@ impl HwModule for Reducer {
         }
 
         if self.spine_valid() && !self.input.spine_ready {
-            return Err("spine leaked".to_string()); // p_anic!(); println!("spine leaked!: {:?}", self.spine_bits());
+            return Err(error::sim::TickHw::Local(
+                "spine leaked".to_string(),
+                error::sim::SimState,
+            )); // p_anic!(); println!("spine leaked!: {:?}", self.spine_bits());
         }
 
         // if self.spine_valid() {
@@ -570,7 +575,7 @@ impl HwModule for Reducer {
         Ok(())
     }
 
-    fn update_stat(&mut self) -> Result<(), String> {
+    fn update_stat(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         if self.in_fire() {
             self.stat.reductions += 1;
         }
@@ -606,7 +611,7 @@ impl HwModule for Reducer {
         })
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         self.comb_table.tick()?;
         self.reg_in.tick()?;
         for reg in self.addr_regs.iter_mut() {

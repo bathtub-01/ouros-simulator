@@ -655,6 +655,7 @@ impl DrfHeap {
                 if self
                     .thread_stack
                     .iter()
+                    // TODO: remove unwrap
                     .any(find_more_dmder(stk.top().unwrap().1))
                 {
                     Ok(CONSUMEs::InputWHNFWithDmder)
@@ -729,6 +730,7 @@ impl DrfHeap {
         // }
         let frame_record = self.frame_stack[self.holder_in.value().stack_idx as usize]
             .top()
+            // TODO: add result here
             .unwrap();
         let idle_stack: bool = self
             .thread_stack
@@ -817,6 +819,8 @@ impl DrfHeap {
     /// write the incoming app
     fn write_incoming(&mut self, p: HeapPort) {
         let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+        // TODO: add error result here
+        // TODO: add result here
         let addr = current_stk.top().unwrap().1;
         let cell = dash_app(&self.input.port_a_bits.load);
         current_stk.pop();
@@ -858,6 +862,7 @@ impl DrfHeap {
             //         println!("frame stk 3 popped. P1");
             //     }
             // }
+            // TODO: add result here
             self.heap_mem.read_a(stack.second().unwrap().1);
             self.holder_in.input.stack_idx = stk_id as u8;
         } else {
@@ -896,6 +901,7 @@ impl DrfHeap {
         let sensitive2 = *s1 == IAs1::ExistIAFresh || *s1 == IAs1::NoExist;
         let returning_app = self.thread_stack[self.input.port_a_bits.stack_idx as usize]
             .top()
+            // TODO: add result here
             .unwrap()
             .1;
         let current_stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
@@ -939,6 +945,7 @@ impl DrfHeap {
 
     fn gen_frame_record(&self) -> FrameRecord {
         let father_stk_id = self.holder_in.value().stack_idx as usize;
+        // TODO: add result here
         let mut res = *self.frame_stack[father_stk_id].top().unwrap();
         res[father_stk_id] = self.addr_holder.input;
         res
@@ -1059,6 +1066,7 @@ impl DrfHeap {
                 self.ia_addr.connect(
                     &self.thread_stack[self.input.port_a_bits.stack_idx as usize]
                         .top()
+                        // TODO: add result here
                         .unwrap()
                         .1,
                 );
@@ -1066,6 +1074,7 @@ impl DrfHeap {
             }
             CONSUMEs::InputWHNFWithDmder => {
                 let current_stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+                // TODO: add result here
                 let current_top = current_stk.top().unwrap().1;
                 self.find_pop_read(find_more_dmder(current_top), false);
                 self.addr_holder.connect(&current_top);
@@ -1073,8 +1082,12 @@ impl DrfHeap {
             }
             CONSUMEs::InputWHNFNoDmderNewFrame => {
                 let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+                // TODO: add error result here
+                // TODO: add result here
                 let current_top = current_stk.top().unwrap().1;
                 current_stk.pop();
+                // TODO: add error result here
+                // TODO: add result here
                 self.heap_mem.read_a(current_stk.second().unwrap().1);
                 self.addr_holder.connect(&current_top);
                 self.frame_stack[self.input.port_a_bits.stack_idx as usize].pop();
@@ -1184,6 +1197,7 @@ impl DrfHeap {
             IAs2::NextStrictArgNewStk => {
                 let current_idx = self.holder_in.value().stack_idx as usize;
                 self.select_next_arg_read(&updated_dmder)?;
+                // TODO: add error result here
                 let frame_record = self.frame_stack[current_idx].top().unwrap();
                 if let Some((stk_id, _)) = self
                     .thread_stack
@@ -1220,7 +1234,9 @@ impl DrfHeap {
         match self.get_resumes() {
             RESUMEs::TopInWHNF => {
                 let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
+                // TODO: add error result here
                 let whnf_addr = current_stk.top().unwrap().1;
+                // TODO: add error result here
                 let dmder_addr = current_stk.second().unwrap().1;
                 self.holder_in.input.load = *self.heap_mem.dout_a();
                 current_stk.pop();
@@ -1299,7 +1315,9 @@ impl HwModule for DrfHeap {
         }
         self.non_exist.connect(&self.input.found);
 
-        self.handle_port_a()?;
+        self.handle_port_a().map_err(|port_a_error| {
+            error::sim::TickHw::Local(port_a_error, error::sim::SimState)
+        })?;
         self.handle_port_b();
 
         // when port b is not locally used, grant it to GC usage
@@ -1337,7 +1355,7 @@ impl HwModule for DrfHeap {
         Ok(())
     }
 
-    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
+    fn update_stat(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         // if self.dealloc_valid() && self.dealloc_bits() == 4077 {
         //     println!("deallocate 65!");
         // }
@@ -1373,7 +1391,11 @@ impl HwModule for DrfHeap {
                     .holder_contents
                     .push(Some(self.holder_out.1.clone()));
             } else if self.output_fire() {
-                self.stat.holder_contents.push(Some(self.out_main_bits()?));
+                self.stat
+                    .holder_contents
+                    .push(Some(self.out_main_bits().map_err(|out_bits_error| {
+                        error::sim::TickHw::Stat(out_bits_error, error::sim::SimState)
+                    })?));
             } else {
                 self.stat.holder_contents.push(None);
             }
@@ -1421,7 +1443,7 @@ impl HwModule for DrfHeap {
         Ok(())
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         self.stm.tick()?;
         for stk in &mut self.thread_stack {
             stk.tick()?
