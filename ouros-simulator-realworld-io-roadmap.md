@@ -9,7 +9,7 @@ The surface interface is defined by `Ouros.IO`: `IO a` wraps `World -> (a, World
 | Primitive Atom | Arity | Saturated request | Result after transaction completion |
 | --- | ---: | --- | --- |
 | `IO false` (read) | 2 | `[IO false, INT addr, World]` | `[Pair comb, INT data, World]` |
-| `IO true` (write) | 3 | `[IO true, INT addr, INT data, World]` | `[Pair comb, Dummy INT, World]` |
+| `IO true` (write) | 3 | `[IO true, INT addr, INT data, World]` | `[Pair comb, I comb, World]` |
 
 `World` in these examples denotes the dummy `INT` argument. Unsaturated `IO` Apps are in WHNF and cause no side effect. Saturated `IO` Apps are strict in their arguments: DHeap must resolve their pointers and produce unboxed arguments before dispatch. The I/O unit never accesses the heap.
 
@@ -39,8 +39,8 @@ The surface interface is defined by `Ouros.IO`: `IO a` wraps `World -> (a, World
   Peripherals (e.g., UART) <-- abstracted --> I/O-controller <-- simulated AXI transaction --> I/O unit + Ouros
   ```
 - [x] Model the I/O-controller as a register bank, and simulate a UART-styled terminal interacting with the register bank.
-- [x] Complete each reduction **only after** the corresponding AXI response from the I/O controller: emit `[Pair comb, INT result, World]` for reads or `[Pair comb, Dummy INT, World]` for writes.
-- [x] Re-inject completed Apps through DHeap input arbitration. Initially don't assume any AXI error.
+- [x] Complete each reduction **only after** the corresponding AXI response from the I/O controller: emit `[Pair comb, INT result, World]` for reads or `[Pair comb, I comb, World]` for writes.
+- [x] Re-inject completed Apps through DHeap & Reducer input arbitration. Initially don't assume any AXI error.
 
 ### 4. Core integration and GC
 
