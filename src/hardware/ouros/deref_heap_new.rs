@@ -105,7 +105,7 @@ enum HeapPort {
     B,
 }
 
-#[derive(Default, Clone, PartialEq, Debug)]
+#[derive(Default, Copy, Clone, PartialEq, Debug)]
 // FIX: should we fix capitalisation of variant names?
 pub enum Stm {
     #[default]
@@ -179,7 +179,7 @@ enum RESUMEs {
 }
 
 /// select the first pointer to deref, returns (arg position, pointer value)
-fn select_1st_arg(app: &App) -> Result<(i32, usize), String> {
+fn select_1st_arg(app: &App) -> Result<(i32, usize), error::sim::local::DerefHeap> {
     match app[0] {
         Atom::Ptr(p, _, false) => Ok((0, p)),
         Atom::Prm(_, _) => match app[1] {
@@ -199,7 +199,10 @@ fn select_1st_arg(app: &App) -> Result<(i32, usize), String> {
 }
 
 /// select the next strict arg, returns (arg position, pointer value)
-fn select_next_arg(app: &App, current: usize) -> Result<(usize, usize), String> {
+fn select_next_arg(
+    app: &App,
+    current: usize,
+) -> Result<(usize, usize), error::sim::local::DerefHeap> {
     match app[2] {
         Atom::Ptr(p, _, false) => Ok((2, p)),
         _ => Err(String::from("unreachable")),
@@ -503,7 +506,7 @@ impl DrfHeap {
         self.holder_out.0 || derived
     }
 
-    pub fn out_main_bits(&self) -> Result<ActiveApp, String> {
+    pub fn out_main_bits(&self) -> Result<ActiveApp, error::sim::local::DerefHeap> {
         let target = self.heap_mem.dout_a();
         if self.holder_out.0 {
             return Ok(self.holder_out.1.clone());
@@ -554,7 +557,7 @@ impl DrfHeap {
         self.need_split()
     }
 
-    pub fn out_big_drg_bits(&self) -> Result<FrozenApp, String> {
+    pub fn out_big_drg_bits(&self) -> Result<FrozenApp, error::sim::local::DerefHeap> {
         let mk_frozen = |a: Option<App>| match a {
             Some(big) => FrozenApp {
                 // heap_addr: self.input.free_addr,
@@ -605,7 +608,7 @@ impl DrfHeap {
     }
 
     /// search for the addr of the App, which is currently being read by DHeap
-    pub fn search(&self) -> Result<usize, String> {
+    pub fn search(&self) -> Result<usize, error::sim::local::DerefHeap> {
         if self.port_a_fire() && self.get_consumes()? == CONSUMEs::InputIA {
             let in_app = mask_seq(&self.input.port_a_bits.load);
             // println!(
@@ -650,7 +653,7 @@ impl DrfHeap {
         self.heap_mem.dout_b()
     }
 
-    fn get_consumes(&self) -> Result<CONSUMEs, String> {
+    fn get_consumes(&self) -> Result<CONSUMEs, error::sim::local::DerefHeap> {
         if !self.port_a_fire() {
             Ok(CONSUMEs::NoInput)
         } else {
@@ -863,7 +866,7 @@ impl DrfHeap {
     }
 
     /// select first arg from `app` and read it
-    fn select_1st_arg_read(&mut self, app: &App) -> Result<(), String> {
+    fn select_1st_arg_read(&mut self, app: &App) -> Result<(), error::sim::local::DerefHeap> {
         let (arg_id, p) = select_1st_arg(app)?;
         self.read_target(p);
         self.arg_id.connect(&(arg_id as usize));
@@ -871,7 +874,7 @@ impl DrfHeap {
     }
 
     /// select next arg from `app` and read it
-    fn select_next_arg_read(&mut self, app: &App) -> Result<(), String> {
+    fn select_next_arg_read(&mut self, app: &App) -> Result<(), error::sim::local::DerefHeap> {
         let (arg_id, p) = select_next_arg(app, *self.arg_id.value())?;
         self.read_target(p);
         self.arg_id.connect(&arg_id);
@@ -903,7 +906,7 @@ impl DrfHeap {
     }
 
     /// take shortcuts, unless 'sensitive cases' are encountered
-    fn step_to_next(&mut self, s1: &IAs1) -> Result<(), String> {
+    fn step_to_next(&mut self, s1: &IAs1) -> Result<(), error::sim::local::DerefHeap> {
         if self.is_sensitive(s1) {
             self.stm.connect(&Stm::Idle);
         } else {
@@ -913,7 +916,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn gen_output_whnf(&self) -> Result<(App, Option<App>), String> {
+    fn gen_output_whnf(&self) -> Result<(App, Option<App>), error::sim::local::DerefHeap> {
         let dmder = self.heap_mem.dout_a();
         let target = &self.holder_in.value().load;
         // println!("addr: {}", self.heap_mem.input.port_a.addr); // use this for GC debugging
@@ -1044,7 +1047,7 @@ impl DrfHeap {
     }
 
     /// consumes the next task; must not use heap port b!
-    fn consume_next(&mut self) -> Result<(), String> {
+    fn consume_next(&mut self) -> Result<(), error::sim::local::DerefHeap> {
         let in_app = mask_seq(&self.input.port_a_bits.load);
         self.holder_in.connect(&ActiveApp {
             stack_idx: self.input.port_a_bits.stack_idx,
@@ -1100,7 +1103,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn step_whnf(&mut self) -> Result<(), String> {
+    fn step_whnf(&mut self) -> Result<(), error::sim::local::DerefHeap> {
         let whnf_addr = *self.addr_holder.value();
 
         match self.get_whnfs() {
@@ -1149,7 +1152,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn step_ia(&mut self) -> Result<(), String> {
+    fn step_ia(&mut self) -> Result<(), error::sim::local::DerefHeap> {
         let dmder = &self.holder_in.value().load;
         let mut updated_dmder = *dmder;
         let target = *self.heap_mem.dout_a();
@@ -1221,7 +1224,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn step_resume(&mut self) -> Result<(), String> {
+    fn step_resume(&mut self) -> Result<(), error::sim::local::DerefHeap> {
         self.write_whnf(HeapPort::B);
         match self.get_resumes() {
             RESUMEs::TopInWHNF => {
@@ -1243,7 +1246,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn handle_port_a(&mut self) -> Result<(), String> {
+    fn handle_port_a(&mut self) -> Result<(), error::sim::local::DerefHeap> {
         if self.holder_out.0 && !self.input.out_main_ready {
             return Ok(());
         }
@@ -1308,7 +1311,7 @@ impl HwModule for DrfHeap {
         self.non_exist.connect(&self.input.found);
 
         self.handle_port_a().map_err(|port_a_error| {
-            error::sim::TickHw::UpdateLocal(port_a_error, error::sim::SimState)
+            error::sim::TickHw::DerefHeap(port_a_error, error::sim::SimState)
         })?;
         self.handle_port_b();
 
@@ -1386,7 +1389,10 @@ impl HwModule for DrfHeap {
                 self.stat
                     .holder_contents
                     .push(Some(self.out_main_bits().map_err(|out_bits_error| {
-                        error::sim::TickHw::Statistics(out_bits_error, error::sim::SimState)
+                        error::sim::TickHw::StatisticsDerefHeap(
+                            out_bits_error,
+                            error::sim::SimState,
+                        )
                     })?));
             } else {
                 self.stat.holder_contents.push(None);

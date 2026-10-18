@@ -24,14 +24,25 @@ fn dash_atom(atom: &Atom) -> Atom {
     }
 }
 
-#[derive(Default, Clone, PartialEq, Debug)]
+#[derive(Default, Copy, Clone, PartialEq, Debug)]
 // FIX: should we fix capitalisation of variant names?
-enum Stm {
+pub enum Stm {
     #[default]
     Idle,
     Spine,
     App,
     Special,
+}
+
+impl std::fmt::Display for Stm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Stm::Idle => write!(f, "Idle"),
+            Stm::Spine => write!(f, "Spine"),
+            Stm::App => write!(f, "App"),
+            Stm::Special => write!(f, "Special"),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -439,7 +450,7 @@ impl Reducer {
         res
     }
 
-    fn step_next(&mut self) -> Result<(), String> {
+    fn step_next(&mut self) -> Result<(), error::sim::local::Reducer> {
         if self.in_fire() {
             self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
@@ -451,21 +462,29 @@ impl Reducer {
                     self.reg_arity.connect(&arity);
                     self.comb_table.read(addr)
                 }
-                Atom::Con(_, fields, idx) => {
+                parent @ Atom::Con(_, fields, idx) => {
                     self.reg_stm.connect(&Stm::Spine);
-                    if let Atom::Tab(base, free_vars) = self.input.in_app.load[fields + 1] {
-                        self.reg_in.input.load[0] = Atom::Com(0, base + idx);
-                        self.reg_arity.connect(&(fields as u8 + free_vars + 1));
-                        self.comb_table.read(base + idx);
-                    } else {
-                        return Err("panic during step".to_string()); // p_anic!()
+                    match self.input.in_app.load[fields + 1] {
+                        Atom::Tab(base, free_vars) => {
+                            self.reg_in.input.load[0] = Atom::Com(0, base + idx);
+                            self.reg_arity.connect(&(fields as u8 + free_vars + 1));
+                            self.comb_table.read(base + idx);
+                        }
+                        invalid_atom => {
+                            return Err(error::sim::local::Reducer::InvalidAtom {
+                                parent,
+                                invalid_atom,
+                            });
+                        }
                     }
                 }
                 Atom::Y => {
                     self.reg_app_mask.connect(&true);
                     self.reg_stm.connect(&Stm::Special);
                 }
-                _ => return Err("panic during step".to_string()), // t_odo!(),
+                unimplemented => {
+                    return Err(error::sim::local::Reducer::UnimplementedAtom { unimplemented });
+                }
             };
         } else {
             self.reg_stm.connect(&Stm::Idle);
@@ -476,8 +495,8 @@ impl Reducer {
 
 impl HwModule for Reducer {
     fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
-        let map_step_error = |step_error_msg: String| -> error::sim::TickHw {
-            error::sim::TickHw::UpdateLocal(step_error_msg, error::sim::SimState)
+        let map_step_error = |reduce_error: error::sim::local::Reducer| {
+            error::sim::TickHw::Reducer(reduce_error, error::sim::SimState)
         };
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
@@ -551,10 +570,13 @@ impl HwModule for Reducer {
         }
 
         if self.spine_valid() && !self.input.spine_ready {
-            return Err(error::sim::TickHw::UpdateLocal(
-                "spine leaked".to_string(),
+            return Err(error::sim::TickHw::Reducer(
+                error::sim::local::Reducer::SpineLeaked {
+                    spine_value: *self.reg_stm.value(),
+                    spine_not_ready: !self.input.spine_ready,
+                },
                 error::sim::SimState,
-            )); // p_anic!(); println!("spine leaked!: {:?}", self.spine_bits());
+            ));
         }
 
         // if self.spine_valid() {

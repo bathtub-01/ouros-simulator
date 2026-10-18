@@ -281,20 +281,35 @@ impl HwModule for OurosCore {
             self.gc.input.monitor_valid = self.reducer.spine_valid();
             self.gc.input.monitor_bits = self.reducer.spine_bits();
             self.gc.input.monitor_big_drf_valid = self.dheap.out_big_drf_valid();
+
             self.gc.input.monitor_big_drf_stk = self
                 .dheap
                 .out_main_bits()
-                .map_err(|out_bits_error| {
-                    error::sim::TickHw::UpdateLocal(out_bits_error, error::sim::SimState)
+                .map_err(|err| {
+                    error::sim::TickHw::Core(
+                        error::sim::local::Core::DereHeapFailed {
+                            err,
+                            context: "self.gc.input.monitor_big_drf_stk".to_string(),
+                        },
+                        error::sim::SimState,
+                    )
                 })?
                 .stack_idx as usize;
+
             self.gc.input.monitor_big_drf_bits = self
                 .dheap
                 .out_main_bits()
-                .map_err(|out_bits_error| {
-                    error::sim::TickHw::UpdateLocal(out_bits_error, error::sim::SimState)
+                .map_err(|err| {
+                    error::sim::TickHw::Core(
+                        error::sim::local::Core::DereHeapFailed {
+                            err,
+                            context: "self.gc.input.monitor_big_drf_bits".to_string(),
+                        },
+                        error::sim::SimState,
+                    )
                 })?
                 .load[0];
+
             self.gc.input.monitor_unset_valid = self.dheap.port_a_fire();
             self.gc.input.monitor_unset = self.dheap.input.port_a_bits.stack_idx as usize;
 
@@ -373,18 +388,27 @@ impl HwModule for OurosCore {
                 }
             });
 
-            let map_out_main_bits = |out_main_bits_err_str: String| -> error::sim::TickHw {
-                error::sim::TickHw::UpdateLocal(out_main_bits_err_str, error::sim::SimState)
+            let map_out_main_bits = |err, context: String| {
+                error::sim::TickHw::Core(
+                    error::sim::local::Core::DereHeapFailed { err, context },
+                    error::sim::SimState,
+                )
             };
 
             if self.dheap.out_main_valid() {
-                match get_dests(&self.dheap.out_main_bits().map_err(map_out_main_bits)?.load) {
+                match get_dests(
+                    &self
+                        .dheap
+                        .out_main_bits()
+                        .map_err(|e| map_out_main_bits(e, "getting dests".to_string()))?
+                        .load,
+                ) {
                     DESTs::ToDHeap => {
                         self.buffers_dheap_a_0.input.in_valid = true;
                         self.buffers_dheap_a_0.input.din = self
                             .dheap
                             .out_main_bits()
-                            .map_err(map_out_main_bits)?
+                            .map_err(|e| map_out_main_bits(e, "DESTs::ToDHeap".to_string()))?
                             .clone();
                         self.dheap.input.out_main_ready = self.buffers_dheap_a_0.in_ready();
                     }
@@ -393,7 +417,7 @@ impl HwModule for OurosCore {
                         self.buffers_alu_1.input.din = self
                             .dheap
                             .out_main_bits()
-                            .map_err(map_out_main_bits)?
+                            .map_err(|e| map_out_main_bits(e, "DESTs::ToALU".to_string()))?
                             .clone();
                         self.dheap.input.out_main_ready = self.buffers_alu_1.in_ready();
                     }
@@ -402,7 +426,7 @@ impl HwModule for OurosCore {
                         self.buffers_reducer_1.input.din = self
                             .dheap
                             .out_main_bits()
-                            .map_err(map_out_main_bits)?
+                            .map_err(|e| map_out_main_bits(e, "DESTs::ToReducer".to_string()))?
                             .clone();
                         self.dheap.input.out_main_ready = self.buffers_reducer_1.in_ready();
                     }
@@ -435,12 +459,15 @@ impl HwModule for OurosCore {
 
             self.buffers_dheap_b_1.input.in_valid = self.dheap.out_big_drf_valid();
 
-            self.buffers_dheap_b_1.input.din =
-                self.dheap
-                    .out_big_drg_bits()
-                    .map_err(|out_big_drg_bits_err_str| {
-                        error::sim::TickHw::UpdateLocal(out_big_drg_bits_err_str, error::sim::SimState)
-                    })?;
+            self.buffers_dheap_b_1.input.din = self.dheap.out_big_drg_bits().map_err(|err| {
+                error::sim::TickHw::Core(
+                    error::sim::local::Core::DereHeapFailed {
+                        err,
+                        context: "self.buffers_dheap_b_1.input.din".to_string(),
+                    },
+                    error::sim::SimState,
+                )
+            })?;
 
             let out_spine = &self.reducer.spine_bits();
             if self.reducer.spine_valid() {
@@ -463,27 +490,44 @@ impl HwModule for OurosCore {
                 }
             }
 
-            let map_output_bits = |output_bits_err_str: String| -> error::sim::TickHw {
-                error::sim::TickHw::UpdateLocal(output_bits_err_str, error::sim::SimState)
+            let map_output_bits = |err: error::sim::local::Alu, context: String| {
+                error::sim::TickHw::Core(
+                    error::sim::local::Core::AluFailed { err, context },
+                    error::sim::SimState,
+                )
             };
 
             if self.alu.output_valid() {
-                if !is_whnf(&self.alu.output_bits().map_err(map_output_bits)?.load) {
+                if !is_whnf(
+                    &self
+                        .alu
+                        .output_bits()
+                        .map_err(|e| map_output_bits(e, "is_whnf check".to_string()))?
+                        .load,
+                ) {
                     self.buffers_reducer_2.input.in_valid = true;
-                    self.buffers_reducer_2.input.din =
-                        self.alu.output_bits().map_err(map_output_bits)?;
+                    self.buffers_reducer_2.input.din = self.alu.output_bits().map_err(|e| {
+                        map_output_bits(e, "self.buffers_reducer_2.input.din".to_string())
+                    })?;
                     self.alu.input.output_ready = self.buffers_reducer_2.in_ready();
                 } else {
                     self.buffers_dheap_a_2.input.in_valid = true;
-                    self.buffers_dheap_a_2.input.din =
-                        self.alu.output_bits().map_err(map_output_bits)?;
+                    self.buffers_dheap_a_2.input.din = self.alu.output_bits().map_err(|e| {
+                        map_output_bits(e, "self.buffers_dheap_a_2.input.din".to_string())
+                    })?;
                     self.alu.input.output_ready = self.buffers_dheap_a_2.in_ready();
                 }
             }
 
             // when dheap reads an app, search whether that app is still outstanding
-            let search = self.dheap.search().map_err(|search_err_str| {
-                error::sim::TickHw::UpdateLocal(search_err_str, error::sim::SimState)
+            let search = self.dheap.search().map_err(|err| {
+                error::sim::TickHw::Core(
+                    error::sim::local::Core::DereHeapFailed {
+                        err,
+                        context: "deref search app outstanding".to_string(),
+                    },
+                    error::sim::SimState,
+                )
             })?;
             self.reducer.input.search = search;
             self.rings_dheap_b_0.input.search = search;

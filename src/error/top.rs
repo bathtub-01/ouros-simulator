@@ -73,31 +73,6 @@ pub enum Simulation {
     #[error("Excedeed cycle limit of {0}")]
     CycleLimit(u32),
 
-    #[error("Ticking hardware: {0}")]
-    Tick(#[from] sim::TickHw),
-}
-
-pub mod sim {
-
-    #[derive(Debug, thiserror::Error)]
-    pub enum TickHw {
-        #[error("Local: {0}")]
-        UpdateLocal(String, SimState),
-        #[error("Stat: {0}")]
-        Statistics(String, SimState),
-    }
-
-    /// This is the snaphot of the state of the App_State that we are running
-    #[derive(Debug, Copy, Clone)]
-    pub struct SimState;
-
-    impl TickHw {
-        /// just to ensure that we always return a state
-        fn get_state(self) -> SimState {
-            match self {
-                TickHw::UpdateLocal(_, state) => state,
-                TickHw::Statistics(_, state) => state,
-            }
-        }
-    }
+    #[error("Running Simulation: {0}")]
+    Run(#[from] crate::error::sim::TickHw),
 }

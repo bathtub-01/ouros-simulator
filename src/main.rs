@@ -612,14 +612,11 @@ fn run() -> Result<(), error::Ouros> {
                     println!("running {}", program_name);
                     // for now the mode will be ignored if a specific program is select
                     // can have an extra check in the future to make it correct
-                    run_big_prog(
-                        progs
-                            .get(program_name.as_str())
-                            .ok_or(error::Initialisation::ProgramNotFound {
-                                program_name: program_name.to_string(),
-                            })
-                            .map_err(error::Ouros::from)?,
-                    )
+                    run_big_prog(progs.get(program_name.as_str()).ok_or_else(|| {
+                        error::Ouros::Init(error::Initialisation::ProgramNotFound {
+                            program_name: program_name.to_string(),
+                        })
+                    })?)
                     .map_err(error::Ouros::SimulationMode)
                 }
                 Args {

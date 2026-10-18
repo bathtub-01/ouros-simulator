@@ -563,7 +563,7 @@ impl GbgCollector {
         }
     }
 
-    fn step_sweep(&mut self) -> Result<(), String> {
+    fn step_sweep(&mut self) -> Result<(), error::sim::local::Gbc> {
         // ========== defaults (update regs from previous demands) ==========
         self.reg_pre_gc.connect(&false);
         if *self.reg_pre_gc.value() {
@@ -608,7 +608,9 @@ impl GbgCollector {
                     println!("old head is 0 when pushing to freelist!");
                 }
             } else if read_out.state == CellState::WorkList {
-                return Err("Broken WorkList! addr: {}".to_string()); // p_anic!("Broken WorkList! addr: {}", *self.reg_sweeper.value());
+                return Err(error::sim::local::Gbc::BrokenWorkList {
+                    addr: *self.reg_sweeper.value(),
+                });
             }
 
             if *self.reg_sweeper.value() < self.const_heap_size - 1 {
@@ -746,7 +748,7 @@ impl HwModule for GbgCollector {
             CollectorState::Root => self.step_root(),
             CollectorState::Mark => self.step_mark(),
             CollectorState::Sweep => self.step_sweep().map_err(|step_sweep_error| {
-                error::sim::TickHw::UpdateLocal(step_sweep_error, error::sim::SimState)
+                error::sim::TickHw::Gbc(step_sweep_error, error::sim::SimState)
             })?,
         }
 

@@ -52,25 +52,24 @@ impl<T: Clone + Default, const N: usize> RArbiter<T, N> {
         self.input.in_valid.iter().any(|&x| x)
     }
 
-    pub fn select(&self) -> Option<usize> {
+    pub fn select(&self) -> Result<usize, error::sim::local::RArbiter> {
         for i in 0..N {
             let port = (i + self.priority.value()) % N;
             if self.input.in_valid[port] {
-                return Some(port);
+                return Ok(port);
             }
         }
-        None
+        Err(error::sim::local::RArbiter::Selection)
     }
 }
 
 impl<T: Clone + Default, const N: usize> HwModule for RArbiter<T, N> {
     fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         self.select()
+            .map_err(|r_arbiter_error| {
+                error::sim::TickHw::Rarbiter(r_arbiter_error, error::sim::SimState)
+            })
             .map(|p| self.priority.connect(&((p + 1) % N)))
-            .ok_or(error::sim::TickHw::UpdateLocal(
-                "Could not select in RArbiter".to_string(),
-                error::sim::SimState,
-            ))
     }
 
     fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
@@ -150,12 +149,12 @@ fn arbiter_spec() {
         });
         // println!("priority: {}", arbiter.states.local.priority.value());
 
-        let select = arbiter.select();
-        assert_eq!(select, Some((i % 4) as usize));
-        assert_eq!(arbiter.out_bits(select), Some(&(i % 4 + 10)));
+        let select = arbiter.select().expect("should have selected arbiter");
+        assert_eq!(select, (i % 4) as usize);
+        assert_eq!(arbiter.out_bits(Some(select)), Some(&(i % 4 + 10)));
 
         for p in 0..4 {
-            assert_eq!(arbiter.in_ready(p, select), Some(p) == select);
+            assert_eq!(arbiter.in_ready(p, Some(select)), p == select);
         }
 
         arbiter.tick().expect("expected to tick arbitrer");

@@ -111,7 +111,7 @@ impl Alu {
         }
     }
 
-    pub fn output_bits(&self) -> Result<ActiveApp, String> {
+    pub fn output_bits(&self) -> Result<ActiveApp, error::sim::local::Alu> {
         if ALU_PIPE {
             Ok(self.holder.1.clone())
         } else {
@@ -123,13 +123,13 @@ impl Alu {
         &self.stat
     }
 
-    fn gen_result(&self) -> Result<ActiveApp, String> {
-        let get_operand = |i: usize| -> Result<i32, String> {
+    fn gen_result(&self) -> Result<ActiveApp, error::sim::local::Alu> {
+        let get_operand = |i: usize| -> Result<i32, error::sim::local::Alu> {
             self.input
                 .input_bits
                 .load
                 .get(i)
-                .ok_or(format!("{} operand could not be load", i))
+                .ok_or_else(|| format!("{} operand could not be load", i))
                 .and_then(take_int)
         };
 
@@ -140,7 +140,7 @@ impl Alu {
             .input_bits
             .load
             .first()
-            .ok_or("failed to load input bits".to_string())
+            .ok_or_else(|| "failed to load input bits".to_string())
             .and_then(|atom| match atom {
                 Prm(op, inv) => Ok(ActiveApp {
                     stack_idx: self.input.input_bits.stack_idx,
@@ -172,7 +172,7 @@ impl HwModule for Alu {
         if self.input_fire() {
             self.holder.0 = true;
             self.holder.1 = self.gen_result().map_err(|error_value| {
-                error::sim::TickHw::UpdateLocal(error_value, error::sim::SimState)
+                error::sim::TickHw::Alu(error_value, error::sim::SimState)
             })?;
         }
         Ok(())
