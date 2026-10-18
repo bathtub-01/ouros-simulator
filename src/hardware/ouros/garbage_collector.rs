@@ -634,17 +634,15 @@ impl HwModule for GbgCollector {
             // }
             if self.input.monitor_big_drf_valid {
                 self.reg_monitors.input[self.input.monitor_big_drf_stk] = {
-                    let mut app: [Atom; APP_LENGTH] = self.reg_monitors.value()
-                        [self.input.monitor_big_drf_stk]
-                        .1
-                        .clone();
-                    app[0] = self.input.monitor_big_drf_bits.clone();
+                    let mut app: [Atom; APP_LENGTH] =
+                        self.reg_monitors.value()[self.input.monitor_big_drf_stk].1;
+                    app[0] = self.input.monitor_big_drf_bits;
                     (true, app)
                 }
             }
             if self.input.monitor_valid {
                 self.reg_monitors.input[self.input.monitor_bits.stack_idx as usize] =
-                    (true, self.input.monitor_bits.load.clone());
+                    (true, self.input.monitor_bits.load);
             }
         }
 
@@ -691,8 +689,7 @@ impl HwModule for GbgCollector {
             self.reg_free_drawed.connect(&true);
             self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
             self.free_len_minus_one();
-        } 
-        else {
+        } else {
             /* nothing to do */
         }
 
@@ -803,7 +800,7 @@ impl HwModule for GbgCollector {
             self.stat.allocations += 1;
         }
 
-        Ok(if self.stat_detail_lv >= DLV_GC1 {
+        if self.stat_detail_lv >= DLV_GC1 {
             if self.deallocate_fire() && *self.reg_collector.value() != CollectorState::Mark {
                 self.stat.immediate_reuse += 1;
             }
@@ -819,7 +816,8 @@ impl HwModule for GbgCollector {
 
             self.stat.free_len.push(*self.reg_free_len.value());
             self.stat.work_len.push(*self.reg_work_len.value());
-        })
+        };
+        Ok(())
     }
 
     fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
@@ -860,16 +858,16 @@ fn gc_spec_draw() {
     use rand::Rng;
     let mut rng = rand::rng();
 
-    gc.tick();
+    gc.tick().expect("expected to tick gc");
     while it < size {
         let draw: bool = rng.random();
         if draw {
             gc.input.addr_out_ready = true;
             assert_eq!(gc.addr_out_bits(), it);
-            it = it + 1;
+            it += 1;
         } else {
             gc.input.addr_out_ready = false;
         }
-        gc.tick();
+        gc.tick().expect("expected to tick gc");
     }
 }

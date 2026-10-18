@@ -212,7 +212,7 @@ fn alu_spec() {
     use Atom::*;
     let mut alu = Alu::new();
 
-    alu.tick();
+    alu.tick().expect("expected to tick alu");
     alu.input.link(|input| {
         input.output_ready = false;
         input.input_valid = true;
@@ -228,13 +228,13 @@ fn alu_spec() {
             Nop,
         ];
     });
-    alu.tick();
+    alu.tick().expect("expected to tick alu");
     println!("{:?}, valid: {}", alu.output_bits(), alu.output_valid());
 
     alu.input.link(|input| {
         input.output_ready = true;
         input.input_valid = false;
     });
-    alu.tick();
+    alu.tick().expect("expected to tick alu");
     println!("{:?}, valid: {}", alu.output_bits(), alu.output_valid());
 }

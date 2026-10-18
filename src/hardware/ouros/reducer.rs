@@ -96,8 +96,8 @@ impl Reducer {
         }
     }
 
-    pub fn program(mut self, prog: &Vec<Vec<Atom>>) -> Self {
-        fn convert(atms: &Vec<Atom>) -> App {
+    pub fn program(mut self, prog: &[Vec<Atom>]) -> Self {
+        fn convert(atms: &[Atom]) -> App {
             assert!(atms.len() <= APP_LENGTH);
             let mut app: App = std::array::from_fn(|_| Atom::Nop);
             for (i, atm) in atms.iter().enumerate() {
@@ -105,7 +105,11 @@ impl Reducer {
             }
             app
         }
-        let img = prog.iter().map(convert).collect();
+        let img = prog
+            .iter()
+            .map(|v| v.iter().as_slice())
+            .map(convert)
+            .collect();
         self.comb_table.image(&img);
         self
     }
@@ -436,7 +440,7 @@ impl Reducer {
     }
 
     fn step_next(&mut self) -> Result<(), String> {
-        Ok(if self.in_fire() {
+        if self.in_fire() {
             self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
             self.reg_big_spine_used.connect(&false);
@@ -465,7 +469,8 @@ impl Reducer {
             };
         } else {
             self.reg_stm.connect(&Stm::Idle);
-        })
+        };
+        Ok(())
     }
 }
 
@@ -603,13 +608,14 @@ impl HwModule for Reducer {
             }
         }
 
-        Ok(if self.stat_detail_lv >= DLV_FULL_LOG {
+        if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.spine_valid() {
                 self.stat.holder_contents.push(Some(self.spine_bits()));
             } else {
                 self.stat.holder_contents.push(None);
             }
-        })
+        };
+        Ok(())
     }
 
     fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {

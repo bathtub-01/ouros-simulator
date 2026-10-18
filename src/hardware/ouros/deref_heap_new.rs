@@ -404,8 +404,8 @@ impl DrfHeap {
     }
 
     /// When creating a `DrfHeap`, put a compiled program into the heap memory.
-    pub fn program(mut self, prog: &Vec<Vec<Atom>>) -> Self {
-        fn convert(atms: &Vec<Atom>) -> App {
+    pub fn program(mut self, prog: &[Vec<Atom>]) -> Self {
+        fn convert(atms: &[Atom]) -> App {
             assert!(atms.len() <= APP_LENGTH);
             let mut app: App = std::array::from_fn(|_| Atom::Nop);
             for (i, atm) in atms.iter().enumerate() {
@@ -414,7 +414,11 @@ impl DrfHeap {
             app
         }
         // convert Vec<Vec<Atom>> to Vec<HeapCell>
-        let img: Vec<App> = prog.iter().map(convert).collect();
+        let img: Vec<App> = prog
+            .iter()
+            .map(|v| v.iter().as_slice())
+            .map(convert)
+            .collect();
         self.heap_mem.image(&img);
         self
     }

@@ -172,9 +172,9 @@ fn addr_box_spec() {
         ab.input.free_addr_valid = gc.addr_out_valid();
         ab.input.free_addr_bits = gc.addr_out_bits();
         gc.input.addr_out_ready = ab.addr_request();
-        gc.tick();
-        ab.tick();
-        ctr = ctr + 1;
+        gc.tick().expect("expected to tick gc");
+        ab.tick().expect("expected to tick gc");
+        ctr += 1;
     }
 
     println!("{:?}", ab.consume_addr_valid());

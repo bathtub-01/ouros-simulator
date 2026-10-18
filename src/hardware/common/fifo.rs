@@ -114,7 +114,7 @@ where
 fn fifo_spec() {
     let mut fifo: Fifo<u32, 4, true> = Fifo::new();
 
-    fifo.tick();
+    fifo.tick().expect("expected to tick fifo");
 
     // fill the fifo (1,2,3,4)
     for i in 1..10 {
@@ -123,7 +123,7 @@ fn fifo_spec() {
             input.din = i;
             input.out_ready = false;
         });
-        fifo.tick();
+        fifo.tick().expect("expected to tick fifo");
     }
 
     // pipelining
@@ -136,6 +136,6 @@ fn fifo_spec() {
         assert!(fire(fifo.input.in_valid, fifo.in_ready()));
         assert!(fire(fifo.out_valid(), fifo.input.out_ready));
         assert_eq!(fifo.dout(), Some(&(i - 4)));
-        fifo.tick();
+        fifo.tick().expect("expected to tick fifo");
     }
 }

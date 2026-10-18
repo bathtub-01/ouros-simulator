@@ -58,21 +58,21 @@ fn bumper_spec() {
         input.start = true;
     });
 
-    bumper.tick();
-    assert_eq!(bumper.stm(), true);
-    bumper.tick();
+    bumper.tick().expect("expected to tick bumper");
+    assert!(bumper.stm());
+    bumper.tick().expect("expected to tick bumper");
     assert_eq!(bumper.res(), 1);
-    bumper.tick();
+    bumper.tick().expect("expected to tick bumper");
     assert_eq!(bumper.res(), 2);
 
     bumper.input.link(|input| {
         input.start = false;
     });
 
-    bumper.tick();
-    assert_eq!(bumper.stm(), false);
+    bumper.tick().expect("expected to tick bumper");
+    assert!(!bumper.stm());
     assert_eq!(bumper.res(), 3);
 
-    bumper.tick();
+    bumper.tick().expect("expected to tick bumper");
     assert_eq!(bumper.res(), 3);
 }

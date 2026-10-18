@@ -634,10 +634,9 @@ fn run() -> Result<(), error::Ouros> {
                     mode: None,
                     prog_name: None,
                     ..
-                } => Err(error::Initialisation::InvalidCliArgs {
+                } => Err(error::Ouros::Init(error::Initialisation::InvalidCliArgs {
                     reason: "need to select a mode or a specific program name to run".to_string(),
-                })
-                .map_err(error::Ouros::from),
+                })),
             }
         })
 }

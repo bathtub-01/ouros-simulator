@@ -76,11 +76,11 @@ fn ring_spec() {
     let mut ring: Ring<u32, 5> = Ring::new();
 
     ring.input.default_input();
-    ring.tick();
+    ring.tick().expect("expected to tick ring");
 
     for i in 0..5 {
         ring.put(&(42 + i));
-        ring.tick();
+        ring.tick().expect("expected to tick ring");
     }
 
     ring.input.default_input();
@@ -93,7 +93,7 @@ fn ring_spec() {
         ring.input.out_fire = true;
         ring.input.search = 42 + i;
         assert!(!ring.found());
-        ring.tick();
+        ring.tick().expect("expected to tick ring");
     }
 
     ring.input.default_input();

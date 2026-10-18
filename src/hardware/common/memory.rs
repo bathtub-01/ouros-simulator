@@ -83,12 +83,12 @@ fn single_port_mem_spec() {
 
     for i in 50..100 {
         mem.write(i, i as u32 + 100);
-        mem.tick();
+        mem.tick().expect("expected to tick mem");
     }
 
     for i in 50..100 {
         mem.read(i);
-        mem.tick();
+        mem.tick().expect("expected to tick mem");
         assert_eq!(mem.dout(), &(i as u32 + 100));
     }
 }
@@ -189,7 +189,7 @@ impl<T: Clone + Default> DualPortMem<T> {
 
 impl<T: Clone + Default> HwModule for DualPortMem<T> {
     fn update_stat(&mut self) -> std::result::Result<(), error::sim::TickHw> {
-        Ok(if self.record_stat {
+        if self.record_stat {
             if self.input.port_a.enable {
                 if self.input.port_a.is_write {
                     self.stat.a_writes += 1;
@@ -205,7 +205,8 @@ impl<T: Clone + Default> HwModule for DualPortMem<T> {
                     self.stat.b_reads += 1;
                 }
             }
-        })
+        };
+        Ok(())
     }
 
     fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
@@ -256,7 +257,7 @@ fn dual_port_mem_spec() {
             input.port_b.is_write = true;
             input.port_b.din = i as u32 + 100;
         });
-        mem.tick();
+        mem.tick().expect("expected to tick mem");
     }
 
     for i in 50..100 {
@@ -266,7 +267,7 @@ fn dual_port_mem_spec() {
             input.port_b.addr = i + 200;
             input.port_b.is_write = false;
         });
-        mem.tick();
+        mem.tick().expect("expected to tick mem");
         assert_eq!(mem.dout_a(), &(i as u32 + 100));
         assert_eq!(mem.dout_b(), &(i as u32 + 100));
     }
@@ -280,7 +281,7 @@ fn dual_port_mem_spec() {
             input.port_b.addr = i;
             input.port_b.is_write = false;
         });
-        mem.tick();
+        mem.tick().expect("expected to tick mem");
         assert_eq!(mem.dout_b(), &(i as u32 + 100));
     }
 
@@ -292,7 +293,7 @@ fn dual_port_mem_spec() {
             input.port_a.addr = i;
             input.port_a.is_write = false;
         });
-        mem.tick();
+        mem.tick().expect("expected to tick mem");
         assert_eq!(mem.dout_a(), &(i as u32 - 100));
     }
 }

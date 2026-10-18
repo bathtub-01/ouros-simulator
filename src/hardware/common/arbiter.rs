@@ -136,7 +136,7 @@ impl<T: Clone + Default, const N: usize> HwModule for PArbiter<T, N> {
 fn arbiter_spec() {
     let mut arbiter: RArbiter<u32, 4> = RArbiter::new();
 
-    arbiter.tick();
+    arbiter.tick().expect("expected to tick arbitrer");
 
     for i in 0..50 {
         arbiter.input.link(|input| {
@@ -158,6 +158,6 @@ fn arbiter_spec() {
             assert_eq!(arbiter.in_ready(p, select), Some(p) == select);
         }
 
-        arbiter.tick();
+        arbiter.tick().expect("expected to tick arbitrer");
     }
 }

@@ -114,14 +114,14 @@ impl<T: Clone + Default, const N: usize> HwModule for Stack<T, N> {
 fn stack_spec() {
     let mut stack: Stack<u32, 64> = Stack::new();
 
-    stack.tick();
+    stack.tick().expect("expected to tick stack");
 
     for i in 0..64 {
         stack.input.link(|input| {
             input.op = StackOp::Push;
             input.din = i;
         });
-        stack.tick();
+        stack.tick().expect("expected to tick stack");
     }
 
     for i in 0..64 {
@@ -131,12 +131,12 @@ fn stack_spec() {
             input.op = StackOp::Mod;
             input.din = i;
         });
-        stack.tick();
+        stack.tick().expect("expected to tick stack");
         assert_eq!(stack.top(), Some(&i));
 
         stack.input.link(|input| {
             input.op = StackOp::Pop;
         });
-        stack.tick();
+        stack.tick().expect("expected to tick stack");
     }
 }

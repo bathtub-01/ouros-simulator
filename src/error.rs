@@ -81,8 +81,6 @@ pub mod sim {
 
     #[derive(Debug, thiserror::Error)]
     pub enum TickHw {
-        #[error("Tick leafs: {0}")]
-        TickLeafs(String, SimState),
         #[error("Local: {0}")]
         Local(String, SimState),
         #[error("Stat: {0}")]
@@ -97,7 +95,6 @@ pub mod sim {
         /// just to ensure that we always return a state
         fn get_state(self) -> SimState {
             match self {
-                TickHw::TickLeafs(_, state) => state,
                 TickHw::Local(_, state) => state,
                 TickHw::Stat(_, state) => state,
             }
