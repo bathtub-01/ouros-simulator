@@ -163,7 +163,8 @@ fn addr_box_spec() {
     use super::garbage_collector::GbgCollector;
     let size = 1024;
     let from = 42;
-    let mut gc = GbgCollector::new(size, from).init_freelist();
+    let gc_at = Default::default();
+    let mut gc = GbgCollector::new(size, from, gc_at).init_freelist();
     let mut ab = AddrBox::new();
     let mut ctr = from;
 

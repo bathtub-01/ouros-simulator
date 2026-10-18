@@ -471,10 +471,13 @@ impl Reducer {
 
 impl HwModule for Reducer {
     fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
+        let map_step_error = |step_error_msg: String| -> error::sim::TickHw {
+            error::sim::TickHw::Local(step_error_msg, error::sim::SimState)
+        };
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
             Stm::Idle => {
-                self.step_next()?;
+                self.step_next().map_err(map_step_error)?;
             }
             Stm::Spine => {
                 // !NOTE! We are assuming this state won't be blocked.
@@ -502,7 +505,7 @@ impl HwModule for Reducer {
                             + 1,
                     );
                 } else {
-                    self.step_next()?;
+                    self.step_next().map_err(map_step_error)?;
                 }
             }
             Stm::App => {
@@ -519,7 +522,7 @@ impl HwModule for Reducer {
                                 + 1,
                         );
                     } else {
-                        self.step_next()?;
+                        self.step_next().map_err(map_step_error)?;
                     }
                 } else {
                     // fail to fire, keep reading
@@ -533,7 +536,7 @@ impl HwModule for Reducer {
             Stm::Special => {
                 self.reg_app_mask.connect(&false);
                 if fire(self.input.app_ready, self.app_valid()) {
-                    self.step_next()?;
+                    self.step_next().map_err(map_step_error)?;
                 }
             }
         }
@@ -580,13 +583,11 @@ impl HwModule for Reducer {
             self.stat.reductions += 1;
         }
 
-        if self.stat_detail_lv >= DLV_GC {
-            if fire(self.input.app_ready, self.app_valid()) {
-                if self.app_bits().load.iter().any(is_ptr) {
-                    self.stat.nested_with_ptr += 1;
-                } else {
-                    self.stat.nested_no_ptr += 1;
-                }
+        if self.stat_detail_lv >= DLV_GC && fire(self.input.app_ready, self.app_valid()) {
+            if self.app_bits().load.iter().any(is_ptr) {
+                self.stat.nested_with_ptr += 1;
+            } else {
+                self.stat.nested_no_ptr += 1;
             }
         }
 

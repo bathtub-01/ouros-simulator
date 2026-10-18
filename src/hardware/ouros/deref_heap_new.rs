@@ -659,15 +659,13 @@ impl DrfHeap {
                     .any(find_more_dmder(stk.top().unwrap().1))
                 {
                     Ok(CONSUMEs::InputWHNFWithDmder)
-                } else {
-                    if stk.second().is_some() {
-                        if stack_cell_with(stk.second(), |(flag, _)| !*flag) {
-                            return Err("strange new frame!".to_string());
-                        }
-                        Ok(CONSUMEs::InputWHNFNoDmderNewFrame)
-                    } else {
-                        Ok(CONSUMEs::InputWHNFNoDmderNoFrame)
+                } else if stk.second().is_some() {
+                    if stack_cell_with(stk.second(), |(flag, _)| !*flag) {
+                        return Err("strange new frame!".to_string());
                     }
+                    Ok(CONSUMEs::InputWHNFNoDmderNewFrame)
+                } else {
+                    Ok(CONSUMEs::InputWHNFNoDmderNoFrame)
                 }
             } else {
                 Ok(CONSUMEs::InputIA)
@@ -682,16 +680,14 @@ impl DrfHeap {
             .any(find_more_dmder(*self.addr_holder.value()))
         {
             WHNFs::MoreDmders
+        } else if self
+            .thread_stack
+            .iter()
+            .any(find_new_frame(*self.addr_holder.value()))
+        {
+            WHNFs::NewFrame
         } else {
-            if self
-                .thread_stack
-                .iter()
-                .any(find_new_frame(*self.addr_holder.value()))
-            {
-                WHNFs::NewFrame
-            } else {
-                WHNFs::NoNewFrame
-            }
+            WHNFs::NoNewFrame
         }
     }
 
@@ -700,20 +696,14 @@ impl DrfHeap {
         let stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
         if *self.non_exist.value() {
             IAs1::NoExist
+        } else if is_whnf(target) {
+            IAs1::ExistWHNF
+        } else if !*self.working_heap.dout_a() {
+            IAs1::ExistIAFresh
+        } else if stack_cell_with(stk.top(), |(flag, _)| !*flag) {
+            IAs1::ExistIAWorkingNormal
         } else {
-            if is_whnf(target) {
-                IAs1::ExistWHNF
-            } else {
-                if !*self.working_heap.dout_a() {
-                    IAs1::ExistIAFresh
-                } else {
-                    if stack_cell_with(stk.top(), |(flag, _)| !*flag) {
-                        IAs1::ExistIAWorkingNormal
-                    } else {
-                        IAs1::ExistIAWorkingAtNewFrame
-                    }
-                }
-            }
+            IAs1::ExistIAWorkingAtNewFrame
         }
     }
 
@@ -743,8 +733,7 @@ impl DrfHeap {
                 Atom::Ptr(_, _, _) | Atom::Seq => false,
                 Atom::Prm(_, _) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
                 Atom::Try => *self.arg_id.value() == 1 && *s1 != IAs1::ExistWHNF,
-                // more on this to support strict args in the future
-                _ => unreachable!(),
+                _ => unimplemented!("more on this to support strict args in the future"),
             }
         };
 
@@ -752,17 +741,15 @@ impl DrfHeap {
             IAs2::NextStrictArgLocal
         } else if more_strict_args && idle_stack {
             IAs2::NextStrictArgNewStk
+        } else if (is_ptr(&ia[0])
+            || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
+            || is_seq(&ia[0])
+            || (is_try(&ia[0]) && *self.arg_id.value() == 1))
+            && target_in_whnf
+        {
+            IAs2::NoMoreArgsCanEmit
         } else {
-            if (is_ptr(&ia[0])
-                || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
-                || is_seq(&ia[0])
-                || (is_try(&ia[0]) && *self.arg_id.value() == 1))
-                && target_in_whnf
-            {
-                IAs2::NoMoreArgsCanEmit
-            } else {
-                IAs2::NoMoreArgsNoEmit // TRY second should go here; what if the 2nd is in compute? We can use meta data to improve PRM/SEQ/TRY?
-            }
+            IAs2::NoMoreArgsNoEmit // TRY second should go here; what if the 2nd is in compute? We can use meta data to improve PRM/SEQ/TRY?
         }
     }
 
@@ -779,6 +766,7 @@ impl DrfHeap {
     fn waited_by(&self) -> Option<usize> {
         let addr = self.input.port_b_bits.heap_addr;
         let a_thread = self.holder_in.value().stack_idx as usize;
+
         if *self.stm.value() == Stm::Ia
             && self.get_ias1() == IAs1::NoExist
             && *self.addr_holder.value() == addr

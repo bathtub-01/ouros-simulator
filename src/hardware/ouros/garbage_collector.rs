@@ -214,12 +214,10 @@ impl GbgCollector {
             && self.input.deallocate_bits != *self.reg_sweeper.value()
         {
             self.input.deallocate_bits
+        } else if *self.reg_free_drawed.value() {
+            self.gc_mem.dout_a().ptr
         } else {
-            if *self.reg_free_drawed.value() {
-                self.gc_mem.dout_a().ptr
-            } else {
-                *self.reg_free_head.value()
-            }
+            *self.reg_free_head.value()
         }
     }
 
@@ -266,12 +264,10 @@ impl GbgCollector {
             let in_app = &self.input.heap_read_bits;
             if in_app.iter().any(is_ptr) {
                 0
+            } else if *self.reg_work_drawed.value() {
+                self.gc_mem.dout_a().ptr
             } else {
-                if *self.reg_work_drawed.value() {
-                    self.gc_mem.dout_a().ptr
-                } else {
-                    *self.reg_work_head.value()
-                }
+                *self.reg_work_head.value()
             }
         } else if *self.reg_move.value() == 2 && !self.mutator_request() {
             let read_out = if *self.reg_pre_gc.value() {
@@ -283,12 +279,10 @@ impl GbgCollector {
             let current_app = self.reg_heap_reader.value();
             if self.more_ptr(current_app) {
                 0
+            } else if mark_this {
+                get_ptr(&current_app[*self.reg_app_idx.value()])
             } else {
-                if mark_this {
-                    get_ptr(&current_app[*self.reg_app_idx.value()])
-                } else {
-                    *self.reg_work_head.value()
-                }
+                *self.reg_work_head.value()
             }
         } else {
             *self.reg_work_on.value()
@@ -693,14 +687,13 @@ impl HwModule for GbgCollector {
                 self.push_to_freelist(self.input.deallocate_bits, real_freelist_head, true);
                 self.free_len_plus_one();
             }
-        } else {
-            if self.addr_out_fire() {
-                self.reg_free_drawed.connect(&true);
-                self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
-                self.free_len_minus_one();
-            } else {
-                /* nothing to do */
-            }
+        } else if self.addr_out_fire() {
+            self.reg_free_drawed.connect(&true);
+            self.gc_mem.read_a(real_freelist_head); // NOTE it's still a free addr
+            self.free_len_minus_one();
+        } 
+        else {
+            /* nothing to do */
         }
 
         if self.feedback_fire() {
@@ -852,7 +845,8 @@ impl HwModule for GbgCollector {
 
 #[test]
 fn gc_spec_init() {
-    let gc = GbgCollector::new(100, 8).init_freelist();
+    let gc_at = Default::default();
+    let gc = GbgCollector::new(100, 8, gc_at).init_freelist();
     println!("{:#?}", gc.gc_mem.ram);
 }
 
@@ -860,7 +854,8 @@ fn gc_spec_init() {
 fn gc_spec_draw() {
     let size = 1024;
     let from = 42;
-    let mut gc = GbgCollector::new(size, from).init_freelist();
+    let gc_at = Default::default();
+    let mut gc = GbgCollector::new(size, from, gc_at).init_freelist();
     let mut it = from;
     use rand::Rng;
     let mut rng = rand::rng();

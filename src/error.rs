@@ -14,6 +14,12 @@ pub enum Ouros {
     InspectionMode(#[from] InspectionMode),
 }
 
+pub fn report_ouros(e: Ouros) {
+    dbg!(&e);
+    // TODO: yet to report it properly
+    // match e {}
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Initialisation {
     #[error("Initialising Rayon thread pool: {0}")]
@@ -22,11 +28,13 @@ pub enum Initialisation {
     ProgramNotFound { program_name: String },
     #[error("Invalid CLI arguments: {reason}")]
     InvalidCliArgs { reason: String },
+    #[error("Patterns are invalid: {reason}")]
+    InvalidPatterns { reason: String },
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum SimulationMode {
-    #[error("Simulation: {0}")]
+    #[error("Simulation mode: {0}")]
     Simulation(Simulation),
 }
 
@@ -58,12 +66,6 @@ pub enum BenchmarkingMode {
     Simulation(Simulation),
     #[error("Output IO had some issues: {0}")]
     OutputIO(std::io::Error),
-}
-
-pub fn report_ouros(e: Ouros) {
-    dbg!(&e);
-    // TODO: yet to report it properly
-    // match e {}
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -1,6 +1,8 @@
 use std::fmt;
 use std::sync::LazyLock;
 
+use crate::error;
+
 pub type Arity = u8;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -111,7 +113,7 @@ pub struct ParseRes {
     pub app3: Vec<Hole>,
 }
 
-pub fn parse_pat(p: &Pat) -> Result<ParseRes, String> {
+pub fn parse_pat(p: &Pat) -> Result<ParseRes, error::Initialisation> {
     let mut result = ParseRes::default();
     parse(p, Mode::Spine, &mut 0, &mut 0, &mut result)?;
     Ok(result)
@@ -142,7 +144,7 @@ fn parse(
     arg_count: &mut u8,
     ptr_count: &mut u8,
     acc: &mut ParseRes,
-) -> Result<(), crate::error::> {
+) -> Result<(), error::Initialisation> {
     let mut stack: Vec<Pat> = Vec::new();
     let mut p_it = p;
     let mut res: Vec<Hole> = Vec::new();
@@ -151,7 +153,9 @@ fn parse(
     while *p_it != Pat::X {
         match p_it {
             Pat::X => {
-                return Err("parse: strange!".to_string());
+                return Err(error::Initialisation::InvalidPatterns {
+                    reason: "parse: strange!".to_string(),
+                });
             }
             Pat::At(l, r) => {
                 stack.push(*r.clone());
