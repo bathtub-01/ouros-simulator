@@ -285,14 +285,14 @@ impl HwModule for OurosCore {
                 .dheap
                 .out_main_bits()
                 .map_err(|out_bits_error| {
-                    error::sim::TickHw::Local(out_bits_error, error::sim::SimState)
+                    error::sim::TickHw::UpdateLocal(out_bits_error, error::sim::SimState)
                 })?
                 .stack_idx as usize;
             self.gc.input.monitor_big_drf_bits = self
                 .dheap
                 .out_main_bits()
                 .map_err(|out_bits_error| {
-                    error::sim::TickHw::Local(out_bits_error, error::sim::SimState)
+                    error::sim::TickHw::UpdateLocal(out_bits_error, error::sim::SimState)
                 })?
                 .load[0];
             self.gc.input.monitor_unset_valid = self.dheap.port_a_fire();
@@ -374,7 +374,7 @@ impl HwModule for OurosCore {
             });
 
             let map_out_main_bits = |out_main_bits_err_str: String| -> error::sim::TickHw {
-                error::sim::TickHw::Local(out_main_bits_err_str, error::sim::SimState)
+                error::sim::TickHw::UpdateLocal(out_main_bits_err_str, error::sim::SimState)
             };
 
             if self.dheap.out_main_valid() {
@@ -439,7 +439,7 @@ impl HwModule for OurosCore {
                 self.dheap
                     .out_big_drg_bits()
                     .map_err(|out_big_drg_bits_err_str| {
-                        error::sim::TickHw::Local(out_big_drg_bits_err_str, error::sim::SimState)
+                        error::sim::TickHw::UpdateLocal(out_big_drg_bits_err_str, error::sim::SimState)
                     })?;
 
             let out_spine = &self.reducer.spine_bits();
@@ -464,7 +464,7 @@ impl HwModule for OurosCore {
             }
 
             let map_output_bits = |output_bits_err_str: String| -> error::sim::TickHw {
-                error::sim::TickHw::Local(output_bits_err_str, error::sim::SimState)
+                error::sim::TickHw::UpdateLocal(output_bits_err_str, error::sim::SimState)
             };
 
             if self.alu.output_valid() {
@@ -483,7 +483,7 @@ impl HwModule for OurosCore {
 
             // when dheap reads an app, search whether that app is still outstanding
             let search = self.dheap.search().map_err(|search_err_str| {
-                error::sim::TickHw::Local(search_err_str, error::sim::SimState)
+                error::sim::TickHw::UpdateLocal(search_err_str, error::sim::SimState)
             })?;
             self.reducer.input.search = search;
             self.rings_dheap_b_0.input.search = search;

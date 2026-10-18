@@ -1308,7 +1308,7 @@ impl HwModule for DrfHeap {
         self.non_exist.connect(&self.input.found);
 
         self.handle_port_a().map_err(|port_a_error| {
-            error::sim::TickHw::Local(port_a_error, error::sim::SimState)
+            error::sim::TickHw::UpdateLocal(port_a_error, error::sim::SimState)
         })?;
         self.handle_port_b();
 
@@ -1386,7 +1386,7 @@ impl HwModule for DrfHeap {
                 self.stat
                     .holder_contents
                     .push(Some(self.out_main_bits().map_err(|out_bits_error| {
-                        error::sim::TickHw::Stat(out_bits_error, error::sim::SimState)
+                        error::sim::TickHw::Statistics(out_bits_error, error::sim::SimState)
                     })?));
             } else {
                 self.stat.holder_contents.push(None);

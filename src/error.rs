@@ -82,9 +82,9 @@ pub mod sim {
     #[derive(Debug, thiserror::Error)]
     pub enum TickHw {
         #[error("Local: {0}")]
-        Local(String, SimState),
+        UpdateLocal(String, SimState),
         #[error("Stat: {0}")]
-        Stat(String, SimState),
+        Statistics(String, SimState),
     }
 
     /// This is the snaphot of the state of the App_State that we are running
@@ -95,8 +95,8 @@ pub mod sim {
         /// just to ensure that we always return a state
         fn get_state(self) -> SimState {
             match self {
-                TickHw::Local(_, state) => state,
-                TickHw::Stat(_, state) => state,
+                TickHw::UpdateLocal(_, state) => state,
+                TickHw::Statistics(_, state) => state,
             }
         }
     }

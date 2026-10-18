@@ -746,7 +746,7 @@ impl HwModule for GbgCollector {
             CollectorState::Root => self.step_root(),
             CollectorState::Mark => self.step_mark(),
             CollectorState::Sweep => self.step_sweep().map_err(|step_sweep_error| {
-                error::sim::TickHw::Local(step_sweep_error, error::sim::SimState)
+                error::sim::TickHw::UpdateLocal(step_sweep_error, error::sim::SimState)
             })?,
         }
 

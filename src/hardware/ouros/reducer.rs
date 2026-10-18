@@ -477,7 +477,7 @@ impl Reducer {
 impl HwModule for Reducer {
     fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         let map_step_error = |step_error_msg: String| -> error::sim::TickHw {
-            error::sim::TickHw::Local(step_error_msg, error::sim::SimState)
+            error::sim::TickHw::UpdateLocal(step_error_msg, error::sim::SimState)
         };
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
@@ -551,7 +551,7 @@ impl HwModule for Reducer {
         }
 
         if self.spine_valid() && !self.input.spine_ready {
-            return Err(error::sim::TickHw::Local(
+            return Err(error::sim::TickHw::UpdateLocal(
                 "spine leaked".to_string(),
                 error::sim::SimState,
             )); // p_anic!(); println!("spine leaked!: {:?}", self.spine_bits());

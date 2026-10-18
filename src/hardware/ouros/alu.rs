@@ -172,7 +172,7 @@ impl HwModule for Alu {
         if self.input_fire() {
             self.holder.0 = true;
             self.holder.1 = self.gen_result().map_err(|error_value| {
-                error::sim::TickHw::Local(error_value, error::sim::SimState)
+                error::sim::TickHw::UpdateLocal(error_value, error::sim::SimState)
             })?;
         }
         Ok(())

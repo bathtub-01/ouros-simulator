@@ -67,7 +67,7 @@ impl<T: Clone + Default, const N: usize> HwModule for RArbiter<T, N> {
     fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         self.select()
             .map(|p| self.priority.connect(&((p + 1) % N)))
-            .ok_or(error::sim::TickHw::Local(
+            .ok_or(error::sim::TickHw::UpdateLocal(
                 "Could not select in RArbiter".to_string(),
                 error::sim::SimState,
             ))
