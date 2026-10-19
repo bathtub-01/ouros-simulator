@@ -6,8 +6,8 @@
 
 use super::program::AluOp::*;
 use super::program::Atom::*;
-use crate::error;
 use crate::{
+    error,
     hardware::{
         ouros::{
             config::*,
@@ -129,8 +129,10 @@ impl Alu {
                 .input_bits
                 .load
                 .get(i)
-                .ok_or_else(|| format!("{} operand could not be load", i))
-                .and_then(take_int)
+                .ok_or_else(|| error::sim::local::Alu::AtomLookup {
+                    context: format!("operand, at index {} could not be load", i),
+                })
+                .and_then(|atom| take_int(atom).map_err(error::sim::local::Alu::AtomErr))
         };
 
         let oprand1: i32 = get_operand(1)?;
@@ -140,7 +142,9 @@ impl Alu {
             .input_bits
             .load
             .first()
-            .ok_or_else(|| "failed to load input bits".to_string())
+            .ok_or_else(|| error::sim::local::Alu::AtomLookup {
+                context: "first atom in input bits".to_string(),
+            })
             .and_then(|atom| match atom {
                 Prm(op, inv) => Ok(ActiveApp {
                     stack_idx: self.input.input_bits.stack_idx,
@@ -158,7 +162,9 @@ impl Alu {
                         arr
                     },
                 }),
-                _ => Err("alu: app head is not an primitive op!".to_string()),
+                fetched_atom => Err(error::sim::local::Alu::AtomLookup {
+                    context: format!("App head is not an primitive op! we got {:?}", fetched_atom),
+                }),
             })
     }
 }

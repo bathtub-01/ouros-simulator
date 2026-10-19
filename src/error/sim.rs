@@ -107,7 +107,20 @@ pub mod local {
     #[derive(Debug, thiserror::Error)]
     pub enum Alu {
         // FIX: to specialise errors
-        #[error("String based error: {0}")]
-        Str(String),
+        #[error("Could not lookup atom: {context}")]
+        AtomLookup { context: String },
+        #[error("Atom error: {0}")]
+        AtomErr(Atom),
+    }
+
+    /// Atom component unit
+    #[derive(Debug, thiserror::Error)]
+    pub enum Atom {
+        // FIX: to specialise errors
+        #[error("Could not lookup atom attribute: {context}")]
+        Lookup { context: String },
+        // #[error("Non Primitive atom lookup: {0}")]
+        // Look
+        // _ => Err("alu: app head is not an primitive op!".to_string()),
     }
 }

@@ -357,7 +357,7 @@ impl Reducer {
         fire(self.input.in_valid, self.in_ready())
     }
 
-    fn get_instant(&self, c: &SpeCell) -> Result<i32, String> {
+    fn get_instant(&self, c: &SpeCell) -> Result<i32, error::sim::local::Atom> {
         let in_app = &self.reg_in.value().load;
         match c {
             SpeCell::Arg(arg) => take_int(&in_app[arg + 1]),
