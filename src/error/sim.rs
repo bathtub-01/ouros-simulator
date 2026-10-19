@@ -92,8 +92,12 @@ pub mod local {
     #[derive(Debug, thiserror::Error)]
     pub enum DerefHeap {
         // FIX: to specialise errors
-        #[error("String based error: {0}")]
-        Str(String),
+        #[error("Frame: {0}")]
+        Frame(String),
+        #[error("Invalid Deref Arg: {0}")]
+        Arg(String),
+        #[error("Invalid Stack: {0}")]
+        Stack(String),
     }
 
     /// Garbage collector errors
@@ -113,14 +117,11 @@ pub mod local {
         AtomErr(Atom),
     }
 
-    /// Atom component unit
+    /// Atom
     #[derive(Debug, thiserror::Error)]
     pub enum Atom {
         // FIX: to specialise errors
         #[error("Could not lookup atom attribute: {context}")]
         Lookup { context: String },
-        // #[error("Non Primitive atom lookup: {0}")]
-        // Look
-        // _ => Err("alu: app head is not an primitive op!".to_string()),
     }
 }

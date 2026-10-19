@@ -184,17 +184,17 @@ fn select_1st_arg(app: &App) -> Result<(i32, usize), error::sim::local::DerefHea
         Atom::Ptr(p, _, false) => Ok((0, p)),
         Atom::Prm(_, _) => match app[1] {
             Atom::Ptr(p, _, false) => Ok((1, p)),
-            Atom::Nop => Err(String::from("unreachable")),
+            Atom::Nop => Err(error::sim::local::DerefHeap::Arg(String::from("unreachable"))),
             _ => match app[2] {
                 Atom::Ptr(p, _, false) => Ok((2, p)),
-                _ => Err(String::from("unreachable")),
+                _ => Err(error::sim::local::DerefHeap::Arg(String::from("unreachable"))),
             },
         },
         Atom::Try | Atom::Seq => match app[1] {
             Atom::Ptr(p, _, false) => Ok((1, p)),
-            _ => Err(format!("No Ptr here: {:?}", app)),
+            _ => Err(error::sim::local::DerefHeap::Arg(format!("No Ptr here: {:?}", app))),
         },
-        _ => Err(format!("app: {:?}", app)),
+        _ => Err(error::sim::local::DerefHeap::Arg(format!("app: {:?}", app))),
     }
 }
 
@@ -205,7 +205,9 @@ fn select_next_arg(
 ) -> Result<(usize, usize), error::sim::local::DerefHeap> {
     match app[2] {
         Atom::Ptr(p, _, false) => Ok((2, p)),
-        _ => Err(String::from("unreachable")),
+        _ => Err(error::sim::local::DerefHeap::Arg(String::from(
+            "unreachable",
+        ))),
     }
 }
 
@@ -668,7 +670,9 @@ impl DrfHeap {
                     Ok(CONSUMEs::InputWHNFWithDmder)
                 } else if stk.second().is_some() {
                     if stack_cell_with(stk.second(), |(flag, _)| !*flag) {
-                        return Err("strange new frame!".to_string());
+                        return Err(error::sim::local::DerefHeap::Frame(
+                            "strange new frame!".to_string(),
+                        ));
                     }
                     Ok(CONSUMEs::InputWHNFNoDmderNewFrame)
                 } else {
@@ -925,7 +929,8 @@ impl DrfHeap {
 
         Ok(deref(
             dmder,
-            usize::try_from(arg_id).map_err(|e| e.to_string())?,
+            usize::try_from(arg_id)
+                .map_err(|e| error::sim::local::DerefHeap::Arg(e.to_string()))?,
             target,
             self.reg_free_addr.value().1,
         ))
@@ -1202,7 +1207,7 @@ impl DrfHeap {
                 {
                     // FIXME: ensure using a new stack
                     if stk_id as u8 == self.holder_in.value().stack_idx {
-                        return Err("GOT YA!".to_string());
+                        return Err(error::sim::local::DerefHeap::Stack("GOT YA!".to_string()));
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                     self.frame_stack[stk_id].push(self.gen_frame_record());
@@ -1398,7 +1403,7 @@ impl HwModule for DrfHeap {
                 self.stat.holder_contents.push(None);
             }
 
-            self.stat.heap_stm.push(self.stm.value().clone());
+            self.stat.heap_stm.push(*self.stm.value());
             self.stat.serving_id.push(self.holder_in.value().stack_idx);
         }
 
