@@ -12,29 +12,29 @@ use super::alu::compute;
 use super::program::*;
 use crate::error;
 use crate::hardware::common::{Register, SinglePortMem};
-use crate::hardware::ouros::{config::*, program};
 use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
+use crate::hardware::ouros::{config::*, program};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 
-    /// Reducer errors
-    #[derive(Debug, thiserror::Error)]
-    pub enum Error {
-        #[error("Invalid Atom ({invalid_atom}) for parent ({parent})")]
-        InvalidAtom {
-            parent: crate::hardware::ouros::program::Atom,
-            invalid_atom: crate::hardware::ouros::program::Atom,
-        },
-        #[error("Unimplemented Atom ({unimplemented})")]
-        UnimplementedAtom {
-            unimplemented: crate::hardware::ouros::program::Atom,
-        },
-        #[error("Spine leaked ({spine_value}) -> spine_not_ready? {spine_not_ready}")]
-        SpineLeaked {
-            spine_value: crate::hardware::ouros::reducer::Stm,
-            spine_not_ready: bool,
-        },
-    }
+/// Reducer errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Invalid Atom ({invalid_atom}) for parent ({parent})")]
+    InvalidAtom {
+        parent: crate::hardware::ouros::program::Atom,
+        invalid_atom: crate::hardware::ouros::program::Atom,
+    },
+    #[error("Unimplemented Atom ({unimplemented})")]
+    UnimplementedAtom {
+        unimplemented: crate::hardware::ouros::program::Atom,
+    },
+    #[error("Spine leaked ({spine_value}) -> spine_not_ready? {spine_not_ready}")]
+    SpineLeaked {
+        spine_value: crate::hardware::ouros::reducer::Stm,
+        spine_not_ready: bool,
+    },
+}
 
 fn dash_atom(atom: &Atom) -> Atom {
     match atom {
@@ -77,7 +77,7 @@ pub struct ReducerInput {
 
 impl HwInput for ReducerInput {}
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct ReducerStat {
     pub busy_cycles: u32,
     pub busy_per_cycle: Vec<bool>,
@@ -514,9 +514,7 @@ impl Reducer {
 
 impl HwModule for Reducer {
     fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
-        let map_step_error = |reduce_error: Error| {
-            error::sim::TickHw::Reducer(reduce_error, error::sim::SimState)
-        };
+        let map_step_error = |reduce_error: Error| error::sim::TickHw::Reducer(reduce_error);
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
             Stm::Idle => {
@@ -589,13 +587,10 @@ impl HwModule for Reducer {
         }
 
         if self.spine_valid() && !self.input.spine_ready {
-            return Err(error::sim::TickHw::Reducer(
-                Error::SpineLeaked {
-                    spine_value: *self.reg_stm.value(),
-                    spine_not_ready: !self.input.spine_ready,
-                },
-                error::sim::SimState,
-            ));
+            return Err(error::sim::TickHw::Reducer(Error::SpineLeaked {
+                spine_value: *self.reg_stm.value(),
+                spine_not_ready: !self.input.spine_ready,
+            }));
         }
 
         // if self.spine_valid() {

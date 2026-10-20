@@ -110,7 +110,7 @@ impl<T: Clone + Default> HwInput for DualInput<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct DualPortMemStat {
     pub a_reads: u32,
     pub a_writes: u32,

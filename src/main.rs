@@ -33,21 +33,33 @@ fn simulate(
     let mut ouros = OurosCore::new(prog, detail_lv, heap_size, gc_at);
     let mut cycle: u32 = 0;
 
-    ouros.tick()?;
+    ouros.tick().map_err(|tick_hw| error::Simulation {
+        stats: Box::new(ouros.get_stat().into()),
+        run: error::SimulationRun::Run(tick_hw),
+    })?;
 
     // kick start the machine
     ouros.input.start = true;
-    ouros.tick()?;
+    ouros.tick().map_err(|tick_hw| error::Simulation {
+        stats: Box::new(ouros.get_stat().into()),
+        run: error::SimulationRun::Run(tick_hw),
+    })?;
     ouros.input.start = false;
 
     loop {
         if cycle >= CYCLE_LIMIT {
-            return Err(error::Simulation::CycleLimit(CYCLE_LIMIT));
+            return Err(error::Simulation {
+                stats: Box::new(ouros.get_stat().into()),
+                run: error::SimulationRun::CycleLimit(CYCLE_LIMIT),
+            });
         }
         if ouros.done() || cycle == 900_000_000 {
             break;
         }
-        ouros.tick()?;
+        ouros.tick().map_err(|tick_hw| error::Simulation {
+            stats: Box::new(ouros.get_stat().into()),
+            run: error::SimulationRun::Run(tick_hw),
+        })?;
         cycle += 1;
     }
 

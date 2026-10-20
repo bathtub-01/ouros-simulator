@@ -127,7 +127,7 @@ pub enum Stm {
     Resume,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct DrfHeapStat {
     active_threads: u8,
     pub work_threads: Vec<(u8, u8)>, // (occupied resources, active threads)
@@ -1319,9 +1319,8 @@ impl HwModule for DrfHeap {
         }
         self.non_exist.connect(&self.input.found);
 
-        self.handle_port_a().map_err(|port_a_error| {
-            error::sim::TickHw::DerefHeap(port_a_error, error::sim::SimState)
-        })?;
+        self.handle_port_a()
+            .map_err(|port_a_error| error::sim::TickHw::DerefHeap(port_a_error))?;
         self.handle_port_b();
 
         // when port b is not locally used, grant it to GC usage
@@ -1398,10 +1397,7 @@ impl HwModule for DrfHeap {
                 self.stat
                     .holder_contents
                     .push(Some(self.out_main_bits().map_err(|out_bits_error| {
-                        error::sim::TickHw::StatisticsDerefHeap(
-                            out_bits_error,
-                            error::sim::SimState,
-                        )
+                        error::sim::TickHw::StatisticsDerefHeap(out_bits_error)
                     })?));
             } else {
                 self.stat.holder_contents.push(None);

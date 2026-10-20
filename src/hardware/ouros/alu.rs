@@ -63,7 +63,7 @@ pub fn compute(op: &AluOp, rev: bool, l: i32, r: i32) -> Atom {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct AluStat {
     pub busy_cycles: u32,
     pub busy_per_cycle: Vec<bool>,
@@ -189,7 +189,7 @@ impl HwModule for Alu {
         if self.input_fire() {
             self.holder.0 = true;
             self.holder.1 = self.gen_result().map_err(|error_value| {
-                error::sim::TickHw::Alu(error_value, error::sim::SimState)
+                error::sim::TickHw::Alu(error_value)
             })?;
         }
         Ok(())

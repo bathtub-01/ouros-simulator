@@ -94,7 +94,7 @@ pub struct GbgCollectorInput {
 
 impl HwInput for GbgCollectorInput {}
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct GbgCollectorStat {
     pub allocations: u32,
     pub feedbacks: u32,
@@ -755,7 +755,7 @@ impl HwModule for GbgCollector {
             CollectorState::Root => self.step_root(),
             CollectorState::Mark => self.step_mark(),
             CollectorState::Sweep => self.step_sweep().map_err(|step_sweep_error| {
-                error::sim::TickHw::Gbc(step_sweep_error, error::sim::SimState)
+                error::sim::TickHw::Gbc(step_sweep_error)
             })?,
         }
 

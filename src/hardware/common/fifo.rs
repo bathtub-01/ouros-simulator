@@ -17,7 +17,7 @@ impl<T: Clone + Default> HwInput for FIFOInput<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct FIFOStat {
     pub length_per_cycle: Vec<u8>,
 }
