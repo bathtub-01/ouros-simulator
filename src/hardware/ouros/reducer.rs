@@ -12,10 +12,29 @@ use super::alu::compute;
 use super::program::*;
 use crate::error;
 use crate::hardware::common::{Register, SinglePortMem};
-use crate::hardware::ouros::config::*;
+use crate::hardware::ouros::{config::*, program};
 use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
+
+    /// Reducer errors
+    #[derive(Debug, thiserror::Error)]
+    pub enum Error {
+        #[error("Invalid Atom ({invalid_atom}) for parent ({parent})")]
+        InvalidAtom {
+            parent: crate::hardware::ouros::program::Atom,
+            invalid_atom: crate::hardware::ouros::program::Atom,
+        },
+        #[error("Unimplemented Atom ({unimplemented})")]
+        UnimplementedAtom {
+            unimplemented: crate::hardware::ouros::program::Atom,
+        },
+        #[error("Spine leaked ({spine_value}) -> spine_not_ready? {spine_not_ready}")]
+        SpineLeaked {
+            spine_value: crate::hardware::ouros::reducer::Stm,
+            spine_not_ready: bool,
+        },
+    }
 
 fn dash_atom(atom: &Atom) -> Atom {
     match atom {
@@ -357,7 +376,7 @@ impl Reducer {
         fire(self.input.in_valid, self.in_ready())
     }
 
-    fn get_instant(&self, c: &SpeCell) -> Result<i32, error::sim::local::Atom> {
+    fn get_instant(&self, c: &SpeCell) -> Result<i32, program::Error> {
         let in_app = &self.reg_in.value().load;
         match c {
             SpeCell::Arg(arg) => take_int(&in_app[arg + 1]),
@@ -450,7 +469,7 @@ impl Reducer {
         res
     }
 
-    fn step_next(&mut self) -> Result<(), error::sim::local::Reducer> {
+    fn step_next(&mut self) -> Result<(), Error> {
         if self.in_fire() {
             self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
@@ -471,7 +490,7 @@ impl Reducer {
                             self.comb_table.read(base + idx);
                         }
                         invalid_atom => {
-                            return Err(error::sim::local::Reducer::InvalidAtom {
+                            return Err(Error::InvalidAtom {
                                 parent,
                                 invalid_atom,
                             });
@@ -483,7 +502,7 @@ impl Reducer {
                     self.reg_stm.connect(&Stm::Special);
                 }
                 unimplemented => {
-                    return Err(error::sim::local::Reducer::UnimplementedAtom { unimplemented });
+                    return Err(Error::UnimplementedAtom { unimplemented });
                 }
             };
         } else {
@@ -495,7 +514,7 @@ impl Reducer {
 
 impl HwModule for Reducer {
     fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
-        let map_step_error = |reduce_error: error::sim::local::Reducer| {
+        let map_step_error = |reduce_error: Error| {
             error::sim::TickHw::Reducer(reduce_error, error::sim::SimState)
         };
         self.comb_table.input.default_input();
@@ -571,7 +590,7 @@ impl HwModule for Reducer {
 
         if self.spine_valid() && !self.input.spine_ready {
             return Err(error::sim::TickHw::Reducer(
-                error::sim::local::Reducer::SpineLeaked {
+                Error::SpineLeaked {
                     spine_value: *self.reg_stm.value(),
                     spine_not_ready: !self.input.spine_ready,
                 },

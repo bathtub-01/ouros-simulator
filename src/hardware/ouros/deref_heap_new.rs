@@ -15,6 +15,18 @@ use crate::hw_module::{HwInput, HwModule};
 use std::cmp::max;
 use std::fmt;
 
+/// DerefHeapNew errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    // FIX: to specialise errors
+    #[error("Frame: {0}")]
+    Frame(String),
+    #[error("Invalid Deref Arg: {0}")]
+    Arg(String),
+    #[error("Invalid Stack: {0}")]
+    Stack(String),
+}
+
 #[derive(Default)]
 pub struct DrfHeapInput {
     pub start: bool,
@@ -179,35 +191,30 @@ enum RESUMEs {
 }
 
 /// select the first pointer to deref, returns (arg position, pointer value)
-fn select_1st_arg(app: &App) -> Result<(i32, usize), error::sim::local::DerefHeap> {
+fn select_1st_arg(app: &App) -> Result<(i32, usize), Error> {
     match app[0] {
         Atom::Ptr(p, _, false) => Ok((0, p)),
         Atom::Prm(_, _) => match app[1] {
             Atom::Ptr(p, _, false) => Ok((1, p)),
-            Atom::Nop => Err(error::sim::local::DerefHeap::Arg(String::from("unreachable"))),
+            Atom::Nop => Err(Error::Arg(String::from("unreachable"))),
             _ => match app[2] {
                 Atom::Ptr(p, _, false) => Ok((2, p)),
-                _ => Err(error::sim::local::DerefHeap::Arg(String::from("unreachable"))),
+                _ => Err(Error::Arg(String::from("unreachable"))),
             },
         },
         Atom::Try | Atom::Seq => match app[1] {
             Atom::Ptr(p, _, false) => Ok((1, p)),
-            _ => Err(error::sim::local::DerefHeap::Arg(format!("No Ptr here: {:?}", app))),
+            _ => Err(Error::Arg(format!("No Ptr here: {:?}", app))),
         },
-        _ => Err(error::sim::local::DerefHeap::Arg(format!("app: {:?}", app))),
+        _ => Err(Error::Arg(format!("app: {:?}", app))),
     }
 }
 
 /// select the next strict arg, returns (arg position, pointer value)
-fn select_next_arg(
-    app: &App,
-    current: usize,
-) -> Result<(usize, usize), error::sim::local::DerefHeap> {
+fn select_next_arg(app: &App, current: usize) -> Result<(usize, usize), Error> {
     match app[2] {
         Atom::Ptr(p, _, false) => Ok((2, p)),
-        _ => Err(error::sim::local::DerefHeap::Arg(String::from(
-            "unreachable",
-        ))),
+        _ => Err(Error::Arg(String::from("unreachable"))),
     }
 }
 
@@ -508,7 +515,7 @@ impl DrfHeap {
         self.holder_out.0 || derived
     }
 
-    pub fn out_main_bits(&self) -> Result<ActiveApp, error::sim::local::DerefHeap> {
+    pub fn out_main_bits(&self) -> Result<ActiveApp, Error> {
         let target = self.heap_mem.dout_a();
         if self.holder_out.0 {
             return Ok(self.holder_out.1.clone());
@@ -559,7 +566,7 @@ impl DrfHeap {
         self.need_split()
     }
 
-    pub fn out_big_drg_bits(&self) -> Result<FrozenApp, error::sim::local::DerefHeap> {
+    pub fn out_big_drg_bits(&self) -> Result<FrozenApp, Error> {
         let mk_frozen = |a: Option<App>| match a {
             Some(big) => FrozenApp {
                 // heap_addr: self.input.free_addr,
@@ -610,7 +617,7 @@ impl DrfHeap {
     }
 
     /// search for the addr of the App, which is currently being read by DHeap
-    pub fn search(&self) -> Result<usize, error::sim::local::DerefHeap> {
+    pub fn search(&self) -> Result<usize, Error> {
         if self.port_a_fire() && self.get_consumes()? == CONSUMEs::InputIA {
             let in_app = mask_seq(&self.input.port_a_bits.load);
             // println!(
@@ -655,7 +662,7 @@ impl DrfHeap {
         self.heap_mem.dout_b()
     }
 
-    fn get_consumes(&self) -> Result<CONSUMEs, error::sim::local::DerefHeap> {
+    fn get_consumes(&self) -> Result<CONSUMEs, Error> {
         if !self.port_a_fire() {
             Ok(CONSUMEs::NoInput)
         } else {
@@ -670,9 +677,7 @@ impl DrfHeap {
                     Ok(CONSUMEs::InputWHNFWithDmder)
                 } else if stk.second().is_some() {
                     if stack_cell_with(stk.second(), |(flag, _)| !*flag) {
-                        return Err(error::sim::local::DerefHeap::Frame(
-                            "strange new frame!".to_string(),
-                        ));
+                        return Err(Error::Frame("strange new frame!".to_string()));
                     }
                     Ok(CONSUMEs::InputWHNFNoDmderNewFrame)
                 } else {
@@ -870,7 +875,7 @@ impl DrfHeap {
     }
 
     /// select first arg from `app` and read it
-    fn select_1st_arg_read(&mut self, app: &App) -> Result<(), error::sim::local::DerefHeap> {
+    fn select_1st_arg_read(&mut self, app: &App) -> Result<(), Error> {
         let (arg_id, p) = select_1st_arg(app)?;
         self.read_target(p);
         self.arg_id.connect(&(arg_id as usize));
@@ -878,7 +883,7 @@ impl DrfHeap {
     }
 
     /// select next arg from `app` and read it
-    fn select_next_arg_read(&mut self, app: &App) -> Result<(), error::sim::local::DerefHeap> {
+    fn select_next_arg_read(&mut self, app: &App) -> Result<(), Error> {
         let (arg_id, p) = select_next_arg(app, *self.arg_id.value())?;
         self.read_target(p);
         self.arg_id.connect(&arg_id);
@@ -910,7 +915,7 @@ impl DrfHeap {
     }
 
     /// take shortcuts, unless 'sensitive cases' are encountered
-    fn step_to_next(&mut self, s1: &IAs1) -> Result<(), error::sim::local::DerefHeap> {
+    fn step_to_next(&mut self, s1: &IAs1) -> Result<(), Error> {
         if self.is_sensitive(s1) {
             self.stm.connect(&Stm::Idle);
         } else {
@@ -920,7 +925,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn gen_output_whnf(&self) -> Result<(App, Option<App>), error::sim::local::DerefHeap> {
+    fn gen_output_whnf(&self) -> Result<(App, Option<App>), Error> {
         let dmder = self.heap_mem.dout_a();
         let target = &self.holder_in.value().load;
         // println!("addr: {}", self.heap_mem.input.port_a.addr); // use this for GC debugging
@@ -929,8 +934,7 @@ impl DrfHeap {
 
         Ok(deref(
             dmder,
-            usize::try_from(arg_id)
-                .map_err(|e| error::sim::local::DerefHeap::Arg(e.to_string()))?,
+            usize::try_from(arg_id).map_err(|e| Error::Arg(e.to_string()))?,
             target,
             self.reg_free_addr.value().1,
         ))
@@ -1052,7 +1056,7 @@ impl DrfHeap {
     }
 
     /// consumes the next task; must not use heap port b!
-    fn consume_next(&mut self) -> Result<(), error::sim::local::DerefHeap> {
+    fn consume_next(&mut self) -> Result<(), Error> {
         let in_app = mask_seq(&self.input.port_a_bits.load);
         self.holder_in.connect(&ActiveApp {
             stack_idx: self.input.port_a_bits.stack_idx,
@@ -1108,7 +1112,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn step_whnf(&mut self) -> Result<(), error::sim::local::DerefHeap> {
+    fn step_whnf(&mut self) -> Result<(), Error> {
         let whnf_addr = *self.addr_holder.value();
 
         match self.get_whnfs() {
@@ -1157,7 +1161,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn step_ia(&mut self) -> Result<(), error::sim::local::DerefHeap> {
+    fn step_ia(&mut self) -> Result<(), Error> {
         let dmder = &self.holder_in.value().load;
         let mut updated_dmder = *dmder;
         let target = *self.heap_mem.dout_a();
@@ -1207,7 +1211,7 @@ impl DrfHeap {
                 {
                     // FIXME: ensure using a new stack
                     if stk_id as u8 == self.holder_in.value().stack_idx {
-                        return Err(error::sim::local::DerefHeap::Stack("GOT YA!".to_string()));
+                        return Err(Error::Stack("GOT YA!".to_string()));
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                     self.frame_stack[stk_id].push(self.gen_frame_record());
@@ -1229,7 +1233,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn step_resume(&mut self) -> Result<(), error::sim::local::DerefHeap> {
+    fn step_resume(&mut self) -> Result<(), Error> {
         self.write_whnf(HeapPort::B);
         match self.get_resumes() {
             RESUMEs::TopInWHNF => {
@@ -1251,7 +1255,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn handle_port_a(&mut self) -> Result<(), error::sim::local::DerefHeap> {
+    fn handle_port_a(&mut self) -> Result<(), Error> {
         if self.holder_out.0 && !self.input.out_main_ready {
             return Ok(());
         }

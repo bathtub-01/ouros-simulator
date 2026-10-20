@@ -16,6 +16,21 @@ use super::garbage_collector::{GbgCollector, GbgCollectorStat};
 use super::program::*;
 use super::reducer::{Reducer, ReducerStat};
 
+/// Core errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("DereHead Failed {err} ({context})")]
+    DereHeapFailed {
+        err: super::deref_heap_new::Error,
+        context: String,
+    },
+    #[error("Alu Failed {err} ({context})")]
+    AluFailed {
+        err: super::alu::Error,
+        context: String,
+    },
+}
+
 enum DESTs {
     ToDHeap,
     ToALU,
@@ -287,7 +302,7 @@ impl HwModule for OurosCore {
                 .out_main_bits()
                 .map_err(|err| {
                     error::sim::TickHw::Core(
-                        error::sim::local::Core::DereHeapFailed {
+                        Error::DereHeapFailed {
                             err,
                             context: "self.gc.input.monitor_big_drf_stk".to_string(),
                         },
@@ -301,7 +316,7 @@ impl HwModule for OurosCore {
                 .out_main_bits()
                 .map_err(|err| {
                     error::sim::TickHw::Core(
-                        error::sim::local::Core::DereHeapFailed {
+                        Error::DereHeapFailed {
                             err,
                             context: "self.gc.input.monitor_big_drf_bits".to_string(),
                         },
@@ -390,7 +405,7 @@ impl HwModule for OurosCore {
 
             let map_out_main_bits = |err, context: String| {
                 error::sim::TickHw::Core(
-                    error::sim::local::Core::DereHeapFailed { err, context },
+                    Error::DereHeapFailed { err, context },
                     error::sim::SimState,
                 )
             };
@@ -461,7 +476,7 @@ impl HwModule for OurosCore {
 
             self.buffers_dheap_b_1.input.din = self.dheap.out_big_drg_bits().map_err(|err| {
                 error::sim::TickHw::Core(
-                    error::sim::local::Core::DereHeapFailed {
+                    Error::DereHeapFailed {
                         err,
                         context: "self.buffers_dheap_b_1.input.din".to_string(),
                     },
@@ -490,11 +505,8 @@ impl HwModule for OurosCore {
                 }
             }
 
-            let map_output_bits = |err: error::sim::local::Alu, context: String| {
-                error::sim::TickHw::Core(
-                    error::sim::local::Core::AluFailed { err, context },
-                    error::sim::SimState,
-                )
+            let map_output_bits = |err: super::alu::Error, context: String| {
+                error::sim::TickHw::Core(Error::AluFailed { err, context }, error::sim::SimState)
             };
 
             if self.alu.output_valid() {
@@ -522,7 +534,7 @@ impl HwModule for OurosCore {
             // when dheap reads an app, search whether that app is still outstanding
             let search = self.dheap.search().map_err(|err| {
                 error::sim::TickHw::Core(
-                    error::sim::local::Core::DereHeapFailed {
+                    Error::DereHeapFailed {
                         err,
                         context: "deref search app outstanding".to_string(),
                     },

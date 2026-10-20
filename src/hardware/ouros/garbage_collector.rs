@@ -8,6 +8,13 @@ use super::config::{APP_LENGTH, CACHE_SIZE, DLV_GC, DLV_GC1, MAX_THREADS};
 use super::program::{ActiveApp, App, Atom, get_ptr, is_ptr};
 use std::collections::VecDeque;
 
+/// Garbage collector errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Broken WorkList! addr: {addr}")]
+    BrokenWorkList { addr: usize },
+}
+
 struct FixedFifo<T> {
     capacity: usize,
     data: VecDeque<T>,
@@ -563,7 +570,7 @@ impl GbgCollector {
         }
     }
 
-    fn step_sweep(&mut self) -> Result<(), error::sim::local::Gbc> {
+    fn step_sweep(&mut self) -> Result<(), Error> {
         // ========== defaults (update regs from previous demands) ==========
         self.reg_pre_gc.connect(&false);
         if *self.reg_pre_gc.value() {
@@ -608,7 +615,7 @@ impl GbgCollector {
                     println!("old head is 0 when pushing to freelist!");
                 }
             } else if read_out.state == CellState::WorkList {
-                return Err(error::sim::local::Gbc::BrokenWorkList {
+                return Err(Error::BrokenWorkList {
                     addr: *self.reg_sweeper.value(),
                 });
             }

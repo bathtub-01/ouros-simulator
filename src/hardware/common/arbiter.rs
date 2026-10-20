@@ -2,6 +2,13 @@ use crate::error;
 use crate::hardware::common::Register;
 use crate::hw_module::{HwInput, HwModule};
 
+/// RArbiter errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Erroneous Selection: Could not select in RArbiter")]
+    Selection,
+}
+
 #[derive(Default)]
 pub struct ArbiterInput<T: Clone + Default> {
     pub in_valid: Vec<bool>,
@@ -52,14 +59,14 @@ impl<T: Clone + Default, const N: usize> RArbiter<T, N> {
         self.input.in_valid.iter().any(|&x| x)
     }
 
-    pub fn select(&self) -> Result<usize, error::sim::local::RArbiter> {
+    pub fn select(&self) -> Result<usize, Error> {
         for i in 0..N {
             let port = (i + self.priority.value()) % N;
             if self.input.in_valid[port] {
                 return Ok(port);
             }
         }
-        Err(error::sim::local::RArbiter::Selection)
+        Err(Error::Selection)
     }
 }
 

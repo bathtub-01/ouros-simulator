@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::hardware::{common, ouros};
+
 /// This is the snaphot of the state of the App_State that we are running
 #[derive(Debug, Copy, Clone)]
 pub struct SimState;
@@ -16,19 +18,19 @@ pub enum TickHw {
     // #[error("TickHw Statistics: {0} {1}")]
     // Statistics(String, SimState),
     #[error("TickHw Statistics DerefHeap: {0} {1}")]
-    StatisticsDerefHeap(local::DerefHeap, SimState),
+    StatisticsDerefHeap(ouros::deref_heap_new::Error, SimState),
     #[error("TickHw Reducer: {0} {1}")]
-    Reducer(local::Reducer, SimState),
+    Reducer(ouros::reducer::Error, SimState),
     #[error("TickHw RArbiter: {0} {1}")]
-    Rarbiter(local::RArbiter, SimState),
+    Rarbiter(common::arbiter::Error, SimState),
     #[error("TickHw Ouros core: {0} {1}")]
-    Core(local::Core, SimState),
+    Core(ouros::ouros_core::Error, SimState),
     #[error("TickHw Garbage Collector: {0} {1}")]
-    Gbc(local::Gbc, SimState),
+    Gbc(ouros::garbage_collector::Error, SimState),
     #[error("TickHw Alu: {0} {1}")]
-    Alu(local::Alu, SimState),
+    Alu(ouros::alu::Error, SimState),
     #[error("TickHw DerefHeap: {0} {1}")]
-    DerefHeap(local::DerefHeap, SimState),
+    DerefHeap(ouros::deref_heap_new::Error, SimState),
 }
 
 impl TickHw {
@@ -43,85 +45,5 @@ impl TickHw {
             TickHw::Alu(_, state) => state,
             TickHw::DerefHeap(_, state) => state,
         }
-    }
-}
-
-pub mod local {
-    // use crate::Atom;
-
-    use crate::hardware;
-
-    use super::*;
-
-    /// RArbiter errors
-    #[derive(Debug, thiserror::Error)]
-    pub enum RArbiter {
-        #[error("Erroneous Selection: Could not select in RArbiter")]
-        Selection,
-    }
-
-    /// RArbiter errors
-    #[derive(Debug, thiserror::Error)]
-    pub enum Reducer {
-        #[error("Invalid Atom ({invalid_atom}) for parent ({parent})")]
-        InvalidAtom {
-            parent: hardware::ouros::program::Atom,
-            invalid_atom: hardware::ouros::program::Atom,
-        },
-        #[error("Unimplemented Atom ({unimplemented})")]
-        UnimplementedAtom {
-            unimplemented: hardware::ouros::program::Atom,
-        },
-        #[error("Spine leaked ({spine_value}) -> spine_not_ready? {spine_not_ready}")]
-        SpineLeaked {
-            spine_value: crate::hardware::ouros::reducer::Stm,
-            spine_not_ready: bool,
-        },
-    }
-
-    /// Core errors
-    #[derive(Debug, thiserror::Error)]
-    pub enum Core {
-        #[error("DereHead Failed {err} ({context})")]
-        DereHeapFailed { err: DerefHeap, context: String },
-        #[error("Alu Failed {err} ({context})")]
-        AluFailed { err: Alu, context: String },
-    }
-
-    /// DerefHeapNew errors
-    #[derive(Debug, thiserror::Error)]
-    pub enum DerefHeap {
-        // FIX: to specialise errors
-        #[error("Frame: {0}")]
-        Frame(String),
-        #[error("Invalid Deref Arg: {0}")]
-        Arg(String),
-        #[error("Invalid Stack: {0}")]
-        Stack(String),
-    }
-
-    /// Garbage collector errors
-    #[derive(Debug, thiserror::Error)]
-    pub enum Gbc {
-        #[error("Broken WorkList! addr: {addr}")]
-        BrokenWorkList { addr: usize },
-    }
-
-    /// ALU component unit
-    #[derive(Debug, thiserror::Error)]
-    pub enum Alu {
-        // FIX: to specialise errors
-        #[error("Could not lookup atom: {context}")]
-        AtomLookup { context: String },
-        #[error("Atom error: {0}")]
-        AtomErr(Atom),
-    }
-
-    /// Atom
-    #[derive(Debug, thiserror::Error)]
-    pub enum Atom {
-        // FIX: to specialise errors
-        #[error("Could not lookup atom attribute: {context}")]
-        Lookup { context: String },
     }
 }

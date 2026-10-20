@@ -1,7 +1,18 @@
 use crate::error;
 use crate::hardware::ouros::combinator::{Arity, Idx, holes_of};
 use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
+use crate::hardware::ouros::program;
 use std::fmt;
+
+
+/// Atom
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    // FIX: to specialise errors
+    #[error("Could not lookup atom attribute: {context}")]
+    Lookup { context: String },
+}
+
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 // FIX: should we fix capitalisation of variant names?
@@ -200,10 +211,10 @@ pub fn is_int(atom: &Atom) -> bool {
     matches!(atom, Atom::Int(_))
 }
 
-pub fn take_int(atom: &Atom) -> Result<i32, error::sim::local::Atom> {
+pub fn take_int(atom: &Atom) -> Result<i32, program::Error> {
     match *atom {
         Atom::Int(i) => Ok(i),
-        _ => Err(error::sim::local::Atom::Lookup {
+        _ => Err(Error::Lookup {
             context: "Not an INT: {:?}".to_string(),
         }),
     }

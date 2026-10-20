@@ -20,6 +20,17 @@ use crate::{
 
 use super::program::*;
 
+
+/// ALU component unit
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    // FIX: to specialise errors
+    #[error("Could not lookup atom: {context}")]
+    AtomLookup { context: String },
+    #[error("Atom error: {0}")]
+    AtomErr(super::program::Error),
+}
+
 #[derive(Default)]
 pub struct AluInput {
     pub input_valid: bool,
@@ -111,7 +122,7 @@ impl Alu {
         }
     }
 
-    pub fn output_bits(&self) -> Result<ActiveApp, error::sim::local::Alu> {
+    pub fn output_bits(&self) -> Result<ActiveApp, Error> {
         if ALU_PIPE {
             Ok(self.holder.1.clone())
         } else {
@@ -123,16 +134,16 @@ impl Alu {
         &self.stat
     }
 
-    fn gen_result(&self) -> Result<ActiveApp, error::sim::local::Alu> {
-        let get_operand = |i: usize| -> Result<i32, error::sim::local::Alu> {
+    fn gen_result(&self) -> Result<ActiveApp, Error> {
+        let get_operand = |i: usize| -> Result<i32, Error> {
             self.input
                 .input_bits
                 .load
                 .get(i)
-                .ok_or_else(|| error::sim::local::Alu::AtomLookup {
+                .ok_or_else(|| Error::AtomLookup {
                     context: format!("operand, at index {} could not be load", i),
                 })
-                .and_then(|atom| take_int(atom).map_err(error::sim::local::Alu::AtomErr))
+                .and_then(|atom| take_int(atom).map_err(Error::AtomErr))
         };
 
         let oprand1: i32 = get_operand(1)?;
@@ -142,7 +153,7 @@ impl Alu {
             .input_bits
             .load
             .first()
-            .ok_or_else(|| error::sim::local::Alu::AtomLookup {
+            .ok_or_else(|| Error::AtomLookup {
                 context: "first atom in input bits".to_string(),
             })
             .and_then(|atom| match atom {
@@ -162,7 +173,7 @@ impl Alu {
                         arr
                     },
                 }),
-                fetched_atom => Err(error::sim::local::Alu::AtomLookup {
+                fetched_atom => Err(Error::AtomLookup {
                     context: format!("App head is not an primitive op! we got {:?}", fetched_atom),
                 }),
             })
