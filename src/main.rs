@@ -1,6 +1,7 @@
 mod error;
 mod hardware;
 mod hw_module;
+mod report;
 
 use clap::{Parser, ValueEnum};
 use indicatif::ParallelProgressIterator;
@@ -23,6 +24,7 @@ use hw_module::HwModule;
 
 const CYCLE_LIMIT: u32 = 1_000_000_000;
 
+// FIX: associate this function with Program
 fn simulate(
     prog: &Program,
     detail_lv: u8,
@@ -53,33 +55,20 @@ fn simulate(
                 run: error::SimulationRun::CycleLimit(CYCLE_LIMIT),
             });
         }
+
         if ouros.done() || cycle == 900_000_000 {
             break;
         }
+
         ouros.tick().map_err(|tick_hw| error::Simulation {
             stats: Box::new(ouros.get_stat().into()),
             run: error::SimulationRun::Run(tick_hw),
         })?;
+
         cycle += 1;
     }
 
     Ok((ouros, cycle))
-}
-
-fn compress(oapp: &Option<ActiveApp>) -> String {
-    match oapp {
-        None => "empty".to_string(),
-        Some(app) => {
-            let app_str = app
-                .load
-                .iter()
-                .take(app_length(&app.load))
-                .map(|x| x.to_string())
-                .collect::<Vec<String>>()
-                .join(", ");
-            format!("{}-[{}]", app.stack_idx, app_str)
-        }
-    }
 }
 
 fn chunk_threads(threads: &[(u8, u8)], chunk_size: usize) -> Vec<(f32, f32)> {
@@ -115,26 +104,18 @@ fn chunk_util(util: &[u8], chunk_size: usize) -> Vec<f32> {
         .collect()
 }
 
-fn write_threads() -> std::io::Result<()> {
-    Ok(())
-}
-
-fn write_busy_rate(file: &mut File, data: &[f32], chunk_size: usize) -> std::io::Result<()> {
-    writeln!(file, "time,rate")?;
-    for (i, t) in data.iter().enumerate() {
-        writeln!(file, "{},{:.2}", i * chunk_size + chunk_size / 2, t * 100.0)?;
-    }
-    Ok(())
-}
-
 fn percent_of(v: u32, total: u32) -> f32 {
     (v as f32 / total as f32) * 100.0
 }
 
-const DIR_SIMU_OUT: &str = "simu-out/";
-
 /// inspect a program with full stat details
 fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
+    let (ouros, runtime_cycles) =
+        simulate(prog, u8::MAX, HEAP_SIZE, GC_AT).map_err(error::InspectionMode::Simulation)?;
+    let stats = ouros.get_stat();
+
+    const DIR_SIMU_OUT: &str = "simu-out/";
+
     let log_path = Path::new(DIR_SIMU_OUT).join("log.txt");
     let threads_path = Path::new(DIR_SIMU_OUT).join("threads.csv");
     let red_rate_path = Path::new(DIR_SIMU_OUT).join("red-rate.csv");
@@ -143,6 +124,11 @@ fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
     let gc_mreq_rate_path = Path::new(DIR_SIMU_OUT).join("gc-mutator-requst-rate.csv");
     let buffer_util_path = Path::new(DIR_SIMU_OUT).join("buffer-util.csv");
     let stm_dist_path = Path::new(DIR_SIMU_OUT).join("stm-dist.csv");
+
+    println!(
+        "==== Simulation done! Cycles consumed: {} ====",
+        runtime_cycles
+    );
 
     fs::create_dir_all(DIR_SIMU_OUT).map_err(error::InspectionMode::InitIO)?;
 
@@ -155,15 +141,6 @@ fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
         File::create(gc_mreq_rate_path).map_err(error::InspectionMode::InitIO)?;
     let mut buffer_util = File::create(buffer_util_path).map_err(error::InspectionMode::InitIO)?;
     let mut stm_dist = File::create(stm_dist_path).map_err(error::InspectionMode::InitIO)?;
-
-    let (ouros, runtime_cycles) =
-        simulate(prog, u8::MAX, HEAP_SIZE, GC_AT).map_err(error::InspectionMode::Simulation)?;
-    let stats = ouros.get_stat();
-
-    println!(
-        "==== Simulation done! Cycles consumed: {} ====",
-        runtime_cycles
-    );
 
     // write log
     writeln!(log, "==================== SUMMARY =====================")
@@ -257,6 +234,22 @@ fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
     writeln!(log, "============= REGISTER CONTENTS ==================")
         .map_err(error::InspectionMode::OutputIO)?;
 
+    fn compress(oapp: &Option<ActiveApp>) -> String {
+        match oapp {
+            None => "empty".to_string(),
+            Some(app) => {
+                let app_str = app
+                    .load
+                    .iter()
+                    .take(app_length(&app.load))
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                format!("{}-[{}]", app.stack_idx, app_str)
+            }
+        }
+    }
+
     for (i, s) in stats
         .dheap_stat
         .holder_contents
@@ -298,6 +291,14 @@ fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
         .map_err(error::InspectionMode::OutputIO)?;
     }
 
+    fn write_busy_rate(file: &mut File, data: &[f32], chunk_size: usize) -> std::io::Result<()> {
+        writeln!(file, "time,rate")?;
+        for (i, t) in data.iter().enumerate() {
+            writeln!(file, "{},{:.2}", i * chunk_size + chunk_size / 2, t * 100.0)?;
+        }
+        Ok(())
+    }
+
     // write busy rate
     let red_rate_data: Vec<f32> = chunk_rate(&stats.reducer_stat.busy_per_cycle, chunk_size);
     write_busy_rate(&mut red_rate, &red_rate_data, chunk_size)
@@ -320,6 +321,7 @@ fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
         buffer_util,
         "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3"
     ).map_err(error::InspectionMode::OutputIO)?;
+
     let buffer_util_data = stats
         .fifos_stat
         .map(|s| chunk_util(&s.length_per_cycle, chunk_size));
@@ -366,17 +368,8 @@ macro_rules! benchmarks {
     }};
 }
 
-const DIR_SIMU_OUT_ALL: &str = "simu-out/all/";
-
 /// run the benchmark suite with less stat details
-fn run_benchmarks(
-    progs: HashMap<&str, &LazyLock<Program>>,
-    is_big_prog: bool,
-) -> Result<(), error::BenchmarkingMode> {
-    let cycle_path = Path::new(DIR_SIMU_OUT_ALL).join("cycles.csv");
-    fs::create_dir_all(DIR_SIMU_OUT_ALL).map_err(error::BenchmarkingMode::InitIO)?;
-    let mut cycle_file = File::create(cycle_path).map_err(error::BenchmarkingMode::InitIO)?;
-
+fn run_benchmarks(progs: HashMap<&str, &LazyLock<Program>>) -> Result<(), error::BenchmarkingMode> {
     let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
     vec.sort_by_key(|(n, _)| *n);
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
@@ -384,8 +377,14 @@ fn run_benchmarks(
         .par_iter()
         .progress_count(benchmarks.len() as u64)
         .map(|p| simulate(p, 0, HEAP_SIZE, GC_AT))
+        // FIX: should not collect a result of a vector but rather a vector of results
         .collect::<Result<_, _>>()
         .map_err(error::BenchmarkingMode::Simulation)?;
+
+    const DIR_SIMU_OUT_ALL: &str = "simu-out/all/";
+    let cycle_path = Path::new(DIR_SIMU_OUT_ALL).join("cycles.csv");
+    fs::create_dir_all(DIR_SIMU_OUT_ALL).map_err(error::BenchmarkingMode::InitIO)?;
+    let mut cycle_file = File::create(cycle_path).map_err(error::BenchmarkingMode::InitIO)?;
 
     for ((core, cycles), n) in results.iter().zip(names) {
         let stat = core.get_stat();
@@ -417,8 +416,6 @@ fn run_big_prog(prog: &Program) -> Result<(), error::SimulationMode> {
     Ok(())
 }
 
-const DIR_SIMU_OUT_GC: &str = "simu-out/gc/";
-
 fn vec_to_string<T: std::fmt::Display>(vec: &[T]) -> String {
     vec.iter()
         .map(|item| item.to_string())
@@ -426,33 +423,15 @@ fn vec_to_string<T: std::fmt::Display>(vec: &[T]) -> String {
         .join(",")
 }
 
-/// evaluate the GC behabiour of the benchmarks
-fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> Result<(), error::GarbageCollectorMode> {
-    let cycle_path = Path::new(DIR_SIMU_OUT_GC).join("cycle.csv");
-    let gc_percent_path = Path::new(DIR_SIMU_OUT_GC).join("gc_percent.csv");
-    let max_pause_path = Path::new(DIR_SIMU_OUT_GC).join("max_pause.csv");
-    let heap_peak_path = Path::new(DIR_SIMU_OUT_GC).join("heap_peak.csv");
-    let peak_workset_path = Path::new(DIR_SIMU_OUT_GC).join("peak_workset.csv");
-    let gc_rounds_path = Path::new(DIR_SIMU_OUT_GC).join("gc_rounds.csv");
-
-    fs::create_dir_all(DIR_SIMU_OUT_GC).map_err(error::GarbageCollectorMode::InitIO)?;
-
-    let mut cycle_file = File::create(cycle_path).map_err(error::GarbageCollectorMode::InitIO)?;
-    let mut gc_percent_file =
-        File::create(gc_percent_path).map_err(error::GarbageCollectorMode::InitIO)?;
-
-    let mut max_pause_file =
-        File::create(max_pause_path).map_err(error::GarbageCollectorMode::InitIO)?;
-    let mut heap_peak_file =
-        File::create(heap_peak_path).map_err(error::GarbageCollectorMode::InitIO)?;
-    let mut peak_workset_file =
-        File::create(peak_workset_path).map_err(error::GarbageCollectorMode::InitIO)?;
-    let mut gc_rounds_file =
-        File::create(gc_rounds_path).map_err(error::GarbageCollectorMode::InitIO)?;
-
+/// evaluate the GC behaviour of the benchmarks
+fn eval_gc(
+    progs: HashMap<&'static str, &LazyLock<Program>>,
+) -> Result<(), error::GarbageCollectorMode> {
     let mut vec: Vec<(&str, &LazyLock<Program>)> = progs.into_iter().collect();
     vec.sort_by_key(|(n, _)| *n);
+
     let (names, benchmarks): (Vec<&str>, Vec<&LazyLock<Program>>) = vec.into_iter().unzip();
+
     let results: Vec<_> = benchmarks
         .par_iter()
         .progress_count(benchmarks.len() as u64)
@@ -479,11 +458,12 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> Result<(), error::Garbag
                             simulate(p, DLV_GC, (peak_workset as f32 * pt) as usize, GC_AT)
                                 .map_err(error::GarbageCollectorMode::Simulation)
                         })
+                        // FIX: should not collect a result of a vector but rather a vector of results
                         .collect::<Result<Vec<(OurosCore, u32)>, error::GarbageCollectorMode>>()
-                        .map(|res| {
-                            let res_cycle: Vec<u32> =
-                                res.iter().map(|(_, cycles)| *cycles).collect();
-                            let res_gc_percent: Vec<f32> = res
+                        .map(|outputs| {
+                            let outputs_cycle: Vec<u32> =
+                                outputs.iter().map(|(_, cycles)| *cycles).collect();
+                            let outputs_gc_percent: Vec<f32> = outputs
                                 .iter()
                                 .map(|(c, time)| {
                                     let stat = c.get_stat();
@@ -494,7 +474,7 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> Result<(), error::Garbag
                                     percent_of(gc_overhead, *time)
                                 })
                                 .collect();
-                            let res_max_pause: Vec<u32> = res
+                            let outputs_max_pause: Vec<u32> = outputs
                                 .iter()
                                 .map(|(core, _)| {
                                     max(
@@ -503,11 +483,11 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> Result<(), error::Garbag
                                     )
                                 })
                                 .collect();
-                            let res_gc_rounds: Vec<u32> = res
+                            let outputs_gc_rounds: Vec<u32> = outputs
                                 .iter()
                                 .map(|(c, _)| c.get_stat().gc_stat.gc_rounds)
                                 .collect();
-                            let res_points: Vec<f32> = res
+                            let outputs_points: Vec<f32> = outputs
                                 .iter()
                                 .map(|(core, _)| {
                                     core.heap_size as f32
@@ -515,17 +495,42 @@ fn eval_gc(progs: HashMap<&str, &LazyLock<Program>>) -> Result<(), error::Garbag
                                 })
                                 .collect();
                             (
-                                res_cycle,
-                                res_gc_percent,
-                                res_max_pause,
-                                res_points,
+                                outputs_cycle,
+                                outputs_gc_percent,
+                                outputs_max_pause,
+                                outputs_points,
                                 peak_workset,
-                                res_gc_rounds,
+                                outputs_gc_rounds,
                             )
                         })
                 })
         })
+        // FIX: should not collect a result of a vector but rather a vector of results
         .collect::<Result<_, error::GarbageCollectorMode>>()?;
+
+    const DIR_SIMU_OUT_GC: &str = "simu-out/gc/";
+
+    let cycle_path = Path::new(DIR_SIMU_OUT_GC).join("cycle.csv");
+    let gc_percent_path = Path::new(DIR_SIMU_OUT_GC).join("gc_percent.csv");
+    let max_pause_path = Path::new(DIR_SIMU_OUT_GC).join("max_pause.csv");
+    let heap_peak_path = Path::new(DIR_SIMU_OUT_GC).join("heap_peak.csv");
+    let peak_workset_path = Path::new(DIR_SIMU_OUT_GC).join("peak_workset.csv");
+    let gc_rounds_path = Path::new(DIR_SIMU_OUT_GC).join("gc_rounds.csv");
+
+    fs::create_dir_all(DIR_SIMU_OUT_GC).map_err(error::GarbageCollectorMode::InitIO)?;
+
+    let mut cycle_file = File::create(cycle_path).map_err(error::GarbageCollectorMode::InitIO)?;
+    let mut gc_percent_file =
+        File::create(gc_percent_path).map_err(error::GarbageCollectorMode::InitIO)?;
+
+    let mut max_pause_file =
+        File::create(max_pause_path).map_err(error::GarbageCollectorMode::InitIO)?;
+    let mut heap_peak_file =
+        File::create(heap_peak_path).map_err(error::GarbageCollectorMode::InitIO)?;
+    let mut peak_workset_file =
+        File::create(peak_workset_path).map_err(error::GarbageCollectorMode::InitIO)?;
+    let mut gc_rounds_file =
+        File::create(gc_rounds_path).map_err(error::GarbageCollectorMode::InitIO)?;
 
     for ((cycle, percent, max_pause, points, peak, rounds), n) in results.into_iter().zip(names) {
         println!(
@@ -573,7 +578,6 @@ enum Mode {
 }
 
 // FIX: move rest of code above into lib.rs
-// FIX: add thisError or anyhow
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -634,7 +638,7 @@ fn run() -> Result<(), error::Ouros> {
                 Args {
                     mode: Some(Mode::All),
                     ..
-                } => run_benchmarks(progs, false).map_err(error::Ouros::BenchmarkingMode),
+                } => run_benchmarks(progs).map_err(error::Ouros::BenchmarkingMode),
                 Args {
                     mode: Some(Mode::Gc),
                     ..

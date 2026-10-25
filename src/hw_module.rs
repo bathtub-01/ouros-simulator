@@ -52,4 +52,6 @@ pub trait HwModule {
         Ok(())
     }
 
+    // FIX: create associated stats type 
+    // FIX: create function that consumes self and returns the associated stats and other type as well
 }
