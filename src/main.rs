@@ -1,6 +1,7 @@
 mod error;
 mod hardware;
 mod hw_module;
+mod terminal;
 
 use clap::{Parser, ValueEnum};
 use indicatif::ParallelProgressIterator;
@@ -58,22 +59,34 @@ fn simulate(
     Ok((ouros, cycle))
 }
 
-/// Run any compiled program through the normal graph-reduction engine with
-/// the built-in AXI4-Lite controller enabled. The UART is an independent
-/// peripheral; pure programs execute and terminate normally in this mode.
-/// Input is delivered by a blocking stdin worker rather than blocking the
-/// simulator or any of its fine-grained Ouros threads. With a canonical
-/// terminal, bytes become available after Return is pressed.
+/// Run the compiled program with a byte-stream UART connected to the host TTY.
+/// In an interactive Unix terminal, input is raw and unechoed, like picocom:
+/// keys (including arrows/SPACE) reach RX immediately and only Ouros TX is
+/// printed. The stdin worker never blocks the graph-reduction engine.
 fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
-    let mut core = OurosCore::new(prog, 0, BIG_HEAP, GC_AT);
-    core.enable_io(AxiTiming::default());
-    let (sender, receiver) = mpsc::channel::<u8>();
+    eprintln!(
+        "Ouros terminal: RX=0x{:02x}, TX=0x{:02x}, STATUS=0x{:02x}; direct keyboard input (Ctrl-C to exit).",
+        UART_RX_DATA, UART_TX_DATA, UART_STATUS
+    );
+    eprintln!("Simulation stops when heap address 0 reaches WHNF.");
+
+    // The guard restores original tty settings even when tick() returns an
+    // error. Piped stdin is left in its original state.
+    let raw_terminal = terminal::RawTerminal::enter().map_err(error::TerminalMode::IO)?;
+
+    enum InputEvent { Byte(u8), Interrupt }
+    let (sender, receiver) = mpsc::channel::<InputEvent>();
+    let intercept_ctrl_c = raw_terminal.is_raw();
     thread::spawn(move || {
         let stdin = std::io::stdin();
         for next in stdin.lock().bytes() {
             match next {
+                Ok(3) if intercept_ctrl_c => {
+                    let _ = sender.send(InputEvent::Interrupt);
+                    break;
+                }
                 Ok(byte) => {
-                    if sender.send(byte).is_err() {
+                    if sender.send(InputEvent::Byte(byte)).is_err() {
                         break;
                     }
                 }
@@ -81,12 +94,9 @@ fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
             }
         }
     });
-    eprintln!(
-        "Ouros terminal: RX=0x{:02x}, TX=0x{:02x}, STATUS=0x{:02x}; enter text then Return.",
-        UART_RX_DATA, UART_TX_DATA, UART_STATUS
-    );
-    eprintln!("Simulation stops when heap address 0 reaches WHNF.");
 
+    let mut core = OurosCore::new(prog, 0, BIG_HEAP, GC_AT);
+    core.enable_io(AxiTiming::default());
     core.tick().map_err(error::TerminalMode::Simulation)?;
     core.input.start = true;
     core.tick().map_err(error::TerminalMode::Simulation)?;
@@ -94,17 +104,21 @@ fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
 
     let mut cycles: u64 = 0;
     let mut stdin_closed = false;
-    while !core.done() {
-        if cycles >= 1_000_000_000 {
-            return Err(error::TerminalMode::Simulation(
-                "exceeded cycle limit".into(),
-            ));
-        }
-        // Poll input each simulated cycle; incoming bytes are buffered in
-        // the peripheral even when an RX transaction is not outstanding.
+    let mut interrupted = false;
+    'simulation: while !core.done() {
+        // No artificial cycle ceiling: this is an interactive application,
+        // which may intentionally keep running indefinitely.
+        // Receive events are buffered in the simulated peripheral even if
+        // there is no pending blocking RX transaction.
         while !stdin_closed {
             match receiver.try_recv() {
-                Ok(byte) => core.io_unit_mut().unwrap().controller.push_rx(byte),
+                Ok(InputEvent::Byte(byte)) => {
+                    core.io_unit_mut().unwrap().controller.push_rx(byte);
+                }
+                Ok(InputEvent::Interrupt) => {
+                    interrupted = true;
+                    break 'simulation;
+                }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     stdin_closed = true;
@@ -112,29 +126,36 @@ fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
                 }
             }
         }
+
         core.tick().map_err(error::TerminalMode::Simulation)?;
         cycles += 1;
         if let Some(first) = core.io_unit_mut().unwrap().controller.pop_tx() {
             let mut stdout = std::io::stdout().lock();
-            stdout
-                .write_all(&[first])
-                .map_err(error::TerminalMode::IO)?;
+            stdout.write_all(&[first]).map_err(error::TerminalMode::IO)?;
             while let Some(byte) = core.io_unit_mut().unwrap().controller.pop_tx() {
                 stdout.write_all(&[byte]).map_err(error::TerminalMode::IO)?;
             }
             stdout.flush().map_err(error::TerminalMode::IO)?;
         }
-        // While waiting for a human at the RX register, relinquish the host
-        // CPU periodically. The hardware continues to advance each cycle.
+        // Periodically yield to the stdin worker and other host processes.
         if cycles % 10_000 == 0 {
             thread::sleep(Duration::from_millis(1));
         }
     }
-    eprintln!(
-        "\nOuros finished normally after {} cycles ({} IO completions).",
-        cycles,
-        core.io_unit().unwrap().completed
-    );
+
+    // Restore canonical input and echo before printing host-side messages.
+    // Drop also restores the main screen and cursor if Ctrl-C interrupted
+    // the application while it was displaying Game of Life.
+    drop(raw_terminal);
+    if interrupted {
+        eprintln!("\nOuros terminal interrupted after {} cycles.", cycles);
+    } else {
+        eprintln!(
+            "\nOuros finished normally after {} cycles ({} IO completions).",
+            cycles,
+            core.io_unit().unwrap().completed
+        );
+    }
     Ok(())
 }
 

@@ -9,7 +9,7 @@ pub struct OurosConfig {
 
 pub const BIG_HEAP: usize = 1024 * 256;
 pub const HEAP_SIZE: usize = 1024 * 256;
-pub const PROG_SIZE: usize = 1024;
+pub const PROG_SIZE: usize = 1024 * 2;
 pub const MAX_THREADS: usize = 4;
 pub const BUFFER_SIZE: usize = MAX_THREADS;
 pub const ADDR_STK_SIZE: usize = 512;
