@@ -1,6 +1,8 @@
 use std::fmt;
 use std::sync::LazyLock;
 
+use crate::error;
+
 pub type Arity = u8;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -111,27 +113,27 @@ pub struct ParseRes {
     pub app3: Vec<Hole>,
 }
 
-pub fn parse_pat(p: &Pat) -> Result<ParseRes, String> {
+pub fn parse_pat(p: &Pat) -> Result<ParseRes, error::Ouros> {
     let mut result = ParseRes::default();
     parse(p, Mode::Spine, &mut 0, &mut 0, &mut result)?;
     Ok(result)
 }
 
 pub static DECODE_TABLE: LazyLock<[ParseRes; 64]> = LazyLock::new(|| {
-    let parsed: Vec<ParseRes> = ALL_PATTERNS
+    let parsed = ALL_PATTERNS
         .iter()
         .map(parse_pat)
-        .collect::<Result<_, _>>()
-        .unwrap_or_default();
-    let res: [ParseRes; 64] = parsed
+        .collect::<Result<Vec<ParseRes>, _>>()
+        .expect("could not parse the given patterns");
+
+    parsed
         .try_into()
-        .expect("pattern decode table size should match");
-    res
+        .expect("pattern decode table size should match")
 });
 
 #[test]
 fn parse_pat_spec() {
-    for (pat, res) in ALL_PATTERNS.iter().zip(DECODE_TABLE.iter()).into_iter() {
+    for (pat, res) in ALL_PATTERNS.iter().zip(DECODE_TABLE.iter()) {
         println!("{},{:?}", pat, res);
     }
 }
@@ -142,7 +144,7 @@ fn parse(
     arg_count: &mut u8,
     ptr_count: &mut u8,
     acc: &mut ParseRes,
-) -> Result<(), String> {
+) -> Result<(), error::Ouros> {
     let mut stack: Vec<Pat> = Vec::new();
     let mut p_it = p;
     let mut res: Vec<Hole> = Vec::new();
@@ -151,7 +153,9 @@ fn parse(
     while *p_it != Pat::X {
         match p_it {
             Pat::X => {
-                return Err("parse: strange!".to_string());
+                return Err(error::Ouros::InvalidPatterns {
+                    reason: "parse: strange!".to_string(),
+                });
             }
             Pat::At(l, r) => {
                 stack.push(*r.clone());

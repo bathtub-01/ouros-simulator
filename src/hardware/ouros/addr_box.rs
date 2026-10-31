@@ -1,4 +1,5 @@
 use super::config::{CONSUMERS, CONSUMERS_DHEAP, CONSUMERS_REDUCER};
+use crate::error;
 use crate::hardware::common::Register;
 use crate::hw_module::{HwInput, HwModule};
 
@@ -104,7 +105,7 @@ impl AddrBox {
 }
 
 impl HwModule for AddrBox {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         // ============ handle free addrs ===========
         for i in 0..CONSUMERS {
             // reg value shifting
@@ -146,7 +147,7 @@ impl HwModule for AddrBox {
         Ok(())
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         for reg in self.addr_regs.iter_mut() {
             reg.tick()?
         }
@@ -162,7 +163,8 @@ fn addr_box_spec() {
     use super::garbage_collector::GbgCollector;
     let size = 1024;
     let from = 42;
-    let mut gc = GbgCollector::new(size, from).init_freelist();
+    let gc_at = Default::default();
+    let mut gc = GbgCollector::new(size, from, gc_at).init_freelist();
     let mut ab = AddrBox::new();
     let mut ctr = from;
 
@@ -170,9 +172,9 @@ fn addr_box_spec() {
         ab.input.free_addr_valid = gc.addr_out_valid();
         ab.input.free_addr_bits = gc.addr_out_bits();
         gc.input.addr_out_ready = ab.addr_request();
-        gc.tick();
-        ab.tick();
-        ctr = ctr + 1;
+        gc.tick().expect("expected to tick gc");
+        ab.tick().expect("expected to tick gc");
+        ctr += 1;
     }
 
     println!("{:?}", ab.consume_addr_valid());

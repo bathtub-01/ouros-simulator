@@ -1,3 +1,4 @@
+use crate::error;
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 use std::collections::VecDeque;
@@ -16,7 +17,7 @@ impl<T: Clone + Default> HwInput for FIFOInput<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct FIFOStat {
     pub length_per_cycle: Vec<u8>,
 }
@@ -83,7 +84,7 @@ impl<T, const N: usize, const P: bool> HwModule for Fifo<T, N, P>
 where
     T: Clone + Default,
 {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         // NOTE: if not using old value, will be a bug when P=false and fifo is full
         // Can play verus on this
         let old_in_ready = self.in_ready();
@@ -97,14 +98,14 @@ where
         Ok(())
     }
 
-    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
+    fn update_stat(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         if self.record_stat {
             self.stat.length_per_cycle.push(self.queue.len() as u8);
         }
         Ok(())
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         Ok(())
     }
 }
@@ -113,7 +114,7 @@ where
 fn fifo_spec() {
     let mut fifo: Fifo<u32, 4, true> = Fifo::new();
 
-    fifo.tick();
+    fifo.tick().expect("expected to tick fifo");
 
     // fill the fifo (1,2,3,4)
     for i in 1..10 {
@@ -122,7 +123,7 @@ fn fifo_spec() {
             input.din = i;
             input.out_ready = false;
         });
-        fifo.tick();
+        fifo.tick().expect("expected to tick fifo");
     }
 
     // pipelining
@@ -135,6 +136,6 @@ fn fifo_spec() {
         assert!(fire(fifo.input.in_valid, fifo.in_ready()));
         assert!(fire(fifo.out_valid(), fifo.input.out_ready));
         assert_eq!(fifo.dout(), Some(&(i - 4)));
-        fifo.tick();
+        fifo.tick().expect("expected to tick fifo");
     }
 }

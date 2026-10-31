@@ -7,12 +7,25 @@
 
 use super::config::*;
 use super::program::*;
+use crate::error;
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{DualPortMem, Register, Stack};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
 use std::cmp::max;
 use std::fmt;
+
+/// DerefHeapNew errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    // FIX: to specialise errors
+    #[error("Frame: {0}")]
+    Frame(String),
+    #[error("Invalid Deref Arg: {0}")]
+    Arg(String),
+    #[error("Invalid Stack: {0}")]
+    Stack(String),
+}
 
 #[derive(Default)]
 pub struct DrfHeapInput {
@@ -104,7 +117,7 @@ enum HeapPort {
     B,
 }
 
-#[derive(Default, Clone, PartialEq, Debug)]
+#[derive(Default, Copy, Clone, PartialEq, Debug)]
 // FIX: should we fix capitalisation of variant names?
 pub enum Stm {
     #[default]
@@ -114,7 +127,7 @@ pub enum Stm {
     Resume,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct DrfHeapStat {
     active_threads: u8,
     pub work_threads: Vec<(u8, u8)>, // (occupied resources, active threads)
@@ -178,30 +191,30 @@ enum RESUMEs {
 }
 
 /// select the first pointer to deref, returns (arg position, pointer value)
-fn select_1st_arg(app: &App) -> Result<(i32, usize), String> {
+fn select_1st_arg(app: &App) -> Result<(i32, usize), Error> {
     match app[0] {
         Atom::Ptr(p, _, false) => Ok((0, p)),
         Atom::Prm(_, _) => match app[1] {
             Atom::Ptr(p, _, false) => Ok((1, p)),
-            Atom::Nop => Err(String::from("unreachable")),
+            Atom::Nop => Err(Error::Arg(String::from("unreachable"))),
             _ => match app[2] {
                 Atom::Ptr(p, _, false) => Ok((2, p)),
-                _ => Err(String::from("unreachable")),
+                _ => Err(Error::Arg(String::from("unreachable"))),
             },
         },
         Atom::Try | Atom::Seq => match app[1] {
             Atom::Ptr(p, _, false) => Ok((1, p)),
-            _ => Err(format!("No Ptr here: {:?}", app)),
+            _ => Err(Error::Arg(format!("No Ptr here: {:?}", app))),
         },
-        _ => Err(format!("app: {:?}", app)),
+        _ => Err(Error::Arg(format!("app: {:?}", app))),
     }
 }
 
 /// select the next strict arg, returns (arg position, pointer value)
-fn select_next_arg(app: &App, current: usize) -> Result<(usize, usize), String> {
+fn select_next_arg(app: &App, current: usize) -> Result<(usize, usize), Error> {
     match app[2] {
         Atom::Ptr(p, _, false) => Ok((2, p)),
-        _ => Err(String::from("unreachable")),
+        _ => Err(Error::Arg(String::from("unreachable"))),
     }
 }
 
@@ -403,8 +416,8 @@ impl DrfHeap {
     }
 
     /// When creating a `DrfHeap`, put a compiled program into the heap memory.
-    pub fn program(mut self, prog: &Vec<Vec<Atom>>) -> Self {
-        fn convert(atms: &Vec<Atom>) -> App {
+    pub fn program(mut self, prog: &[Vec<Atom>]) -> Self {
+        fn convert(atms: &[Atom]) -> App {
             assert!(atms.len() <= APP_LENGTH);
             let mut app: App = std::array::from_fn(|_| Atom::Nop);
             for (i, atm) in atms.iter().enumerate() {
@@ -413,7 +426,11 @@ impl DrfHeap {
             app
         }
         // convert Vec<Vec<Atom>> to Vec<HeapCell>
-        let img: Vec<App> = prog.iter().map(convert).collect();
+        let img: Vec<App> = prog
+            .iter()
+            .map(|v| v.iter().as_slice())
+            .map(convert)
+            .collect();
         self.heap_mem.image(&img);
         self
     }
@@ -498,7 +515,7 @@ impl DrfHeap {
         self.holder_out.0 || derived
     }
 
-    pub fn out_main_bits(&self) -> Result<ActiveApp, String> {
+    pub fn out_main_bits(&self) -> Result<ActiveApp, Error> {
         let target = self.heap_mem.dout_a();
         if self.holder_out.0 {
             return Ok(self.holder_out.1.clone());
@@ -549,7 +566,7 @@ impl DrfHeap {
         self.need_split()
     }
 
-    pub fn out_big_drg_bits(&self) -> Result<FrozenApp, String> {
+    pub fn out_big_drg_bits(&self) -> Result<FrozenApp, Error> {
         let mk_frozen = |a: Option<App>| match a {
             Some(big) => FrozenApp {
                 // heap_addr: self.input.free_addr,
@@ -600,7 +617,7 @@ impl DrfHeap {
     }
 
     /// search for the addr of the App, which is currently being read by DHeap
-    pub fn search(&self) -> Result<usize, String> {
+    pub fn search(&self) -> Result<usize, Error> {
         if self.port_a_fire() && self.get_consumes()? == CONSUMEs::InputIA {
             let in_app = mask_seq(&self.input.port_a_bits.load);
             // println!(
@@ -645,7 +662,7 @@ impl DrfHeap {
         self.heap_mem.dout_b()
     }
 
-    fn get_consumes(&self) -> Result<CONSUMEs, String> {
+    fn get_consumes(&self) -> Result<CONSUMEs, Error> {
         if !self.port_a_fire() {
             Ok(CONSUMEs::NoInput)
         } else {
@@ -654,18 +671,17 @@ impl DrfHeap {
                 if self
                     .thread_stack
                     .iter()
+                    // TODO: remove unwrap
                     .any(find_more_dmder(stk.top().unwrap().1))
                 {
                     Ok(CONSUMEs::InputWHNFWithDmder)
-                } else {
-                    if stk.second().is_some() {
-                        if stack_cell_with(stk.second(), |(flag, _)| !*flag) {
-                            return Err("strange new frame!".to_string());
-                        }
-                        Ok(CONSUMEs::InputWHNFNoDmderNewFrame)
-                    } else {
-                        Ok(CONSUMEs::InputWHNFNoDmderNoFrame)
+                } else if stk.second().is_some() {
+                    if stack_cell_with(stk.second(), |(flag, _)| !*flag) {
+                        return Err(Error::Frame("strange new frame!".to_string()));
                     }
+                    Ok(CONSUMEs::InputWHNFNoDmderNewFrame)
+                } else {
+                    Ok(CONSUMEs::InputWHNFNoDmderNoFrame)
                 }
             } else {
                 Ok(CONSUMEs::InputIA)
@@ -680,16 +696,14 @@ impl DrfHeap {
             .any(find_more_dmder(*self.addr_holder.value()))
         {
             WHNFs::MoreDmders
+        } else if self
+            .thread_stack
+            .iter()
+            .any(find_new_frame(*self.addr_holder.value()))
+        {
+            WHNFs::NewFrame
         } else {
-            if self
-                .thread_stack
-                .iter()
-                .any(find_new_frame(*self.addr_holder.value()))
-            {
-                WHNFs::NewFrame
-            } else {
-                WHNFs::NoNewFrame
-            }
+            WHNFs::NoNewFrame
         }
     }
 
@@ -698,20 +712,14 @@ impl DrfHeap {
         let stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
         if *self.non_exist.value() {
             IAs1::NoExist
+        } else if is_whnf(target) {
+            IAs1::ExistWHNF
+        } else if !*self.working_heap.dout_a() {
+            IAs1::ExistIAFresh
+        } else if stack_cell_with(stk.top(), |(flag, _)| !*flag) {
+            IAs1::ExistIAWorkingNormal
         } else {
-            if is_whnf(target) {
-                IAs1::ExistWHNF
-            } else {
-                if !*self.working_heap.dout_a() {
-                    IAs1::ExistIAFresh
-                } else {
-                    if stack_cell_with(stk.top(), |(flag, _)| !*flag) {
-                        IAs1::ExistIAWorkingNormal
-                    } else {
-                        IAs1::ExistIAWorkingAtNewFrame
-                    }
-                }
-            }
+            IAs1::ExistIAWorkingAtNewFrame
         }
     }
 
@@ -728,6 +736,7 @@ impl DrfHeap {
         // }
         let frame_record = self.frame_stack[self.holder_in.value().stack_idx as usize]
             .top()
+            // TODO: add result here
             .unwrap();
         let idle_stack: bool = self
             .thread_stack
@@ -740,8 +749,7 @@ impl DrfHeap {
                 Atom::Ptr(_, _, _) | Atom::Seq => false,
                 Atom::Prm(_, _) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
                 Atom::Try => *self.arg_id.value() == 1 && *s1 != IAs1::ExistWHNF,
-                // more on this to support strict args in the future
-                _ => unreachable!(),
+                _ => unimplemented!("more on this to support strict args in the future"),
             }
         };
 
@@ -749,17 +757,15 @@ impl DrfHeap {
             IAs2::NextStrictArgLocal
         } else if more_strict_args && idle_stack {
             IAs2::NextStrictArgNewStk
+        } else if (is_ptr(&ia[0])
+            || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
+            || is_seq(&ia[0])
+            || (is_try(&ia[0]) && *self.arg_id.value() == 1))
+            && target_in_whnf
+        {
+            IAs2::NoMoreArgsCanEmit
         } else {
-            if (is_ptr(&ia[0])
-                || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
-                || is_seq(&ia[0])
-                || (is_try(&ia[0]) && *self.arg_id.value() == 1))
-                && target_in_whnf
-            {
-                IAs2::NoMoreArgsCanEmit
-            } else {
-                IAs2::NoMoreArgsNoEmit // TRY second should go here; what if the 2nd is in compute? We can use meta data to improve PRM/SEQ/TRY?
-            }
+            IAs2::NoMoreArgsNoEmit // TRY second should go here; what if the 2nd is in compute? We can use meta data to improve PRM/SEQ/TRY?
         }
     }
 
@@ -776,6 +782,7 @@ impl DrfHeap {
     fn waited_by(&self) -> Option<usize> {
         let addr = self.input.port_b_bits.heap_addr;
         let a_thread = self.holder_in.value().stack_idx as usize;
+
         if *self.stm.value() == Stm::Ia
             && self.get_ias1() == IAs1::NoExist
             && *self.addr_holder.value() == addr
@@ -816,6 +823,8 @@ impl DrfHeap {
     /// write the incoming app
     fn write_incoming(&mut self, p: HeapPort) {
         let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+        // TODO: add error result here
+        // TODO: add result here
         let addr = current_stk.top().unwrap().1;
         let cell = dash_app(&self.input.port_a_bits.load);
         current_stk.pop();
@@ -857,6 +866,7 @@ impl DrfHeap {
             //         println!("frame stk 3 popped. P1");
             //     }
             // }
+            // TODO: add result here
             self.heap_mem.read_a(stack.second().unwrap().1);
             self.holder_in.input.stack_idx = stk_id as u8;
         } else {
@@ -865,7 +875,7 @@ impl DrfHeap {
     }
 
     /// select first arg from `app` and read it
-    fn select_1st_arg_read(&mut self, app: &App) -> Result<(), String> {
+    fn select_1st_arg_read(&mut self, app: &App) -> Result<(), Error> {
         let (arg_id, p) = select_1st_arg(app)?;
         self.read_target(p);
         self.arg_id.connect(&(arg_id as usize));
@@ -873,7 +883,7 @@ impl DrfHeap {
     }
 
     /// select next arg from `app` and read it
-    fn select_next_arg_read(&mut self, app: &App) -> Result<(), String> {
+    fn select_next_arg_read(&mut self, app: &App) -> Result<(), Error> {
         let (arg_id, p) = select_next_arg(app, *self.arg_id.value())?;
         self.read_target(p);
         self.arg_id.connect(&arg_id);
@@ -895,6 +905,7 @@ impl DrfHeap {
         let sensitive2 = *s1 == IAs1::ExistIAFresh || *s1 == IAs1::NoExist;
         let returning_app = self.thread_stack[self.input.port_a_bits.stack_idx as usize]
             .top()
+            // TODO: add result here
             .unwrap()
             .1;
         let current_stk = &self.thread_stack[self.holder_in.value().stack_idx as usize];
@@ -904,7 +915,7 @@ impl DrfHeap {
     }
 
     /// take shortcuts, unless 'sensitive cases' are encountered
-    fn step_to_next(&mut self, s1: &IAs1) -> Result<(), String> {
+    fn step_to_next(&mut self, s1: &IAs1) -> Result<(), Error> {
         if self.is_sensitive(s1) {
             self.stm.connect(&Stm::Idle);
         } else {
@@ -914,7 +925,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn gen_output_whnf(&self) -> Result<(App, Option<App>), String> {
+    fn gen_output_whnf(&self) -> Result<(App, Option<App>), Error> {
         let dmder = self.heap_mem.dout_a();
         let target = &self.holder_in.value().load;
         // println!("addr: {}", self.heap_mem.input.port_a.addr); // use this for GC debugging
@@ -923,7 +934,7 @@ impl DrfHeap {
 
         Ok(deref(
             dmder,
-            usize::try_from(arg_id).map_err(|e| e.to_string())?,
+            usize::try_from(arg_id).map_err(|e| Error::Arg(e.to_string()))?,
             target,
             self.reg_free_addr.value().1,
         ))
@@ -938,6 +949,7 @@ impl DrfHeap {
 
     fn gen_frame_record(&self) -> FrameRecord {
         let father_stk_id = self.holder_in.value().stack_idx as usize;
+        // TODO: add result here
         let mut res = *self.frame_stack[father_stk_id].top().unwrap();
         res[father_stk_id] = self.addr_holder.input;
         res
@@ -1044,7 +1056,7 @@ impl DrfHeap {
     }
 
     /// consumes the next task; must not use heap port b!
-    fn consume_next(&mut self) -> Result<(), String> {
+    fn consume_next(&mut self) -> Result<(), Error> {
         let in_app = mask_seq(&self.input.port_a_bits.load);
         self.holder_in.connect(&ActiveApp {
             stack_idx: self.input.port_a_bits.stack_idx,
@@ -1058,6 +1070,7 @@ impl DrfHeap {
                 self.ia_addr.connect(
                     &self.thread_stack[self.input.port_a_bits.stack_idx as usize]
                         .top()
+                        // TODO: add result here
                         .unwrap()
                         .1,
                 );
@@ -1065,6 +1078,7 @@ impl DrfHeap {
             }
             CONSUMEs::InputWHNFWithDmder => {
                 let current_stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+                // TODO: add result here
                 let current_top = current_stk.top().unwrap().1;
                 self.find_pop_read(find_more_dmder(current_top), false);
                 self.addr_holder.connect(&current_top);
@@ -1072,8 +1086,12 @@ impl DrfHeap {
             }
             CONSUMEs::InputWHNFNoDmderNewFrame => {
                 let current_stk = &mut self.thread_stack[self.input.port_a_bits.stack_idx as usize];
+                // TODO: add error result here
+                // TODO: add result here
                 let current_top = current_stk.top().unwrap().1;
                 current_stk.pop();
+                // TODO: add error result here
+                // TODO: add result here
                 self.heap_mem.read_a(current_stk.second().unwrap().1);
                 self.addr_holder.connect(&current_top);
                 self.frame_stack[self.input.port_a_bits.stack_idx as usize].pop();
@@ -1094,7 +1112,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn step_whnf(&mut self) -> Result<(), String> {
+    fn step_whnf(&mut self) -> Result<(), Error> {
         let whnf_addr = *self.addr_holder.value();
 
         match self.get_whnfs() {
@@ -1143,7 +1161,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn step_ia(&mut self) -> Result<(), String> {
+    fn step_ia(&mut self) -> Result<(), Error> {
         let dmder = &self.holder_in.value().load;
         let mut updated_dmder = *dmder;
         let target = *self.heap_mem.dout_a();
@@ -1183,6 +1201,7 @@ impl DrfHeap {
             IAs2::NextStrictArgNewStk => {
                 let current_idx = self.holder_in.value().stack_idx as usize;
                 self.select_next_arg_read(&updated_dmder)?;
+                // TODO: add error result here
                 let frame_record = self.frame_stack[current_idx].top().unwrap();
                 if let Some((stk_id, _)) = self
                     .thread_stack
@@ -1192,7 +1211,7 @@ impl DrfHeap {
                 {
                     // FIXME: ensure using a new stack
                     if stk_id as u8 == self.holder_in.value().stack_idx {
-                        return Err("GOT YA!".to_string());
+                        return Err(Error::Stack("GOT YA!".to_string()));
                     }
                     self.holder_in.input.stack_idx = stk_id as u8;
                     self.frame_stack[stk_id].push(self.gen_frame_record());
@@ -1214,12 +1233,14 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn step_resume(&mut self) -> Result<(), String> {
+    fn step_resume(&mut self) -> Result<(), Error> {
         self.write_whnf(HeapPort::B);
         match self.get_resumes() {
             RESUMEs::TopInWHNF => {
                 let current_stk = &mut self.thread_stack[self.holder_in.value().stack_idx as usize];
+                // TODO: add error result here
                 let whnf_addr = current_stk.top().unwrap().1;
+                // TODO: add error result here
                 let dmder_addr = current_stk.second().unwrap().1;
                 self.holder_in.input.load = *self.heap_mem.dout_a();
                 current_stk.pop();
@@ -1234,7 +1255,7 @@ impl DrfHeap {
         Ok(())
     }
 
-    fn handle_port_a(&mut self) -> Result<(), String> {
+    fn handle_port_a(&mut self) -> Result<(), Error> {
         if self.holder_out.0 && !self.input.out_main_ready {
             return Ok(());
         }
@@ -1263,7 +1284,7 @@ impl DrfHeap {
 }
 
 impl HwModule for DrfHeap {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         self.update_prepare();
         self.gc_read_granted.connect(&false);
 
@@ -1298,7 +1319,8 @@ impl HwModule for DrfHeap {
         }
         self.non_exist.connect(&self.input.found);
 
-        self.handle_port_a()?;
+        self.handle_port_a()
+            .map_err(error::sim::TickHw::DerefHeap)?;
         self.handle_port_b();
 
         // when port b is not locally used, grant it to GC usage
@@ -1336,7 +1358,7 @@ impl HwModule for DrfHeap {
         Ok(())
     }
 
-    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
+    fn update_stat(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         // if self.dealloc_valid() && self.dealloc_bits() == 4077 {
         //     println!("deallocate 65!");
         // }
@@ -1372,12 +1394,16 @@ impl HwModule for DrfHeap {
                     .holder_contents
                     .push(Some(self.holder_out.1.clone()));
             } else if self.output_fire() {
-                self.stat.holder_contents.push(Some(self.out_main_bits()?));
+                self.stat
+                    .holder_contents
+                    .push(Some(self.out_main_bits().map_err(|out_bits_error| {
+                        error::sim::TickHw::StatisticsDerefHeap(out_bits_error)
+                    })?));
             } else {
                 self.stat.holder_contents.push(None);
             }
 
-            self.stat.heap_stm.push(self.stm.value().clone());
+            self.stat.heap_stm.push(*self.stm.value());
             self.stat.serving_id.push(self.holder_in.value().stack_idx);
         }
 
@@ -1420,7 +1446,7 @@ impl HwModule for DrfHeap {
         Ok(())
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         self.stm.tick()?;
         for stk in &mut self.thread_stack {
             stk.tick()?

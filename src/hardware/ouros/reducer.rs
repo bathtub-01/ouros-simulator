@@ -10,11 +10,31 @@ use std::cmp::max;
 
 use super::alu::compute;
 use super::program::*;
+use crate::error;
 use crate::hardware::common::{Register, SinglePortMem};
-use crate::hardware::ouros::config::*;
 use crate::hardware::ouros::program::{ActiveApp, App, Atom, FrozenApp};
+use crate::hardware::ouros::{config::*, program};
 use crate::hardware::utils::fire;
 use crate::hw_module::{HwInput, HwModule};
+
+/// Reducer errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Invalid Atom ({invalid_atom}) for parent ({parent})")]
+    InvalidAtom {
+        parent: crate::hardware::ouros::program::Atom,
+        invalid_atom: crate::hardware::ouros::program::Atom,
+    },
+    #[error("Unimplemented Atom ({unimplemented})")]
+    UnimplementedAtom {
+        unimplemented: crate::hardware::ouros::program::Atom,
+    },
+    #[error("Spine leaked ({spine_value}) -> spine_not_ready? {spine_not_ready}")]
+    SpineLeaked {
+        spine_value: crate::hardware::ouros::reducer::Stm,
+        spine_not_ready: bool,
+    },
+}
 
 fn dash_atom(atom: &Atom) -> Atom {
     match atom {
@@ -23,14 +43,25 @@ fn dash_atom(atom: &Atom) -> Atom {
     }
 }
 
-#[derive(Default, Clone, PartialEq, Debug)]
+#[derive(Default, Copy, Clone, PartialEq, Debug)]
 // FIX: should we fix capitalisation of variant names?
-enum Stm {
+pub enum Stm {
     #[default]
     Idle,
     Spine,
     App,
     Special,
+}
+
+impl std::fmt::Display for Stm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Stm::Idle => write!(f, "Idle"),
+            Stm::Spine => write!(f, "Spine"),
+            Stm::App => write!(f, "App"),
+            Stm::Special => write!(f, "Special"),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -46,7 +77,7 @@ pub struct ReducerInput {
 
 impl HwInput for ReducerInput {}
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct ReducerStat {
     pub busy_cycles: u32,
     pub busy_per_cycle: Vec<bool>,
@@ -95,8 +126,8 @@ impl Reducer {
         }
     }
 
-    pub fn program(mut self, prog: &Vec<Vec<Atom>>) -> Self {
-        fn convert(atms: &Vec<Atom>) -> App {
+    pub fn program(mut self, prog: &[Vec<Atom>]) -> Self {
+        fn convert(atms: &[Atom]) -> App {
             assert!(atms.len() <= APP_LENGTH);
             let mut app: App = std::array::from_fn(|_| Atom::Nop);
             for (i, atm) in atms.iter().enumerate() {
@@ -104,7 +135,11 @@ impl Reducer {
             }
             app
         }
-        let img = prog.iter().map(convert).collect();
+        let img = prog
+            .iter()
+            .map(|v| v.iter().as_slice())
+            .map(convert)
+            .collect();
         self.comb_table.image(&img);
         self
     }
@@ -341,7 +376,7 @@ impl Reducer {
         fire(self.input.in_valid, self.in_ready())
     }
 
-    fn get_instant(&self, c: &SpeCell) -> Result<i32, String> {
+    fn get_instant(&self, c: &SpeCell) -> Result<i32, program::Error> {
         let in_app = &self.reg_in.value().load;
         match c {
             SpeCell::Arg(arg) => take_int(&in_app[arg + 1]),
@@ -378,6 +413,7 @@ impl Reducer {
             .iter()
             .skip(idx)
             .position(|a| self.is_nested(a))
+            // TODO: add error result here
             .unwrap()
     }
 
@@ -433,8 +469,8 @@ impl Reducer {
         res
     }
 
-    fn step_next(&mut self) -> Result<(), String> {
-        Ok(if self.in_fire() {
+    fn step_next(&mut self) -> Result<(), Error> {
+        if self.in_fire() {
             self.reg_in.connect(&self.input.in_app);
             self.reg_idx.connect(&0);
             self.reg_big_spine_used.connect(&false);
@@ -445,34 +481,44 @@ impl Reducer {
                     self.reg_arity.connect(&arity);
                     self.comb_table.read(addr)
                 }
-                Atom::Con(_, fields, idx) => {
+                parent @ Atom::Con(_, fields, idx) => {
                     self.reg_stm.connect(&Stm::Spine);
-                    if let Atom::Tab(base, free_vars) = self.input.in_app.load[fields + 1] {
-                        self.reg_in.input.load[0] = Atom::Com(0, base + idx);
-                        self.reg_arity.connect(&(fields as u8 + free_vars + 1));
-                        self.comb_table.read(base + idx);
-                    } else {
-                        return Err("panic during step".to_string()); // p_anic!()
+                    match self.input.in_app.load[fields + 1] {
+                        Atom::Tab(base, free_vars) => {
+                            self.reg_in.input.load[0] = Atom::Com(0, base + idx);
+                            self.reg_arity.connect(&(fields as u8 + free_vars + 1));
+                            self.comb_table.read(base + idx);
+                        }
+                        invalid_atom => {
+                            return Err(Error::InvalidAtom {
+                                parent,
+                                invalid_atom,
+                            });
+                        }
                     }
                 }
                 Atom::Y => {
                     self.reg_app_mask.connect(&true);
                     self.reg_stm.connect(&Stm::Special);
                 }
-                _ => return Err("panic during step".to_string()), // t_odo!(),
+                unimplemented => {
+                    return Err(Error::UnimplementedAtom { unimplemented });
+                }
             };
         } else {
             self.reg_stm.connect(&Stm::Idle);
-        })
+        };
+        Ok(())
     }
 }
 
 impl HwModule for Reducer {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
+        let map_step_error = |reduce_error: Error| error::sim::TickHw::Reducer(reduce_error);
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
             Stm::Idle => {
-                self.step_next()?;
+                self.step_next().map_err(map_step_error)?;
             }
             Stm::Spine => {
                 // !NOTE! We are assuming this state won't be blocked.
@@ -500,7 +546,7 @@ impl HwModule for Reducer {
                             + 1,
                     );
                 } else {
-                    self.step_next()?;
+                    self.step_next().map_err(map_step_error)?;
                 }
             }
             Stm::App => {
@@ -517,7 +563,7 @@ impl HwModule for Reducer {
                                 + 1,
                         );
                     } else {
-                        self.step_next()?;
+                        self.step_next().map_err(map_step_error)?;
                     }
                 } else {
                     // fail to fire, keep reading
@@ -531,7 +577,7 @@ impl HwModule for Reducer {
             Stm::Special => {
                 self.reg_app_mask.connect(&false);
                 if fire(self.input.app_ready, self.app_valid()) {
-                    self.step_next()?;
+                    self.step_next().map_err(map_step_error)?;
                 }
             }
         }
@@ -541,7 +587,10 @@ impl HwModule for Reducer {
         }
 
         if self.spine_valid() && !self.input.spine_ready {
-            return Err("spine leaked".to_string()); // p_anic!(); println!("spine leaked!: {:?}", self.spine_bits());
+            return Err(error::sim::TickHw::Reducer(Error::SpineLeaked {
+                spine_value: *self.reg_stm.value(),
+                spine_not_ready: !self.input.spine_ready,
+            }));
         }
 
         // if self.spine_valid() {
@@ -570,18 +619,16 @@ impl HwModule for Reducer {
         Ok(())
     }
 
-    fn update_stat(&mut self) -> Result<(), String> {
+    fn update_stat(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         if self.in_fire() {
             self.stat.reductions += 1;
         }
 
-        if self.stat_detail_lv >= DLV_GC {
-            if fire(self.input.app_ready, self.app_valid()) {
-                if self.app_bits().load.iter().any(is_ptr) {
-                    self.stat.nested_with_ptr += 1;
-                } else {
-                    self.stat.nested_no_ptr += 1;
-                }
+        if self.stat_detail_lv >= DLV_GC && fire(self.input.app_ready, self.app_valid()) {
+            if self.app_bits().load.iter().any(is_ptr) {
+                self.stat.nested_with_ptr += 1;
+            } else {
+                self.stat.nested_no_ptr += 1;
             }
         }
 
@@ -597,16 +644,17 @@ impl HwModule for Reducer {
             }
         }
 
-        Ok(if self.stat_detail_lv >= DLV_FULL_LOG {
+        if self.stat_detail_lv >= DLV_FULL_LOG {
             if self.spine_valid() {
                 self.stat.holder_contents.push(Some(self.spine_bits()));
             } else {
                 self.stat.holder_contents.push(None);
             }
-        })
+        };
+        Ok(())
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         self.comb_table.tick()?;
         self.reg_in.tick()?;
         for reg in self.addr_regs.iter_mut() {

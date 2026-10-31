@@ -7,6 +7,7 @@
 use super::program::AluOp::*;
 use super::program::Atom::*;
 use crate::{
+    error,
     hardware::{
         ouros::{
             config::*,
@@ -18,6 +19,17 @@ use crate::{
 };
 
 use super::program::*;
+
+
+/// ALU component unit
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    // FIX: to specialise errors
+    #[error("Could not lookup atom: {context}")]
+    AtomLookup { context: String },
+    #[error("Atom error: {0}")]
+    AtomErr(super::program::Error),
+}
 
 #[derive(Default)]
 pub struct AluInput {
@@ -51,7 +63,7 @@ pub fn compute(op: &AluOp, rev: bool, l: i32, r: i32) -> Atom {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct AluStat {
     pub busy_cycles: u32,
     pub busy_per_cycle: Vec<bool>,
@@ -110,7 +122,7 @@ impl Alu {
         }
     }
 
-    pub fn output_bits(&self) -> Result<ActiveApp, String> {
+    pub fn output_bits(&self) -> Result<ActiveApp, Error> {
         if ALU_PIPE {
             Ok(self.holder.1.clone())
         } else {
@@ -122,14 +134,16 @@ impl Alu {
         &self.stat
     }
 
-    fn gen_result(&self) -> Result<ActiveApp, String> {
-        let get_operand = |i: usize| -> Result<i32, String> {
+    fn gen_result(&self) -> Result<ActiveApp, Error> {
+        let get_operand = |i: usize| -> Result<i32, Error> {
             self.input
                 .input_bits
                 .load
                 .get(i)
-                .ok_or(format!("{} operand could not be load", i))
-                .and_then(take_int)
+                .ok_or_else(|| Error::AtomLookup {
+                    context: format!("operand, at index {} could not be load", i),
+                })
+                .and_then(|atom| take_int(atom).map_err(Error::AtomErr))
         };
 
         let oprand1: i32 = get_operand(1)?;
@@ -139,7 +153,9 @@ impl Alu {
             .input_bits
             .load
             .first()
-            .ok_or("failed to load input bits".to_string())
+            .ok_or_else(|| Error::AtomLookup {
+                context: "first atom in input bits".to_string(),
+            })
             .and_then(|atom| match atom {
                 Prm(op, inv) => Ok(ActiveApp {
                     stack_idx: self.input.input_bits.stack_idx,
@@ -157,25 +173,29 @@ impl Alu {
                         arr
                     },
                 }),
-                _ => Err("alu: app head is not an primitive op!".to_string()),
+                fetched_atom => Err(Error::AtomLookup {
+                    context: format!("App head is not an primitive op! we got {:?}", fetched_atom),
+                }),
             })
     }
 }
 
 impl HwModule for Alu {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         if fire(self.holder.0, self.input.output_ready) {
             self.holder.0 = false;
         }
 
         if self.input_fire() {
             self.holder.0 = true;
-            self.holder.1 = self.gen_result()?;
+            self.holder.1 = self.gen_result().map_err(|error_value| {
+                error::sim::TickHw::Alu(error_value)
+            })?;
         }
         Ok(())
     }
 
-    fn update_stat(&mut self) -> std::result::Result<(), std::string::String> {
+    fn update_stat(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         if self.input_fire() {
             self.stat.reductions += 1;
         }
@@ -199,7 +219,7 @@ impl HwModule for Alu {
         Ok(())
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         Ok(())
     }
 }
@@ -209,7 +229,7 @@ fn alu_spec() {
     use Atom::*;
     let mut alu = Alu::new();
 
-    alu.tick();
+    alu.tick().expect("expected to tick alu");
     alu.input.link(|input| {
         input.output_ready = false;
         input.input_valid = true;
@@ -225,13 +245,13 @@ fn alu_spec() {
             Nop,
         ];
     });
-    alu.tick();
+    alu.tick().expect("expected to tick alu");
     println!("{:?}, valid: {}", alu.output_bits(), alu.output_valid());
 
     alu.input.link(|input| {
         input.output_ready = true;
         input.input_valid = false;
     });
-    alu.tick();
+    alu.tick().expect("expected to tick alu");
     println!("{:?}, valid: {}", alu.output_bits(), alu.output_valid());
 }

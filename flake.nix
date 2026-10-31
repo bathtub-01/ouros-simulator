@@ -22,6 +22,8 @@
           fd
           rust-analyzer
           rust-bin.beta.latest.default
+          bacon
+          tracy
         ];
 
         myRustPkg = pkgs.rustPlatform.buildRustPackage {

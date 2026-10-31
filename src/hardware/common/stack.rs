@@ -1,6 +1,8 @@
 use crate::hw_module::{HwInput, HwModule};
 use vstd::prelude::*;
 
+use crate::error;
+
 verus! {
 #[derive(Default, Debug, PartialEq)]
 pub enum StackOp {
@@ -77,7 +79,7 @@ impl<T: Clone + Default, const N: usize> Stack<T, N> {
 }
 
 impl<T: Clone + Default, const N: usize> HwModule for Stack<T, N> {
-    fn update_local(&mut self) -> Result<(), String>
+    fn update_local(&mut self) -> Result<(), error::sim::TickHw>
     ensures
     self.input.op is NOP ==> self.mem == old(self).mem,
     self.input.op is PUSH ==> self.mem@.len() > old(self).mem@.len(),
@@ -100,7 +102,7 @@ impl<T: Clone + Default, const N: usize> HwModule for Stack<T, N> {
             Ok(())
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {Ok(())}
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {Ok(())}
 }
 
     fn push(vec: &mut Vec<bool>, b: bool)
@@ -112,14 +114,14 @@ impl<T: Clone + Default, const N: usize> HwModule for Stack<T, N> {
 fn stack_spec() {
     let mut stack: Stack<u32, 64> = Stack::new();
 
-    stack.tick();
+    stack.tick().expect("expected to tick stack");
 
     for i in 0..64 {
         stack.input.link(|input| {
             input.op = StackOp::Push;
             input.din = i;
         });
-        stack.tick();
+        stack.tick().expect("expected to tick stack");
     }
 
     for i in 0..64 {
@@ -129,12 +131,12 @@ fn stack_spec() {
             input.op = StackOp::Mod;
             input.din = i;
         });
-        stack.tick();
+        stack.tick().expect("expected to tick stack");
         assert_eq!(stack.top(), Some(&i));
 
         stack.input.link(|input| {
             input.op = StackOp::Pop;
         });
-        stack.tick();
+        stack.tick().expect("expected to tick stack");
     }
 }

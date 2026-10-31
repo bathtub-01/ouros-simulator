@@ -3,10 +3,6 @@ name = "ouros-simulator"
 version = "0.1.0"
 edition = "2024"
 
-# [lints.clippy]
-# pedantic="warn", will add afterwards
-# nursery="forbid" #, will add afterwards
-
 [dependencies]
 rand = "0.9.2"
 vstd = "=0.0.0-2026-01-11-0057"
@@ -15,7 +11,7 @@ indicatif = { version = "0.17", features = ["rayon"] }
 clap = { version = "4.6.1", features = ["derive"] }
 tracy-client = { version = "0.18.4", default-features = false, features = ["flush-on-exit"] }
 dhat = { version = "0.3", optional = true }
-thiserror="2.0.20"
+thiserror = "2.0.20"
 
 [features]
 profile = ["tracy-client/enable"]
@@ -23,3 +19,9 @@ dhat-heap = ["dep:dhat"]
 
 [package.metadata.verus]
 verify = true
+
+
+# TODO: add extra config to make the project stricter
+# [lints.clippy]
+# pedantic="warn", will add afterwards
+# nursery="forbid" #, will add afterwards

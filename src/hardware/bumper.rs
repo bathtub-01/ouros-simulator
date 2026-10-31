@@ -1,5 +1,6 @@
 // Example module to demonstrate the framework's usage.
 
+use crate::error;
 use crate::hardware::common::Register;
 use crate::hw_module::{HwInput, HwModule};
 
@@ -18,7 +19,7 @@ pub struct Bumper {
 }
 
 impl HwModule for Bumper {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         // Update local state based on input
         self.running.connect(&self.input.start);
 
@@ -28,9 +29,10 @@ impl HwModule for Bumper {
         Ok(())
     }
 
-    fn tick_children(&mut self) -> Result<(), String> {
+    fn tick_children(&mut self) -> Result<(), error::sim::TickHw> {
         self.counter.tick()?;
-        self.running.tick()
+        self.running.tick()?;
+        Ok(())
     }
 }
 
@@ -56,21 +58,21 @@ fn bumper_spec() {
         input.start = true;
     });
 
-    bumper.tick();
-    assert_eq!(bumper.stm(), true);
-    bumper.tick();
+    bumper.tick().expect("expected to tick bumper");
+    assert!(bumper.stm());
+    bumper.tick().expect("expected to tick bumper");
     assert_eq!(bumper.res(), 1);
-    bumper.tick();
+    bumper.tick().expect("expected to tick bumper");
     assert_eq!(bumper.res(), 2);
 
     bumper.input.link(|input| {
         input.start = false;
     });
 
-    bumper.tick();
-    assert_eq!(bumper.stm(), false);
+    bumper.tick().expect("expected to tick bumper");
+    assert!(!bumper.stm());
     assert_eq!(bumper.res(), 3);
 
-    bumper.tick();
+    bumper.tick().expect("expected to tick bumper");
     assert_eq!(bumper.res(), 3);
 }

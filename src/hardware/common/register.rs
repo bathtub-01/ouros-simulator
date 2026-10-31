@@ -1,4 +1,4 @@
-use crate::hw_module::HwModule;
+use crate::{error, hw_module::HwModule};
 use vstd::prelude::*;
 
 #[derive(Default)]
@@ -26,15 +26,15 @@ impl<V: Clone + Default> Register<V> {
     }
 }
 impl<V: Clone + Default> HwModule for Register<V> {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         self.value = self.input.clone();
         Ok(())
     }
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         Ok(())
     }
 
-    fn tick(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         self.update_local()
     }
 }

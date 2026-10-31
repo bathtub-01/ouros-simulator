@@ -15,6 +15,8 @@
 // The outputs of hardware modules are implemented as methods. They are always
 // derived from current states.
 
+use crate::error;
+
 /// At a certain clock cycle, it contains states of the input ports
 pub trait HwInput {
     /// Update the input state at this cycle.
@@ -34,16 +36,22 @@ pub trait HwInput {
 /// By calling `tick` at cycle `n`, the whole module is **updated**. The `local`
 /// states are now in cycle `n+1`.
 pub trait HwModule {
-    fn update_local(&mut self) -> Result<(), String>;
-    fn update_stat(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> Result<(), error::sim::TickHw>;
+    fn update_stat(&mut self) -> Result<(), error::sim::TickHw> {
         Ok(())
     }
-    fn tick_children(&mut self) -> Result<(), String>;
+    fn tick_children(&mut self) -> Result<(), error::sim::TickHw>;
 
     /// After `input` get setup, use `tick` to update local states.
-    fn tick(&mut self) -> Result<(), String> {
+    fn tick(&mut self) -> Result<(), error::sim::TickHw> {
         self.update_stat()?; // now `input` and `local` are in the same cycle
         self.update_local()?;
-        self.tick_children()
+
+        self.tick_children()?;
+
+        Ok(())
     }
+
+    // FIX: create associated stats type 
+    // FIX: create function that consumes self and returns the associated stats and other type as well
 }
