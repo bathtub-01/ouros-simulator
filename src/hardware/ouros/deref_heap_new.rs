@@ -1320,7 +1320,7 @@ impl HwModule for DrfHeap {
         self.non_exist.connect(&self.input.found);
 
         self.handle_port_a()
-            .map_err(|port_a_error| error::sim::TickHw::DerefHeap(port_a_error))?;
+            .map_err(error::sim::TickHw::DerefHeap)?;
         self.handle_port_b();
 
         // when port b is not locally used, grant it to GC usage
