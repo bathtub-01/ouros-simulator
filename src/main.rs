@@ -284,18 +284,6 @@ mod report {
                         )?;
                     }
 
-                    fn write_busy_rate(
-                        file: &mut File,
-                        data: &[f32],
-                        chunk_size: usize,
-                    ) -> std::io::Result<()> {
-                        writeln!(file, "time,rate")?;
-                        for (i, t) in data.iter().enumerate() {
-                            writeln!(file, "{},{:.2}", i * chunk_size + chunk_size / 2, t * 100.0)?;
-                        }
-                        Ok(())
-                    }
-
                     // write busy rate
                     let red_rate_data: Vec<f32> =
                         chunk_rate(&stats.reducer_stat.busy_per_cycle, chunk_size);
@@ -362,7 +350,7 @@ mod report {
 /// keys (including arrows/SPACE) reach RX immediately and only Ouros TX is
 /// printed. The stdin worker never blocks the graph-reduction engine.
 fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros> {
-   eprintln!(
+    eprintln!(
         "Ouros terminal: RX=0x{:02x}, TX=0x{:02x}, STATUS=0x{:02x}; direct keyboard input (Ctrl-C to exit).",
         UART_RX_DATA, UART_TX_DATA, UART_STATUS
     );
@@ -456,6 +444,14 @@ fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros
             cycles,
             core.io_unit()?.completed
         );
+    }
+    Ok(())
+}
+
+fn write_busy_rate(file: &mut File, data: &[f32], chunk_size: usize) -> std::io::Result<()> {
+    writeln!(file, "time,rate")?;
+    for (i, t) in data.iter().enumerate() {
+        writeln!(file, "{},{:.2}", i * chunk_size + chunk_size / 2, t * 100.0)?;
     }
     Ok(())
 }
@@ -719,7 +715,6 @@ macro_rules! benchmarks {
 }
 
 const DIR_SIMU_OUT_ALL: &str = "simu-out/all/";
-
 
 const DIR_SIMU_OUT_GC: &str = "simu-out/gc/";
 
@@ -1039,7 +1034,7 @@ fn main() -> Result<(), error::Ouros> {
                             program_name: program_name.to_string(),
                         })
                         .map_err(error::Ouros::from)?,
-                    *program_name,
+                    program_name.clone(),
                 ),
                 Args {
                     mode: Some(Mode::Terminal),
@@ -1064,14 +1059,20 @@ fn main() -> Result<(), error::Ouros> {
                         })
                         .map(|program| {
                             report::Builder::set_run_mode(report::RunMode::BigProgram)
-                                .get_input(simulate(program, *program_name, 0, BIG_HEAP, GC_AT))
+                                .get_input(simulate(
+                                    program,
+                                    program_name.clone(),
+                                    0,
+                                    BIG_HEAP,
+                                    GC_AT,
+                                ))
                                 .report()
                         })
                 }
                 Args {
                     mode: Some(Mode::All),
                     ..
-                } => run_benchmarks(progs, program_name.to_string()),
+                } => run_benchmarks(progs),
                 Args {
                     mode: Some(Mode::Gc),
                     ..
