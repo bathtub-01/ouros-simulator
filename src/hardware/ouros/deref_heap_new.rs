@@ -25,6 +25,8 @@ pub enum Error {
     Arg(String),
     #[error("Invalid Stack: {0}")]
     Stack(String),
+    #[error("Internal IO: {0}")]
+    IO(String),
 }
 
 #[derive(Default)]
@@ -35,6 +37,8 @@ pub struct DrfHeapInput {
     pub port_b_valid: bool,
     pub port_b_bits: FrozenApp,
     pub out_main_ready: bool,
+    /// IO request channel (response re-enters port_a through core arbitration).
+    pub out_io_ready: bool,
     pub out_sub_ready: bool,
     pub found: bool,
     // GC signals
@@ -149,6 +153,10 @@ enum CONSUMEs {
     NoInput,
     /// input is an IA
     InputIA,
+    /// saturated IO with unboxed strict operands; issue only once.
+    InputIOReady,
+    /// completed IO Pair with a case-table/extra application must reduce.
+    InputForwardReducer,
     /// input is an WHNF; demander found in any stacks
     InputWHNFWithDmder,
     /// input is an WHNF; no demander is found; different frame under the WHNF
@@ -191,17 +199,32 @@ enum RESUMEs {
 }
 
 /// select the first pointer to deref, returns (arg position, pointer value)
-fn select_1st_arg(app: &App) -> Result<(i32, usize), Error> {
+fn select_1st_arg(app: &App) -> Result<(usize, usize), Error> {
     match app[0] {
         Atom::Ptr(p, _, false) => Ok((0, p)),
         Atom::Prm(_, _) => match app[1] {
             Atom::Ptr(p, _, false) => Ok((1, p)),
-            Atom::Nop => Err(Error::Arg(String::from("unreachable"))),
             _ => match app[2] {
                 Atom::Ptr(p, _, false) => Ok((2, p)),
-                _ => Err(Error::Arg(String::from("unreachable"))),
+                _ => Err(Error::Arg(format!("PRM has no strict pointer: {:?}", app))),
             },
         },
+        Atom::IO(_) => {
+            for &idx in io_strict_positions(&app[0]) {
+                if !is_int(&app[idx]) && !matches!(app[idx], Atom::Ptr(_, _, false)) {
+                    return Err(Error::Arg(format!(
+                        "IO argument {} must be INT or PTR: {:?}",
+                        idx, app
+                    )));
+                }
+            }
+            io_next_pointer(app, 0).ok_or_else(|| {
+                Error::Arg(format!(
+                    "saturated IO requires INT or PTR strict operands: {:?}",
+                    app
+                ))
+            })
+        }
         Atom::Try | Atom::Seq => match app[1] {
             Atom::Ptr(p, _, false) => Ok((1, p)),
             _ => Err(Error::Arg(format!("No Ptr here: {:?}", app))),
@@ -210,11 +233,26 @@ fn select_1st_arg(app: &App) -> Result<(i32, usize), Error> {
     }
 }
 
-/// select the next strict arg, returns (arg position, pointer value)
+/// A strict IO pointer must resolve to an unboxed INT, not a constructor
+/// or partial application that merely happens to be in WHNF.
+fn check_io_target(app: &App, arg_id: usize, target: &App) -> Result<(), Error> {
+    if is_io(&app[0]) && arg_id != 0 && (app_length(target) != 1 || !is_int(&target[0])) {
+        return Err(Error::IO(format!(
+            "IO strict argument {} expected unboxed INT, got {:?}",
+            arg_id, target
+        )));
+    }
+    Ok(())
+}
+
 fn select_next_arg(app: &App, current: usize) -> Result<(usize, usize), Error> {
+    if is_io(&app[0]) {
+        return io_next_pointer(app, current)
+            .ok_or_else(|| Error::Arg(format!("IO has no further strict pointer: {:?}", app)));
+    }
     match app[2] {
         Atom::Ptr(p, _, false) => Ok((2, p)),
-        _ => Err(Error::Arg(String::from("unreachable"))),
+        _ => Err(Error::Arg(format!("No next strict pointer in {:?}", app))),
     }
 }
 
@@ -383,7 +421,9 @@ pub struct DrfHeap {
     pub heap_mem: DualPortMem<App>,
     working_heap: DualPortMem<bool>,
     holder_out: (bool, ActiveApp), // output-reg: (valid, app)
-    working: Register<bool>,       // track whether the machine is working
+    holder_out_startup: bool,
+    io_holder: (bool, ActiveApp), // ready IO request, held until accepted
+    working: Register<bool>,      // track whether the machine is working
     arg_id: Register<usize>,
     non_exist: Register<bool>,
     gc_read_granted: Register<bool>,
@@ -405,6 +445,8 @@ impl DrfHeap {
             heap_mem: DualPortMem::new(heap_size),
             working_heap: DualPortMem::new(heap_size),
             holder_out: Default::default(),
+            holder_out_startup: false,
+            io_holder: Default::default(),
             working: Default::default(),
             stat: Default::default(),
             arg_id: Default::default(),
@@ -458,6 +500,18 @@ impl DrfHeap {
         fire(self.out_sub_valid(), self.input.out_sub_ready)
     }
 
+    pub fn out_io_valid(&self) -> bool {
+        self.io_holder.0
+    }
+
+    pub fn out_io_bits(&self) -> &ActiveApp {
+        &self.io_holder.1
+    }
+
+    pub fn out_io_fire(&self) -> bool {
+        fire(self.out_io_valid(), self.input.out_io_ready)
+    }
+
     pub fn port_a_ready(&self) -> bool {
         let local_release: bool = match *self.stm.value() {
             Stm::Idle => true,
@@ -474,7 +528,12 @@ impl DrfHeap {
                 RESUMEs::TopInIA => true,
             },
         };
-        local_release && self.input.free_addr_valid
+        // Do not accept another ready request while a previous IO effect is
+        // backpressured. It must leave the holder exactly once.
+        local_release
+            && self.input.free_addr_valid
+            && (!self.io_holder.0 || self.input.out_io_ready)
+            && (!self.out_main_valid() || self.input.out_main_ready)
     }
 
     pub fn port_b_ready(&self) -> bool {
@@ -495,6 +554,12 @@ impl DrfHeap {
             Stm::Resume => true,
         };
         !borrowed
+    }
+
+    /// Only the initial root bypasses DHeap's input processing. It must not
+    /// issue an IO request directly from this startup holder.
+    pub fn out_main_from_startup(&self) -> bool {
+        self.holder_out.0 && self.holder_out_startup
     }
 
     pub fn out_main_valid(&self) -> bool {
@@ -534,6 +599,11 @@ impl DrfHeap {
                 }
                 match self.get_ias2(&ias1) {
                     IAs2::NoMoreArgsCanEmit => {
+                        check_io_target(
+                            &self.holder_in.value().load,
+                            *self.arg_id.value(),
+                            target,
+                        )?;
                         let (updated_dmder, _) = deref(
                             &self.holder_in.value().load,
                             *self.arg_id.value(),
@@ -631,7 +701,7 @@ impl DrfHeap {
             match self.get_ias2(&self.get_ias1()) {
                 IAs2::NextStrictArgLocal | IAs2::NextStrictArgNewStk => {
                     let dmder = &self.holder_in.value().load;
-                    let (_, p) = select_next_arg(dmder, 0)?;
+                    let (_, p) = select_next_arg(dmder, *self.arg_id.value())?;
                     Ok(p)
                 }
                 _ => Ok(0),
@@ -665,6 +735,13 @@ impl DrfHeap {
     fn get_consumes(&self) -> Result<CONSUMEs, Error> {
         if !self.port_a_fire() {
             Ok(CONSUMEs::NoInput)
+        } else if io_is_ready(&self.input.port_a_bits.load) {
+            Ok(CONSUMEs::InputIOReady)
+        } else if is_con(&self.input.port_a_bits.load[0]) && !is_whnf(&self.input.port_a_bits.load)
+        {
+            // An over-applied IO result arrives from the IO unit through
+            // port A. Reducer-ready constructors have no strict operands.
+            Ok(CONSUMEs::InputForwardReducer)
         } else {
             let stk = &self.thread_stack[self.input.port_a_bits.stack_idx as usize];
             if is_whnf(&self.input.port_a_bits.load) {
@@ -749,11 +826,20 @@ impl DrfHeap {
                 Atom::Ptr(_, _, _) | Atom::Seq => false,
                 Atom::Prm(_, _) => *self.arg_id.value() == 1 && is_ptr(&ia[2]),
                 Atom::Try => *self.arg_id.value() == 1 && *s1 != IAs1::ExistWHNF,
+                Atom::IO(_) => io_next_pointer(ia, *self.arg_id.value()).is_some(),
+                // more on this to support strict args in the future
                 _ => unimplemented!("more on this to support strict args in the future"),
             }
         };
 
-        if more_strict_args && local_stack {
+        // IO operands must be forced in order. Unlike pure PRM arguments,
+        // concurrent forcing would permit a later World/data dependency to
+        // resume before the earlier argument and confuse the ordinary
+        // demander-heap unwinding path (which selects the first unresolved PTR).
+        // We still use the normal suspension/reactivation mechanism.
+        if is_io(&ia[0]) && more_strict_args && *s1 != IAs1::ExistWHNF {
+            IAs2::NoMoreArgsNoEmit
+        } else if more_strict_args && local_stack {
             IAs2::NextStrictArgLocal
         } else if more_strict_args && idle_stack {
             IAs2::NextStrictArgNewStk
@@ -761,6 +847,15 @@ impl DrfHeap {
             || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
             || is_seq(&ia[0])
             || (is_try(&ia[0]) && *self.arg_id.value() == 1))
+            && target_in_whnf
+        {
+            IAs2::NoMoreArgsCanEmit
+            // TRY second should go here; what if the 2nd is in compute? We can use meta data to improve PRM/SEQ/TRY?
+        } else if (is_ptr(&ia[0])
+            || (is_prm(&ia[0]) && (is_int(&ia[1]) || is_int(&ia[2])))
+            || is_seq(&ia[0])
+            || (is_try(&ia[0]) && *self.arg_id.value() == 1)
+            || is_io(&ia[0]))
             && target_in_whnf
         {
             IAs2::NoMoreArgsCanEmit
@@ -810,6 +905,10 @@ impl DrfHeap {
         // clear holder when output fires
         if self.output_fire() {
             self.holder_out.0 = false;
+            self.holder_out_startup = false;
+        }
+        if self.out_io_fire() {
+            self.io_holder.0 = false;
         }
     }
 
@@ -930,14 +1029,9 @@ impl DrfHeap {
         let target = &self.holder_in.value().load;
         // println!("addr: {}", self.heap_mem.input.port_a.addr); // use this for GC debugging
         let (arg_id, _) = select_1st_arg(dmder)?;
-        // deref(dmder, arg_id, target, self.input.free_addr)
+        check_io_target(dmder, arg_id, target)?;
 
-        Ok(deref(
-            dmder,
-            usize::try_from(arg_id).map_err(|e| Error::Arg(e.to_string()))?,
-            target,
-            self.reg_free_addr.value().1,
-        ))
+        Ok(deref(dmder, arg_id, target, self.reg_free_addr.value().1))
     }
 
     fn gen_active_app(&self, app: App) -> ActiveApp {
@@ -1032,6 +1126,12 @@ impl DrfHeap {
                 Atom::Ptr(_, unique, _) => *unique,
                 _ => matches!(&self.heap_mem.dout_a()[2], Atom::Ptr(_, true, _)),
             },
+            Atom::IO(_) => {
+                let dmder = self.heap_mem.dout_a();
+                io_next_pointer(dmder, 0)
+                    .map(|(idx, _)| is_unique_ptr(&dmder[idx]))
+                    .unwrap_or(false)
+            }
             Atom::Seq => match &self.heap_mem.dout_a()[1] {
                 Atom::Ptr(_, unique, _) => *unique,
                 _ => false,
@@ -1065,6 +1165,19 @@ impl DrfHeap {
 
         match self.get_consumes()? {
             CONSUMEs::NoInput => self.stm.connect(&Stm::Idle),
+            CONSUMEs::InputIOReady => {
+                // No stack pop or heap update: the app is still under evaluation
+                // until the IO unit sends the completed Pair back via port_a.
+                debug_assert!(!self.io_holder.0);
+                self.io_holder = (true, self.input.port_a_bits.clone());
+                self.stm.connect(&Stm::Idle);
+            }
+            CONSUMEs::InputForwardReducer => {
+                debug_assert!(!self.holder_out.0);
+                self.holder_out = (true, self.input.port_a_bits.clone());
+                self.holder_out_startup = false;
+                self.stm.connect(&Stm::Idle);
+            }
             CONSUMEs::InputIA => {
                 self.select_1st_arg_read(&in_app)?;
                 self.ia_addr.connect(
@@ -1172,9 +1285,13 @@ impl DrfHeap {
                 self.push_target(false);
             }
             IAs1::ExistWHNF => {
-                let (deref_res, _) =
-                // deref(dmder, *self.arg_id.value(), &target, self.input.free_addr);
-                    deref(dmder, *self.arg_id.value(), &target, self.reg_free_addr.value().1);
+                check_io_target(dmder, *self.arg_id.value(), &target)?;
+                let (deref_res, _) = deref(
+                    dmder,
+                    *self.arg_id.value(),
+                    &target,
+                    self.reg_free_addr.value().1,
+                );
                 updated_dmder = deref_res;
                 self.holder_in.input.load = updated_dmder;
             }
@@ -1256,7 +1373,9 @@ impl DrfHeap {
     }
 
     fn handle_port_a(&mut self) -> Result<(), Error> {
-        if self.holder_out.0 && !self.input.out_main_ready {
+        if (self.out_main_valid() && !self.input.out_main_ready)
+            || (self.io_holder.0 && !self.input.out_io_ready)
+        {
             return Ok(());
         }
 
@@ -1296,6 +1415,7 @@ impl HwModule for DrfHeap {
                 self.thread_stack[0].push((false, 0));
                 self.frame_stack[0].push(Default::default());
                 // put output register
+                self.holder_out_startup = true;
                 self.holder_out = (
                     true,
                     ActiveApp {
@@ -1419,6 +1539,9 @@ impl HwModule for DrfHeap {
             if self.output_fire() {
                 self.stat.active_threads += 1;
             }
+            if self.out_io_fire() {
+                self.stat.active_threads += 1;
+            }
             if self.out_sub_fire() {
                 self.stat.active_threads += 1;
             }
@@ -1464,5 +1587,84 @@ impl HwModule for DrfHeap {
         self.non_exist.tick()?;
         self.gc_read_granted.tick()?;
         self.reg_free_addr.tick()
+    }
+}
+
+#[cfg(test)]
+mod io_dheap_tests {
+    use super::*;
+
+    #[test]
+    fn strict_io_arguments_unbox_in_order() {
+        let mut read = [Atom::Nop; APP_LENGTH];
+        read[0] = Atom::IO(false);
+        read[1] = Atom::Ptr(21, false, false);
+        read[2] = Atom::Ptr(22, false, false);
+        assert_eq!(select_1st_arg(&read).unwrap(), (1, 21));
+        assert_eq!(select_next_arg(&read, 1).unwrap(), (2, 22));
+
+        let data = [
+            Atom::Int(99),
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+        ];
+        assert!(check_io_target(&read, 1, &data).is_ok());
+        let (partially_resolved, extra) = deref(&read, 1, &data, 50);
+        assert!(extra.is_none());
+        assert_eq!(partially_resolved[1], Atom::Int(99));
+        assert!(!io_is_ready(&partially_resolved));
+        assert_eq!(select_1st_arg(&partially_resolved).unwrap(), (2, 22));
+        let (ready, _) = deref(&partially_resolved, 2, &data, 50);
+        assert!(io_is_ready(&ready));
+    }
+
+    #[test]
+    fn write_forces_world_after_address_and_data() {
+        let mut write = [Atom::Nop; APP_LENGTH];
+        write[0] = Atom::IO(true);
+        write[1] = Atom::Ptr(10, false, false);
+        write[2] = Atom::Ptr(11, false, false);
+        write[3] = Atom::Ptr(12, false, false);
+        assert_eq!(select_1st_arg(&write).unwrap(), (1, 10));
+        let target = [
+            Atom::Int(5),
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+            Atom::Nop,
+        ];
+        for position in 1..=3 {
+            let (result, _) = deref(&write, position, &target, 99);
+            write = result;
+            if position < 3 {
+                assert!(!io_is_ready(&write));
+                assert_eq!(select_1st_arg(&write).unwrap().0, position + 1);
+            }
+        }
+        assert!(io_is_ready(&write));
+    }
+
+    #[test]
+    fn strict_io_operand_must_be_unboxed_int() {
+        let read = slice_to_app(&[Atom::IO(false), Atom::Ptr(5, false, false), Atom::Int(0)]);
+        let boxed = slice_to_app(&[Atom::Com(1, 2)]);
+        assert!(check_io_target(&read, 1, &boxed).is_err());
+        let malformed = slice_to_app(&[Atom::IO(false), Atom::Com(1, 2), Atom::Int(0)]);
+        assert!(select_1st_arg(&malformed).is_err());
+    }
+
+    #[test]
+    fn root_world_token_is_an_ordinary_int() {
+        let root = vec![Atom::Com(1, 3), Atom::Int(0)];
+        let heap = DrfHeap::new(16).program(&vec![root.clone()]);
+        assert_eq!(&heap.heap_mem.ram[0][0..2], &root[..]);
     }
 }

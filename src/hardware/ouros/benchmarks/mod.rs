@@ -48,6 +48,9 @@ pub use treesum::*;
 pub mod skiabseval;
 pub use skiabseval::*;
 
+pub mod uart;
+pub use uart::*;
+
 pub mod treepari;
 pub use treepari::*;
 

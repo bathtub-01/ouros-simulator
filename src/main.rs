@@ -1,18 +1,22 @@
 mod error;
 mod hardware;
 mod hw_module;
+mod terminal;
 
+use crate::hardware::ouros::io_unit::{AxiTiming, UART_RX_DATA, UART_STATUS, UART_TX_DATA};
+use crate::mpsc::TryRecvError;
+use std::time::Duration;
 use std::{
     cell::RefCell,
     cmp::max,
     collections::HashMap,
     env,
     fs::{self, File},
-    io::prelude::*,
-    io::{Error, Write},
+    io::{Error, Write, prelude::*},
     path::Path,
     rc::Rc,
-    sync::LazyLock,
+    sync::{LazyLock, mpsc},
+    thread,
 };
 
 use hardware::ouros::{
@@ -27,118 +31,6 @@ use hw_module::HwModule;
 use clap::{Parser, ValueEnum};
 use indicatif::ParallelProgressIterator;
 use rayon::prelude::*;
-
-fn chunk_threads(threads: &[(u8, u8)], chunk_size: usize) -> Vec<(f32, f32)> {
-    threads
-        .chunks(chunk_size)
-        .map(|chunk| {
-            let occupied = chunk
-                .iter()
-                .fold((0, 0), |(a, b), (c, d)| (a + *c as u32, b + *d as u32));
-            (
-                occupied.0 as f32 / chunk.len() as f32,
-                occupied.1 as f32 / chunk.len() as f32,
-            )
-        })
-        .collect()
-}
-
-fn chunk_rate(bpc: &[bool], chunk_size: usize) -> Vec<f32> {
-    bpc.chunks(chunk_size)
-        .map(|chunk| {
-            let busy_count = chunk.iter().filter(|&&b| b).count();
-            busy_count as f32 / chunk.len() as f32
-        })
-        .collect()
-}
-
-fn chunk_util(util: &[u8], chunk_size: usize) -> Vec<f32> {
-    util.chunks(chunk_size)
-        .map(|chunk| {
-            let sum: u32 = chunk.iter().rfold(0, |a, b| a + *b as u32);
-            sum as f32 / chunk.len() as f32
-        })
-        .collect()
-}
-
-fn percent_of(v: u32, total: u32) -> f32 {
-    (v as f32 / total as f32) * 100.0
-}
-
-fn vec_to_string<T: std::fmt::Display>(vec: &[T]) -> String {
-    vec.iter()
-        .map(|item| item.to_string())
-        .collect::<Vec<String>>()
-        .join(",")
-}
-
-const CYCLE_LIMIT: u32 = 1_000_000_000;
-
-// FIX: associate this function with Program
-fn simulate(
-    prog: &Program,
-    prog_name: String,
-    detail_lv: u8,
-    heap_size: usize,
-    gc_at: f32,
-) -> report::OurosOutput {
-    let _span = tracy_client::span!("simulate");
-    let mut ouros = OurosCore::new(prog, detail_lv, heap_size, gc_at);
-    let mut cycles: u32 = 0;
-
-    ouros.tick().map_err(|tick_hw| error::Simulation {
-        stats: Box::new(ouros.get_stat().into()),
-        run: error::SimulationRun::Run(Box::new(tick_hw)),
-        name: prog_name.clone(),
-    })?;
-
-    // kick start the machine
-    ouros.input.start = true;
-    ouros.tick().map_err(|tick_hw| error::Simulation {
-        stats: Box::new(ouros.get_stat().into()),
-        run: error::SimulationRun::Run(Box::new(tick_hw)),
-        name: prog_name.clone(),
-    })?;
-    ouros.input.start = false;
-
-    loop {
-        if cycles >= CYCLE_LIMIT {
-            return Err(error::Simulation {
-                stats: Box::new(ouros.get_stat().into()),
-                run: error::SimulationRun::CycleLimit(CYCLE_LIMIT),
-                name: prog_name.clone(),
-            });
-        }
-
-        if ouros.done() || cycles == 900_000_000 {
-            break;
-        }
-
-        ouros.tick().map_err(|tick_hw| error::Simulation {
-            stats: Box::new(ouros.get_stat().into()),
-            run: error::SimulationRun::Run(Box::new(tick_hw)),
-            name: prog_name.clone(),
-        })?;
-
-        cycles += 1;
-    }
-
-    Ok(report::OurosState {
-        core: ouros,
-        cycles,
-        name: prog_name,
-    })
-}
-
-macro_rules! benchmarks {
-    ($($name:ident),* $(,)?) => {{
-        let mut map = HashMap::new();
-        $(
-            map.insert(stringify!($name).to_string(), & $name);
-        )*
-        map
-    }};
-}
 
 mod report {
 
@@ -465,6 +357,437 @@ mod report {
     }
 }
 
+/// Run the compiled program with a byte-stream UART connected to the host TTY.
+/// In an interactive Unix terminal, input is raw and unechoed, like picocom:
+/// keys (including arrows/SPACE) reach RX immediately and only Ouros TX is
+/// printed. The stdin worker never blocks the graph-reduction engine.
+fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros> {
+   eprintln!(
+        "Ouros terminal: RX=0x{:02x}, TX=0x{:02x}, STATUS=0x{:02x}; direct keyboard input (Ctrl-C to exit).",
+        UART_RX_DATA, UART_TX_DATA, UART_STATUS
+    );
+    eprintln!("Simulation stops when heap address 0 reaches WHNF.");
+
+    // The guard restores original tty settings even when tick() returns an
+    // error. Piped stdin is left in its original state.
+    let raw_terminal = terminal::RawTerminal::enter()?;
+
+    enum InputEvent {
+        Byte(u8),
+        Interrupt,
+    }
+    let (sender, receiver) = mpsc::channel::<InputEvent>();
+    let intercept_ctrl_c = raw_terminal.is_raw();
+    thread::spawn(move || {
+        let stdin = std::io::stdin();
+        for next in stdin.lock().bytes() {
+            match next {
+                Ok(3) if intercept_ctrl_c => {
+                    let _ = sender.send(InputEvent::Interrupt);
+                    break;
+                }
+                Ok(byte) => {
+                    if sender.send(InputEvent::Byte(byte)).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let mut core = OurosCore::new(prog, 0, BIG_HEAP, GC_AT);
+    core.enable_io(AxiTiming::default());
+    core.tick().map_err(|e| (core, program_name, e).into())?;
+    core.input.start = true;
+    core.tick().map_err(|e| (core, program_name, e).into())?;
+    core.input.start = false;
+
+    let mut cycles: u64 = 0;
+    let mut stdin_closed = false;
+    let mut interrupted = false;
+    'simulation: while !core.done() {
+        // No artificial cycle ceiling: this is an interactive application,
+        // which may intentionally keep running indefinitely.
+        // Receive events are buffered in the simulated peripheral even if
+        // there is no pending blocking RX transaction.
+        while !stdin_closed {
+            match receiver.try_recv() {
+                Ok(InputEvent::Byte(byte)) => {
+                    core.io_unit_mut().unwrap().controller.push_rx(byte);
+                }
+                Ok(InputEvent::Interrupt) => {
+                    interrupted = true;
+                    break 'simulation;
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    stdin_closed = true;
+                    break;
+                }
+            }
+        }
+
+        core.tick().map_err(|e| (core, program_name, e).into())?;
+        cycles += 1;
+        if let Some(first) = core.io_unit_mut()?.controller.pop_tx() {
+            let mut stdout = std::io::stdout().lock();
+            stdout.write_all(&[first])?;
+            while let Some(byte) = core.io_unit_mut()?.controller.pop_tx() {
+                stdout.write_all(&[byte])?;
+            }
+            stdout.flush()?;
+        }
+        // Periodically yield to the stdin worker and other host processes.
+        if cycles % 10_000 == 0 {
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    // Restore canonical input and echo before printing host-side messages.
+    // Drop also restores the main screen and cursor if Ctrl-C interrupted
+    // the application while it was displaying Game of Life.
+    drop(raw_terminal);
+    if interrupted {
+        eprintln!("\nOuros terminal interrupted after {} cycles.", cycles);
+    } else {
+        eprintln!(
+            "\nOuros finished normally after {} cycles ({} IO completions).",
+            cycles,
+            core.io_unit()?.completed
+        );
+    }
+    Ok(())
+}
+
+fn compress(oapp: &Option<ActiveApp>) -> String {
+    match oapp {
+        None => "empty".to_string(),
+        Some(app) => {
+            let app_str = app
+                .load
+                .iter()
+                .take(app_length(&app.load))
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join(", ");
+            format!("{}-[{}]", app.stack_idx, app_str)
+        }
+    }
+}
+
+fn chunk_threads(threads: &[(u8, u8)], chunk_size: usize) -> Vec<(f32, f32)> {
+    threads
+        .chunks(chunk_size)
+        .map(|chunk| {
+            let occupied = chunk
+                .iter()
+                .fold((0, 0), |(a, b), (c, d)| (a + *c as u32, b + *d as u32));
+            (
+                occupied.0 as f32 / chunk.len() as f32,
+                occupied.1 as f32 / chunk.len() as f32,
+            )
+        })
+        .collect()
+}
+
+fn chunk_rate(bpc: &[bool], chunk_size: usize) -> Vec<f32> {
+    bpc.chunks(chunk_size)
+        .map(|chunk| {
+            let busy_count = chunk.iter().filter(|&&b| b).count();
+            busy_count as f32 / chunk.len() as f32
+        })
+        .collect()
+}
+
+fn chunk_util(util: &[u8], chunk_size: usize) -> Vec<f32> {
+    util.chunks(chunk_size)
+        .map(|chunk| {
+            let sum: u32 = chunk.iter().rfold(0, |a, b| a + *b as u32);
+            sum as f32 / chunk.len() as f32
+        })
+        .collect()
+}
+
+fn percent_of(v: u32, total: u32) -> f32 {
+    (v as f32 / total as f32) * 100.0
+}
+
+const DIR_SIMU_OUT: &str = "simu-out/";
+
+/// inspect a program with full stat details
+fn inspect_prog(prog: &Program) -> Result<(), error::Ouros> {
+    let log_path = Path::new(DIR_SIMU_OUT).join("log.txt");
+    let threads_path = Path::new(DIR_SIMU_OUT).join("threads.csv");
+    let red_rate_path = Path::new(DIR_SIMU_OUT).join("red-rate.csv");
+    let alu_rate_path = Path::new(DIR_SIMU_OUT).join("alu-rate.csv");
+    let dhp_rate_path = Path::new(DIR_SIMU_OUT).join("dhp-rate.csv");
+    let gc_mreq_rate_path = Path::new(DIR_SIMU_OUT).join("gc-mutator-requst-rate.csv");
+    let buffer_util_path = Path::new(DIR_SIMU_OUT).join("buffer-util.csv");
+    let stm_dist_path = Path::new(DIR_SIMU_OUT).join("stm-dist.csv");
+
+    fs::create_dir_all(DIR_SIMU_OUT)?;
+
+    let mut log = File::create(log_path)?;
+    let mut threads = File::create(threads_path)?;
+    let mut red_rate = File::create(red_rate_path)?;
+    let mut alu_rate = File::create(alu_rate_path)?;
+    let mut dhp_rate = File::create(dhp_rate_path)?;
+    let mut gc_mreq_rate = File::create(gc_mreq_rate_path)?;
+    let mut buffer_util = File::create(buffer_util_path)?;
+    let mut stm_dist = File::create(stm_dist_path)?;
+
+    let (ouros, runtime_cycles) = simulate(prog, u8::MAX, HEAP_SIZE, GC_AT)?;
+    let stats = ouros.get_stat();
+
+    println!(
+        "==== Simulation done! Cycles consumed: {} ====",
+        runtime_cycles
+    );
+
+    // write log
+    writeln!(log, "==================== SUMMARY =====================")?;
+    writeln!(
+        log,
+        "     Simulation done! Cycles consumed: {}, Avg. threads: {}",
+        runtime_cycles,
+        stats
+            .dheap_stat
+            .work_threads
+            .iter()
+            .fold(0 as f64, |acc, e| acc + e.1 as f64)
+            / stats.dheap_stat.work_threads.len() as f64
+    )?;
+    writeln!(
+        log,
+        "       Reducer busy cycles: {} ({:.2}%)",
+        stats.reducer_stat.busy_cycles,
+        percent_of(stats.reducer_stat.busy_cycles, runtime_cycles)
+    )?;
+    writeln!(
+        log,
+        "         ALU busy cycles: {} ({:.2}%)",
+        stats.alu_stat.busy_cycles,
+        percent_of(stats.alu_stat.busy_cycles, runtime_cycles)
+    )?;
+    writeln!(
+        log,
+        "Heap memory accesses: {} (a_read {}, a_write {}, b_read {}, b_write {})",
+        stats.mem_stat.a_reads
+            + stats.mem_stat.a_writes
+            + stats.mem_stat.b_reads
+            + stats.mem_stat.b_writes,
+        stats.mem_stat.a_reads,
+        stats.mem_stat.a_writes,
+        stats.mem_stat.b_reads,
+        stats.mem_stat.b_writes,
+    )?;
+    writeln!(
+        log,
+        "heap allocations: {} | heap update: {} | avoided: {}",
+        stats.gc_stat.allocations, stats.dheap_stat.heap_update, stats.dheap_stat.update_avoided
+    )?;
+    writeln!(log, "==================== GC STATS ====================")?;
+    writeln!(
+        log,
+        "GC rounds: {} | 1-bit ref count recycle: {} | GC feedbacks: {} ({} shadowed)",
+        stats.gc_stat.gc_rounds,
+        stats.gc_stat.immediate_reuse,
+        stats.gc_stat.feedbacks,
+        stats.gc_stat.feedbacks_shadowed
+    )?;
+    writeln!(
+        log,
+        "GC stalls (Reducer): {} ({:.2}%, longest {}) | GC stalls (DHeap): {} ({:.2}%, longest {}) ",
+        stats.reducer_stat.gc_stall_cycles,
+        percent_of(stats.reducer_stat.gc_stall_cycles, runtime_cycles),
+        stats.reducer_stat.gc_longest_stall,
+        stats.dheap_stat.gc_stall_cycles,
+        percent_of(stats.dheap_stat.gc_stall_cycles, runtime_cycles),
+        stats.dheap_stat.gc_longest_stall
+    )?;
+    writeln!(
+        log,
+        "peak workset size: {} (heap size {:.2}x) | cycles on marking: {} ({:?})",
+        stats.peak_workset_size,
+        (HEAP_SIZE as f32) / (stats.peak_workset_size as f32),
+        stats.gc_stat.mark_cycles,
+        stats.gc_stat.mark_cycles_move
+    )?;
+    let gc_mark_reads = stats.gc_stat.cache_hit + stats.gc_stat.cache_miss;
+    writeln!(
+        log,
+        "new apps with ptr: {} | new apps without ptr: {} | gc cache hit: {} ({:.2}%) miss: {} ({:.2}%)",
+        stats.reducer_stat.nested_with_ptr,
+        stats.reducer_stat.nested_no_ptr,
+        stats.gc_stat.cache_hit,
+        percent_of(stats.gc_stat.cache_hit, gc_mark_reads),
+        stats.gc_stat.cache_miss,
+        percent_of(stats.gc_stat.cache_miss, gc_mark_reads),
+    )?;
+    writeln!(log, "============= REGISTER CONTENTS ==================")?;
+
+    for (i, s) in stats
+        .dheap_stat
+        .holder_contents
+        .iter()
+        .zip(&stats.reducer_stat.holder_contents)
+        .zip(&stats.alu_stat.holder_contents)
+        .zip(&stats.dheap_stat.heap_stm)
+        .zip(&stats.dheap_stat.serving_id)
+        .map(|((((a, b), c), d), e)| (a, b, c, d, e))
+        .enumerate()
+    {
+        writeln!(
+            log,
+            "{} dheap[{}-{}]: {} reducer: {} alu: {} | freelist len: {}",
+            i,
+            s.3,
+            s.4,
+            compress(s.0),
+            compress(s.1),
+            compress(s.2),
+            stats.gc_stat.free_len[i]
+        )?;
+    }
+
+    let points_on_graph = 150;
+    let chunk_size = stats.dheap_stat.work_threads.len() / points_on_graph;
+    // write thread stats
+    writeln!(threads, "time,occupied,active")?;
+    let threads_data = chunk_threads(&stats.dheap_stat.work_threads, chunk_size);
+    for (i, t) in threads_data.iter().enumerate() {
+        writeln!(
+            threads,
+            "{},{},{}",
+            i * chunk_size + chunk_size / 2,
+            t.0,
+            t.1
+        )?;
+    }
+
+    // write busy rate
+    let red_rate_data: Vec<f32> = chunk_rate(&stats.reducer_stat.busy_per_cycle, chunk_size);
+    write_busy_rate(&mut red_rate, &red_rate_data, chunk_size)?;
+
+    let alu_rate_data: Vec<f32> = chunk_rate(&stats.alu_stat.busy_per_cycle, chunk_size);
+    write_busy_rate(&mut alu_rate, &alu_rate_data, chunk_size)?;
+
+    let dhp_rate_data: Vec<f32> = chunk_rate(&stats.dheap_stat.busy_per_cycle, chunk_size);
+    write_busy_rate(&mut dhp_rate, &dhp_rate_data, chunk_size)?;
+
+    let gc_mreq_rate_data: Vec<f32> = chunk_rate(&stats.gc_stat.m_request_per_cycle, chunk_size);
+    write_busy_rate(&mut gc_mreq_rate, &gc_mreq_rate_data, chunk_size)?;
+
+    // write buffer utilisation
+    writeln!(
+        buffer_util,
+        "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_a_4,io_0,io_1,dheap_b_0,dheap_b_1,reducer_0,reducer_1,reducer_2,reducer_3"
+    )?;
+    let buffer_util_data = stats
+        .fifos_stat
+        .map(|s| chunk_util(&s.length_per_cycle, chunk_size));
+    for i in 0..buffer_util_data[0].len() {
+        let cols = buffer_util_data
+            .iter()
+            .map(|series| format!("{:.2}", series[i]))
+            .collect::<Vec<_>>()
+            .join(",");
+        writeln!(buffer_util, "{},{}", i * chunk_size + chunk_size / 2, cols)?;
+    }
+
+    // write stm distributioin
+    writeln!(stm_dist, "state,cycles")?;
+    for (s, c) in ["IDLE", "WHNF", "IA", "RESUME"]
+        .iter()
+        .zip(stats.dheap_stat.stm_cycles)
+    {
+        writeln!(stm_dist, "{},{}", s, c)?;
+    }
+
+    Ok(())
+}
+
+macro_rules! benchmarks {
+    ($($name:ident),* $(,)?) => {{
+        let mut map = HashMap::new();
+        $(
+            map.insert(stringify!($name).to_string(), & $name);
+        )*
+        map
+    }};
+}
+
+const DIR_SIMU_OUT_ALL: &str = "simu-out/all/";
+
+
+const DIR_SIMU_OUT_GC: &str = "simu-out/gc/";
+
+fn vec_to_string<T: std::fmt::Display>(vec: &[T]) -> String {
+    vec.iter()
+        .map(|item| item.to_string())
+        .collect::<Vec<String>>()
+        .join(",")
+}
+
+const CYCLE_LIMIT: u32 = 1_000_000_000;
+
+// FIX: associate this function with Program
+fn simulate(
+    prog: &Program,
+    prog_name: String,
+    detail_lv: u8,
+    heap_size: usize,
+    gc_at: f32,
+) -> report::OurosOutput {
+    let _span = tracy_client::span!("simulate");
+    let mut ouros = OurosCore::new(prog, detail_lv, heap_size, gc_at);
+    let mut cycles: u32 = 0;
+
+    ouros.tick().map_err(|tick_hw| error::Simulation {
+        stats: Box::new(ouros.get_stat().into()),
+        run: error::SimulationRun::Run(Box::new(tick_hw)),
+        name: prog_name.clone(),
+    })?;
+
+    // kick start the machine
+    ouros.input.start = true;
+    ouros.tick().map_err(|tick_hw| error::Simulation {
+        stats: Box::new(ouros.get_stat().into()),
+        run: error::SimulationRun::Run(Box::new(tick_hw)),
+        name: prog_name.clone(),
+    })?;
+    ouros.input.start = false;
+
+    loop {
+        if cycles >= CYCLE_LIMIT {
+            return Err(error::Simulation {
+                stats: Box::new(ouros.get_stat().into()),
+                run: error::SimulationRun::CycleLimit(CYCLE_LIMIT),
+                name: prog_name.clone(),
+            });
+        }
+
+        if ouros.done() || cycles == 900_000_000 {
+            break;
+        }
+
+        ouros.tick().map_err(|tick_hw| error::Simulation {
+            stats: Box::new(ouros.get_stat().into()),
+            run: error::SimulationRun::Run(Box::new(tick_hw)),
+            name: prog_name.clone(),
+        })?;
+
+        cycles += 1;
+    }
+
+    Ok(report::OurosState {
+        core: ouros,
+        cycles,
+        name: prog_name,
+    })
+}
+
 /// inspect a program with full stat details
 fn inspect_prog(prog: &Program, prog_name: String) {
     report::Builder::set_run_mode(report::RunMode::Inspection)
@@ -659,6 +982,8 @@ enum Mode {
     #[default]
     All,
     Gc,
+    /// Execute a selected program with a simulated AXI UART terminal.
+    Terminal,
 }
 
 // FIX: move rest of code above into lib.rs
@@ -677,6 +1002,13 @@ fn main() -> Result<(), error::Ouros> {
     println!("cargo run -- --prog-name=FIB");
 
     let parsed_args = Args::parse();
+    let ref parsed_args @ Args { num_threads, .. } = Args::parse();
+    if !matches!(parsed_args.mode.as_ref(), Some(Mode::Terminal)) {
+        println!("examples of command to run:");
+        println!("cargo run -- --mode=all");
+        println!("cargo run -- --prog-name=FIB");
+        println!("cargo run -- --mode=terminal --prog-name=FIB");
+    }
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(parsed_args.num_threads)
@@ -692,9 +1024,31 @@ fn main() -> Result<(), error::Ouros> {
                 // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
                 // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
                 ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
+                UART
             ); // ignoring TREESUM as it does not have much garbage..
 
             match parsed_args {
+                Args {
+                    mode: Some(Mode::Terminal),
+                    prog_name: Some(program_name),
+                    ..
+                } => run_terminal(
+                    progs
+                        .get(program_name.as_str())
+                        .ok_or(error::Ouros::ProgramNotFound {
+                            program_name: program_name.to_string(),
+                        })
+                        .map_err(error::Ouros::from)?,
+                    *program_name,
+                ),
+                Args {
+                    mode: Some(Mode::Terminal),
+                    prog_name: None,
+                    ..
+                } => Err(error::Ouros::InvalidCliArgs {
+                    reason: "--mode=terminal requires --prog-name=<compiled-program>".into(),
+                })
+                .map_err(error::Ouros::from),
                 Args {
                     prog_name: Some(program_name),
                     ..
@@ -710,14 +1064,14 @@ fn main() -> Result<(), error::Ouros> {
                         })
                         .map(|program| {
                             report::Builder::set_run_mode(report::RunMode::BigProgram)
-                                .get_input(simulate(program, program_name, 0, BIG_HEAP, GC_AT))
+                                .get_input(simulate(program, *program_name, 0, BIG_HEAP, GC_AT))
                                 .report()
                         })
                 }
                 Args {
                     mode: Some(Mode::All),
                     ..
-                } => run_benchmarks(progs),
+                } => run_benchmarks(progs, program_name.to_string()),
                 Args {
                     mode: Some(Mode::Gc),
                     ..

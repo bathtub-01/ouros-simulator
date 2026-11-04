@@ -90,6 +90,8 @@ pub struct GbgCollectorInput {
     pub monitor_big_drf_stk: usize,
     pub monitor_unset_valid: bool,
     pub monitor_unset: usize,
+    /// All IO Apps held by the IO unit or its ready/valid buffers.
+    pub io_roots: Vec<ActiveApp>,
 }
 
 impl HwInput for GbgCollectorInput {}
@@ -653,6 +655,12 @@ impl HwModule for GbgCollector {
                 self.reg_monitors.input[self.input.monitor_bits.stack_idx as usize] =
                     (true, self.input.monitor_bits.load);
             }
+            // IO retains its operand App through arbitrarily long AXI
+            // backpressure. The latest IO App takes priority over a stale
+            // Reducer monitor for the same logical stack.
+            for pending in &self.input.io_roots {
+                self.reg_monitors.input[pending.stack_idx as usize] = (true, pending.load);
+            }
         }
 
         let real_freelist_head: usize = if *self.reg_free_drawed.value() {
@@ -754,9 +762,9 @@ impl HwModule for GbgCollector {
             CollectorState::Idle => self.step_idle(),
             CollectorState::Root => self.step_root(),
             CollectorState::Mark => self.step_mark(),
-            CollectorState::Sweep => self.step_sweep().map_err(|step_sweep_error| {
-                error::sim::TickHw::Gbc(step_sweep_error)
-            })?,
+            CollectorState::Sweep => self
+                .step_sweep()
+                .map_err(|step_sweep_error| error::sim::TickHw::Gbc(step_sweep_error))?,
         }
 
         if self.stat_detail_lv >= DLV_GC
