@@ -4,6 +4,8 @@ use rayon::ThreadPoolBuildError;
 pub enum Ouros {
     #[error("Program initialisation error: {0}")]
     Init(#[from] Initialisation),
+    #[error("Terminal mode: {0}")]
+    TerminalMode(#[from] TerminalMode),
     #[error("Pure simulation CLI mode: {0}")]
     SimulationMode(#[from] SimulationMode),
     #[error("Garbage collector CLI mode: {0}")]
@@ -70,4 +72,12 @@ pub fn report_ouros(e: Ouros) {
     dbg!(&e);
     // TODO: yet to report it properly
     // match e {}
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum TerminalMode {
+    #[error("Simulator: {0}")]
+    Simulation(String),
+    #[error("Terminal output: {0}")]
+    IO(std::io::Error),
 }

@@ -17,3 +17,5 @@ pub mod ouros_core;
 pub mod garbage_collector;
 
 pub mod addr_box;
+
+pub mod io_unit;

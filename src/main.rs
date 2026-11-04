@@ -1,6 +1,7 @@
 mod error;
 mod hardware;
 mod hw_module;
+mod terminal;
 
 use clap::{Parser, ValueEnum};
 use indicatif::ParallelProgressIterator;
@@ -10,13 +11,17 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
-use std::io::{Error, Write};
+use std::io::{Error, Read, Write};
 use std::path::Path;
+use std::sync::mpsc::{self, TryRecvError};
 use std::sync::LazyLock;
+use std::thread;
+use std::time::Duration;
 
 use hardware::ouros::config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE};
+use hardware::ouros::io_unit::{AxiTiming, UART_RX_DATA, UART_STATUS, UART_TX_DATA};
 use hardware::ouros::ouros_core::OurosCore;
-use hardware::ouros::program::{ActiveApp, App, Program, app_length};
+use hardware::ouros::program::{app_length, ActiveApp, App, Program};
 
 use hardware::ouros::benchmarks::{self, *};
 use hw_module::HwModule;
@@ -52,6 +57,106 @@ fn simulate(
     }
 
     Ok((ouros, cycle))
+}
+
+/// Run the compiled program with a byte-stream UART connected to the host TTY.
+/// In an interactive Unix terminal, input is raw and unechoed, like picocom:
+/// keys (including arrows/SPACE) reach RX immediately and only Ouros TX is
+/// printed. The stdin worker never blocks the graph-reduction engine.
+fn run_terminal(prog: &Program) -> Result<(), error::TerminalMode> {
+    eprintln!(
+        "Ouros terminal: RX=0x{:02x}, TX=0x{:02x}, STATUS=0x{:02x}; direct keyboard input (Ctrl-C to exit).",
+        UART_RX_DATA, UART_TX_DATA, UART_STATUS
+    );
+    eprintln!("Simulation stops when heap address 0 reaches WHNF.");
+
+    // The guard restores original tty settings even when tick() returns an
+    // error. Piped stdin is left in its original state.
+    let raw_terminal = terminal::RawTerminal::enter().map_err(error::TerminalMode::IO)?;
+
+    enum InputEvent { Byte(u8), Interrupt }
+    let (sender, receiver) = mpsc::channel::<InputEvent>();
+    let intercept_ctrl_c = raw_terminal.is_raw();
+    thread::spawn(move || {
+        let stdin = std::io::stdin();
+        for next in stdin.lock().bytes() {
+            match next {
+                Ok(3) if intercept_ctrl_c => {
+                    let _ = sender.send(InputEvent::Interrupt);
+                    break;
+                }
+                Ok(byte) => {
+                    if sender.send(InputEvent::Byte(byte)).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let mut core = OurosCore::new(prog, 0, BIG_HEAP, GC_AT);
+    core.enable_io(AxiTiming::default());
+    core.tick().map_err(error::TerminalMode::Simulation)?;
+    core.input.start = true;
+    core.tick().map_err(error::TerminalMode::Simulation)?;
+    core.input.start = false;
+
+    let mut cycles: u64 = 0;
+    let mut stdin_closed = false;
+    let mut interrupted = false;
+    'simulation: while !core.done() {
+        // No artificial cycle ceiling: this is an interactive application,
+        // which may intentionally keep running indefinitely.
+        // Receive events are buffered in the simulated peripheral even if
+        // there is no pending blocking RX transaction.
+        while !stdin_closed {
+            match receiver.try_recv() {
+                Ok(InputEvent::Byte(byte)) => {
+                    core.io_unit_mut().unwrap().controller.push_rx(byte);
+                }
+                Ok(InputEvent::Interrupt) => {
+                    interrupted = true;
+                    break 'simulation;
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    stdin_closed = true;
+                    break;
+                }
+            }
+        }
+
+        core.tick().map_err(error::TerminalMode::Simulation)?;
+        cycles += 1;
+        if let Some(first) = core.io_unit_mut().unwrap().controller.pop_tx() {
+            let mut stdout = std::io::stdout().lock();
+            stdout.write_all(&[first]).map_err(error::TerminalMode::IO)?;
+            while let Some(byte) = core.io_unit_mut().unwrap().controller.pop_tx() {
+                stdout.write_all(&[byte]).map_err(error::TerminalMode::IO)?;
+            }
+            stdout.flush().map_err(error::TerminalMode::IO)?;
+        }
+        // Periodically yield to the stdin worker and other host processes.
+        if cycles % 10_000 == 0 {
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    // Restore canonical input and echo before printing host-side messages.
+    // Drop also restores the main screen and cursor if Ctrl-C interrupted
+    // the application while it was displaying Game of Life.
+    drop(raw_terminal);
+    if interrupted {
+        eprintln!("\nOuros terminal interrupted after {} cycles.", cycles);
+    } else {
+        eprintln!(
+            "\nOuros finished normally after {} cycles ({} IO completions).",
+            cycles,
+            core.io_unit().unwrap().completed
+        );
+    }
+    Ok(())
 }
 
 fn compress(oapp: &Option<ActiveApp>) -> String {
@@ -306,30 +411,19 @@ fn inspect_prog(prog: &Program) -> Result<(), error::InspectionMode> {
     // write buffer utilisation
     writeln!(
         buffer_util,
-        "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_b,,reducer_0,reducer_1,reducer_2,reducer_3"
+        "time,alu_0,alu_1,alu_2,dheap_a_0,dheap_a_1,dheap_a_2,dheap_a_3,dheap_a_4,io_0,io_1,dheap_b_0,dheap_b_1,reducer_0,reducer_1,reducer_2,reducer_3"
     ).map_err(error::InspectionMode::OutputIO)?;
     let buffer_util_data = stats
         .fifos_stat
         .map(|s| chunk_util(&s.length_per_cycle, chunk_size));
     for i in 0..buffer_util_data[0].len() {
-        writeln!(
-            buffer_util,
-            "{},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2}",
-            i * chunk_size + chunk_size / 2,
-            buffer_util_data[0][i],
-            buffer_util_data[1][i],
-            buffer_util_data[2][i],
-            buffer_util_data[3][i],
-            buffer_util_data[4][i],
-            buffer_util_data[5][i],
-            buffer_util_data[6][i],
-            buffer_util_data[7][i],
-            buffer_util_data[8][i],
-            buffer_util_data[9][i],
-            buffer_util_data[10][i],
-            buffer_util_data[11][i],
-        )
-        .map_err(error::InspectionMode::OutputIO)?;
+        let cols = buffer_util_data
+            .iter()
+            .map(|series| format!("{:.2}", series[i]))
+            .collect::<Vec<_>>()
+            .join(",");
+        writeln!(buffer_util, "{},{}", i * chunk_size + chunk_size / 2, cols)
+            .map_err(error::InspectionMode::OutputIO)?;
     }
 
     // write stm distributioin
@@ -558,6 +652,8 @@ enum Mode {
     #[default]
     All,
     Gc,
+    /// Execute a selected program with a simulated AXI UART terminal.
+    Terminal,
 }
 
 // FIX: move rest of code above into lib.rs
@@ -581,11 +677,13 @@ fn run() -> Result<(), error::Ouros> {
     #[cfg(feature = "dhat-heap")]
     let _profiler = dhat::Profiler::new_heap();
 
-    println!("examples of command to run:");
-    println!("cargo run -- --mode=all");
-    println!("cargo run -- --prog-name=FIB");
-
     let ref parsed_args @ Args { num_threads, .. } = Args::parse();
+    if !matches!(parsed_args.mode.as_ref(), Some(Mode::Terminal)) {
+        println!("examples of command to run:");
+        println!("cargo run -- --mode=all");
+        println!("cargo run -- --prog-name=FIB");
+        println!("cargo run -- --mode=terminal --prog-name=FIB");
+    }
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
@@ -602,9 +700,31 @@ fn run() -> Result<(), error::Ouros> {
                 // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
                 // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
                 ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
+                UART
             ); // ignoring TREESUM as it does not have much garbage..
 
             match parsed_args {
+                Args {
+                    mode: Some(Mode::Terminal),
+                    prog_name: Some(program_name),
+                    ..
+                } => run_terminal(
+                    progs
+                        .get(program_name.as_str())
+                        .ok_or(error::Initialisation::ProgramNotFound {
+                            program_name: program_name.to_string(),
+                        })
+                        .map_err(error::Ouros::from)?,
+                )
+                .map_err(error::Ouros::TerminalMode),
+                Args {
+                    mode: Some(Mode::Terminal),
+                    prog_name: None,
+                    ..
+                } => Err(error::Initialisation::InvalidCliArgs {
+                    reason: "--mode=terminal requires --prog-name=<compiled-program>".into(),
+                })
+                .map_err(error::Ouros::from),
                 Args {
                     prog_name: Some(program_name),
                     ..
