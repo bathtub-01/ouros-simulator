@@ -1,5 +1,6 @@
 # List of tasks to finish
 
+- clean the FIX/TODOS: create issues
 - document all modules, at least in structure
 - reorganise module
 - reorganise module names

@@ -73,9 +73,7 @@ impl<T: Clone + Default, const N: usize> RArbiter<T, N> {
 impl<T: Clone + Default, const N: usize> HwModule for RArbiter<T, N> {
     fn update_local(&mut self) -> Result<(), error::sim::TickHw> {
         self.select()
-            .map_err(|r_arbiter_error| {
-                error::sim::TickHw::Rarbiter(r_arbiter_error)
-            })
+            .map_err(error::sim::TickHw::from)
             .map(|p| self.priority.connect(&((p + 1) % N)))
     }
 

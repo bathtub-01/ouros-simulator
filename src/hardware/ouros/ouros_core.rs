@@ -232,11 +232,15 @@ impl OurosCore {
         self.io_unit = Some(IoUnit::new(timing));
     }
 
-    pub fn io_unit(&self) -> Option<&IoUnit> {
-        self.io_unit.as_ref()
+    pub fn io_unit(&self) -> Result<&IoUnit, error::sim::TickHw> {
+        self.io_unit
+            .as_ref()
+            .ok_or_else(|| error::sim::TickHw::IOunit("getting ref".to_string()))
     }
-    pub fn io_unit_mut(&mut self) -> Option<&mut IoUnit> {
-        self.io_unit.as_mut()
+    pub fn io_unit_mut(&mut self) -> Result<&mut IoUnit, error::sim::TickHw> {
+        self.io_unit
+            .as_mut()
+            .ok_or_else(|| error::sim::TickHw::IOunit("getting ref".to_string()))
     }
 
     /// Ready/valid interface to the optional IO unit.

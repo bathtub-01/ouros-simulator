@@ -762,9 +762,7 @@ impl HwModule for GbgCollector {
             CollectorState::Idle => self.step_idle(),
             CollectorState::Root => self.step_root(),
             CollectorState::Mark => self.step_mark(),
-            CollectorState::Sweep => self
-                .step_sweep()
-                .map_err(|step_sweep_error| error::sim::TickHw::Gbc(step_sweep_error))?,
+            CollectorState::Sweep => self.step_sweep()?,
         }
 
         if self.stat_detail_lv >= DLV_GC

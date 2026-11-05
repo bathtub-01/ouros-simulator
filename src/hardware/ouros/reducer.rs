@@ -514,11 +514,10 @@ impl Reducer {
 
 impl HwModule for Reducer {
     fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
-        let map_step_error = |reduce_error: Error| error::sim::TickHw::Reducer(reduce_error);
         self.comb_table.input.default_input();
         match *self.reg_stm.value() {
             Stm::Idle => {
-                self.step_next().map_err(map_step_error)?;
+                self.step_next()?;
             }
             Stm::Spine => {
                 // !NOTE! We are assuming this state won't be blocked.
@@ -546,7 +545,7 @@ impl HwModule for Reducer {
                             + 1,
                     );
                 } else {
-                    self.step_next().map_err(map_step_error)?;
+                    self.step_next()?;
                 }
             }
             Stm::App => {
@@ -563,7 +562,7 @@ impl HwModule for Reducer {
                                 + 1,
                         );
                     } else {
-                        self.step_next().map_err(map_step_error)?;
+                        self.step_next()?;
                     }
                 } else {
                     // fail to fire, keep reading
@@ -577,7 +576,7 @@ impl HwModule for Reducer {
             Stm::Special => {
                 self.reg_app_mask.connect(&false);
                 if fire(self.input.app_ready, self.app_valid()) {
-                    self.step_next().map_err(map_step_error)?;
+                    self.step_next()?;
                 }
             }
         }

@@ -20,8 +20,20 @@ pub enum Ouros {
     InvalidPatterns { reason: String },
 }
 
-impl From<(&OurosCore, String, sim::TickHw)> for Ouros {
-    fn from((ouros_core, name, run): (&OurosCore, String, sim::TickHw)) -> Self {
+pub struct TickHwToOuros<'a> {
+    pub ouros_core: &'a OurosCore,
+    pub prog_name: String,
+    pub run: sim::TickHw,
+}
+
+impl From<TickHwToOuros<'_>> for Ouros {
+    fn from(
+        TickHwToOuros {
+            ouros_core,
+            prog_name: name,
+            run,
+        }: TickHwToOuros,
+    ) -> Self {
         Ouros::Simulation(Simulation {
             stats: Box::new(ouros_core.get_stat().into()),
             run: SimulationRun::Run(Box::new(run)),
@@ -60,17 +72,17 @@ pub mod sim {
     #[derive(Debug, thiserror::Error)]
     pub enum TickHw {
         #[error("TickHw Statistics DerefHeap: {0}")]
-        StatisticsDerefHeap(ouros::deref_heap_new::Error),
+        StatisticsDerefHeap(#[from] ouros::deref_heap_new::Error),
         #[error("TickHw Reducer: {0}")]
-        Reducer(ouros::reducer::Error),
+        Reducer(#[from] ouros::reducer::Error),
         #[error("TickHw RArbiter: {0}")]
-        Rarbiter(common::arbiter::Error),
+        Rarbiter(#[from] common::arbiter::Error),
         #[error("TickHw Ouros core: {0}")]
-        Core(ouros::ouros_core::Error),
+        Core(#[from] ouros::ouros_core::Error),
         #[error("TickHw Garbage Collector: {0}")]
-        Gbc(ouros::garbage_collector::Error),
+        Gbc(#[from] ouros::garbage_collector::Error),
         #[error("TickHw Alu: {0}")]
-        Alu(ouros::alu::Error),
+        Alu(#[from] ouros::alu::Error),
         #[error("TickHw DerefHeap: {0}")]
         DerefHeap(ouros::deref_heap_new::Error),
         #[error("TickHw IO unit: {0}")]

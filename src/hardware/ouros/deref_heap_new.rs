@@ -1514,11 +1514,7 @@ impl HwModule for DrfHeap {
                     .holder_contents
                     .push(Some(self.holder_out.1.clone()));
             } else if self.output_fire() {
-                self.stat
-                    .holder_contents
-                    .push(Some(self.out_main_bits().map_err(|out_bits_error| {
-                        error::sim::TickHw::StatisticsDerefHeap(out_bits_error)
-                    })?));
+                self.stat.holder_contents.push(Some(self.out_main_bits()?));
             } else {
                 self.stat.holder_contents.push(None);
             }

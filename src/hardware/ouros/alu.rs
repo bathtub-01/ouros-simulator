@@ -28,7 +28,7 @@ pub enum Error {
     #[error("Could not lookup atom: {context}")]
     AtomLookup { context: String },
     #[error("Atom error: {0}")]
-    AtomErr(super::program::Error),
+    AtomErr(#[from] super::program::Error),
 }
 
 #[derive(Default)]
@@ -188,9 +188,7 @@ impl HwModule for Alu {
 
         if self.input_fire() {
             self.holder.0 = true;
-            self.holder.1 = self.gen_result().map_err(|error_value| {
-                error::sim::TickHw::Alu(error_value)
-            })?;
+            self.holder.1 = self.gen_result()?;
         }
         Ok(())
     }
