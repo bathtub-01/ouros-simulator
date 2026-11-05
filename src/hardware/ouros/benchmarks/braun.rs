@@ -97,7 +97,7 @@ pub static BRAUN: LazyLock<Program> = LazyLock::new(|| { Program {
             Ptr(0, true, true),
         ], 
         vec![ // 14 
-            Com(1,39),
+            Com(2,39),
             Arg(0, true),
         ], 
         // AExp10

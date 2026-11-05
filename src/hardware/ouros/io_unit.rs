@@ -6,7 +6,8 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::hardware::ouros::program::{io_is_ready, ActiveApp, App, Atom};
+use crate::error;
+use crate::hardware::ouros::program::{ActiveApp, App, Atom, io_is_ready};
 use crate::hw_module::{HwInput, HwModule};
 
 /// Word-aligned 32-bit AXI4-Lite UART registers (byte addresses).
@@ -30,7 +31,12 @@ pub struct AxiTiming {
 
 impl Default for AxiTiming {
     fn default() -> Self {
-        Self { response_latency: 2, aw_delay: 0, w_delay: 0, ar_delay: 0 }
+        Self {
+            response_latency: 2,
+            aw_delay: 0,
+            w_delay: 0,
+            ar_delay: 0,
+        }
     }
 }
 
@@ -54,37 +60,57 @@ pub struct AxiLiteController {
 impl AxiLiteController {
     pub fn new(timing: AxiTiming) -> Self {
         Self {
-            timing, cycle: 0, aw: None, w: None, b_countdown: None,
-            r_countdown: None, r_data: None, regs: HashMap::new(),
-            rx: VecDeque::new(), tx: VecDeque::new(), reads: 0, writes: 0,
+            timing,
+            cycle: 0,
+            aw: None,
+            w: None,
+            b_countdown: None,
+            r_countdown: None,
+            r_data: None,
+            regs: HashMap::new(),
+            rx: VecDeque::new(),
+            tx: VecDeque::new(),
+            reads: 0,
+            writes: 0,
         }
     }
 
-    pub fn push_rx(&mut self, byte: u8) { self.rx.push_back(byte); }
-    pub fn pop_tx(&mut self) -> Option<u8> { self.tx.pop_front() }
+    pub fn push_rx(&mut self, byte: u8) {
+        self.rx.push_back(byte);
+    }
+    pub fn pop_tx(&mut self) -> Option<u8> {
+        self.tx.pop_front()
+    }
     pub fn register(&self, address: u32) -> u32 {
         self.regs.get(&(address & !3)).copied().unwrap_or(0)
     }
     pub fn set_register(&mut self, address: u32, value: u32) {
         self.regs.insert(address & !3, value);
     }
-    pub fn rx_len(&self) -> usize { self.rx.len() }
+    pub fn rx_len(&self) -> usize {
+        self.rx.len()
+    }
 
     pub fn aw_ready(&self) -> bool {
-        self.aw.is_none() && self.b_countdown.is_none()
-            && self.cycle >= self.timing.aw_delay as u64
+        self.aw.is_none() && self.b_countdown.is_none() && self.cycle >= self.timing.aw_delay as u64
     }
     pub fn w_ready(&self) -> bool {
-        self.w.is_none() && self.b_countdown.is_none()
-            && self.cycle >= self.timing.w_delay as u64
+        self.w.is_none() && self.b_countdown.is_none() && self.cycle >= self.timing.w_delay as u64
     }
     pub fn ar_ready(&self) -> bool {
-        self.r_countdown.is_none() && self.r_data.is_none()
+        self.r_countdown.is_none()
+            && self.r_data.is_none()
             && self.cycle >= self.timing.ar_delay as u64
     }
-    pub fn b_valid(&self) -> bool { self.b_countdown == Some(0) }
-    pub fn r_valid(&self) -> bool { self.r_data.is_some() }
-    pub fn r_bits(&self) -> Option<u32> { self.r_data }
+    pub fn b_valid(&self) -> bool {
+        self.b_countdown == Some(0)
+    }
+    pub fn r_valid(&self) -> bool {
+        self.r_data.is_some()
+    }
+    pub fn r_bits(&self) -> Option<u32> {
+        self.r_data
+    }
 
     fn can_read(&self, addr: u32) -> bool {
         (addr & !3) != UART_RX_DATA || !self.rx.is_empty()
@@ -105,18 +131,32 @@ impl AxiLiteController {
     }
 
     /// One clock edge of the controller. Ready/valid refer to the *old* state.
-    pub fn tick_bus(&mut self, aw: Option<u32>, w: Option<u32>, ar: Option<u32>,
-                    b_ready: bool, r_ready: bool) {
+    pub fn tick_bus(
+        &mut self,
+        aw: Option<u32>,
+        w: Option<u32>,
+        ar: Option<u32>,
+        b_ready: bool,
+        r_ready: bool,
+    ) {
         let accept_aw = aw.is_some() && self.aw_ready();
         let accept_w = w.is_some() && self.w_ready();
         let accept_ar = ar.is_some() && self.ar_ready();
         let consume_b = b_ready && self.b_valid();
         let consume_r = r_ready && self.r_valid();
 
-        if consume_b { self.b_countdown = None; }
-        if consume_r { self.r_data = None; }
-        if accept_aw { self.aw = aw.map(|a| a & !3); }
-        if accept_w { self.w = w; }
+        if consume_b {
+            self.b_countdown = None;
+        }
+        if consume_r {
+            self.r_data = None;
+        }
+        if accept_aw {
+            self.aw = aw.map(|a| a & !3);
+        }
+        if accept_w {
+            self.w = w;
+        }
         if accept_ar {
             self.r_countdown = ar.map(|a| (a & !3, self.timing.response_latency.saturating_add(1)));
         }
@@ -130,7 +170,9 @@ impl AxiLiteController {
             self.b_countdown = Some(self.timing.response_latency.saturating_add(1));
         }
         if let Some(n) = self.b_countdown.as_mut() {
-            if *n > 0 { *n -= 1; }
+            if *n > 0 {
+                *n -= 1;
+            }
         }
         if let Some((addr, n)) = self.r_countdown {
             if n > 0 {
@@ -154,7 +196,11 @@ pub struct IoUnitInput {
 impl HwInput for IoUnitInput {}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Phase { Send, Wait, Complete }
+enum Phase {
+    Send,
+    Wait,
+    Complete,
+}
 
 struct Transaction {
     request: ActiveApp,
@@ -177,12 +223,20 @@ pub struct IoUnit {
 
 impl IoUnit {
     pub fn new(timing: AxiTiming) -> Self {
-        Self { input: Default::default(), controller: AxiLiteController::new(timing),
-               transaction: None, completed: 0 }
+        Self {
+            input: Default::default(),
+            controller: AxiLiteController::new(timing),
+            transaction: None,
+            completed: 0,
+        }
     }
-    pub fn request_ready(&self) -> bool { self.transaction.is_none() }
+    pub fn request_ready(&self) -> bool {
+        self.transaction.is_none()
+    }
     pub fn response_valid(&self) -> bool {
-        self.transaction.as_ref().is_some_and(|t| t.phase == Phase::Complete)
+        self.transaction
+            .as_ref()
+            .is_some_and(|t| t.phase == Phase::Complete)
     }
     pub fn response_bits(&self) -> Option<&ActiveApp> {
         self.transaction.as_ref().and_then(|t| t.result.as_ref())
@@ -194,17 +248,40 @@ impl IoUnit {
         self.transaction.as_ref().map(|t| &t.request.load)
     }
 
-    fn begin(app: ActiveApp) -> Result<Transaction, String> {
+    fn begin(app: ActiveApp) -> Result<Transaction, error::sim::TickHw> {
         if !io_is_ready(&app.load) {
-            return Err(format!("IO unit received non-ready App: {:?}", app.load));
+            return Err(error::sim::TickHw::IOunit(format!(
+                "IO unit received non-ready App: {:?}",
+                app.load
+            )));
         }
         let is_write = matches!(app.load[0], Atom::IO(true));
-        let address = match app.load[1] { Atom::Int(n) => n as u32, _ => unreachable!() };
+        let address = match app.load[1] {
+            Atom::Int(n) => n as u32,
+            _ => unreachable!(),
+        };
         let (data, world) = if is_write {
-            (Some(match app.load[2] { Atom::Int(n) => n as u32, _ => unreachable!() }), app.load[3])
-        } else { (None, app.load[2]) };
-        Ok(Transaction { request: app, address, data, world, aw_sent: false,
-                         w_sent: false, ar_sent: false, phase: Phase::Send, result: None })
+            (
+                Some(match app.load[2] {
+                    Atom::Int(n) => n as u32,
+                    _ => unreachable!(),
+                }),
+                app.load[3],
+            )
+        } else {
+            (None, app.load[2])
+        };
+        Ok(Transaction {
+            request: app,
+            address,
+            data,
+            world,
+            aw_sent: false,
+            w_sent: false,
+            ar_sent: false,
+            phase: Phase::Send,
+            result: None,
+        })
     }
 
     fn finish(t: &mut Transaction, result: u32) {
@@ -213,25 +290,34 @@ impl IoUnit {
         // When returning `((), World)`, `()` is just the I combinator; we abuse the record of K for it.
         let mut load: App = [Atom::Nop; 8];
         load[0] = Atom::Com(3, 2);
-        load[1] = if is_write { Atom::Com(1,0) } else { Atom::Int(result as i32) };
+        load[1] = if is_write {
+            Atom::Com(1, 0)
+        } else {
+            Atom::Int(result as i32)
+        };
         load[2] = t.world;
         // An over-applied IO primitive passes on its remaining arguments.
         let first_tail = if is_write { 4 } else { 3 };
         let mut next = 3;
         for &atom in t.request.load[first_tail..].iter() {
-            if atom == Atom::Nop { break; }
+            if atom == Atom::Nop {
+                break;
+            }
             // The original App contains at most 8 Atoms; replacing a four-
             // or three-argument redex by a three-Atom pair always fits.
             load[next] = atom;
             next += 1;
         }
-        t.result = Some(ActiveApp { stack_idx: t.request.stack_idx, load });
+        t.result = Some(ActiveApp {
+            stack_idx: t.request.stack_idx,
+            load,
+        });
         t.phase = Phase::Complete;
     }
 }
 
 impl HwModule for IoUnit {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         // Old-state handshakes, sampled before any state mutations.
         let request_fire = self.input.request_valid && self.request_ready();
         let response_fire = self.response_valid() && self.input.response_ready;
@@ -250,17 +336,24 @@ impl HwModule for IoUnit {
                     if t.data.is_some() {
                         if !t.aw_sent {
                             aw = Some(t.address);
-                            if self.controller.aw_ready() { t.aw_sent = true; }
+                            if self.controller.aw_ready() {
+                                t.aw_sent = true;
+                            }
                         }
                         if !t.w_sent {
                             w = t.data;
-                            if self.controller.w_ready() { t.w_sent = true; }
+                            if self.controller.w_ready() {
+                                t.w_sent = true;
+                            }
                         }
-                        if t.aw_sent && t.w_sent { t.phase = Phase::Wait; }
-                    } else {
-                        if !t.ar_sent {
-                            ar = Some(t.address);
-                            if self.controller.ar_ready() { t.ar_sent = true; t.phase = Phase::Wait; }
+                        if t.aw_sent && t.w_sent {
+                            t.phase = Phase::Wait;
+                        }
+                    } else if !t.ar_sent {
+                        ar = Some(t.address);
+                        if self.controller.ar_ready() {
+                            t.ar_sent = true;
+                            t.phase = Phase::Wait;
                         }
                     }
                 }
@@ -279,10 +372,14 @@ impl HwModule for IoUnit {
             }
         }
         self.controller.tick_bus(aw, w, ar, b_ready, r_ready);
-        if request_fire { self.transaction = Some(Self::begin(self.input.request_bits.clone())?); }
+        if request_fire {
+            self.transaction = Some(Self::begin(self.input.request_bits.clone())?);
+        }
         Ok(())
     }
-    fn tick_children(&mut self) -> Result<(), String> { Ok(()) }
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -301,25 +398,35 @@ mod tests {
         unit.tick().unwrap();
         unit.input.request_valid = false;
         for _ in 0..200 {
-            if let Some(result) = unit.response_bits() { return result.clone(); }
+            if let Some(result) = unit.response_bits() {
+                return result.clone();
+            }
             unit.tick().unwrap();
         }
         panic!("IO timed out");
     }
     #[test]
     fn read_write_await_axi_response_and_preserve_world() {
-        let mut u = IoUnit::new(AxiTiming { response_latency: 4, aw_delay: 2, w_delay: 6, ar_delay: 0 });
+        let mut u = IoUnit::new(AxiTiming {
+            response_latency: 4,
+            aw_delay: 2,
+            w_delay: 6,
+            ar_delay: 0,
+        });
         let write = run(&mut u, app(&[IO(true), Int(0x20), Int(-1), Int(99)]));
         assert_eq!(u.controller.register(0x20), u32::MAX);
         assert_eq!(write.stack_idx, 2);
-        assert_eq!(write.load[..3], [Com(3,2), Com(1,0), Int(99)]);
+        assert_eq!(write.load[..3], [Com(3, 2), Com(1, 0), Int(99)]);
         assert_eq!(u.completed, 0); // held until response-ready
-        for _ in 0..8 { u.tick().unwrap(); assert!(u.response_valid()); }
+        for _ in 0..8 {
+            u.tick().unwrap();
+            assert!(u.response_valid());
+        }
         u.input.response_ready = true;
         u.tick().unwrap();
         u.input.response_ready = false;
         let read = run(&mut u, app(&[IO(false), Int(0x20), Int(101)]));
-        assert_eq!(read.load[..3], [Com(3,2), Int(-1), Int(101)]);
+        assert_eq!(read.load[..3], [Com(3, 2), Int(-1), Int(101)]);
         assert_eq!(u.controller.writes, 1);
         assert_eq!(u.controller.reads, 1);
     }
@@ -335,15 +442,22 @@ mod tests {
     #[test]
     fn aw_and_w_accept_in_either_order() {
         let mut ctrl = AxiLiteController::new(AxiTiming {
-            aw_delay: 6, w_delay: 0, ar_delay: 0, response_latency: 3,
+            aw_delay: 6,
+            w_delay: 0,
+            ar_delay: 0,
+            response_latency: 3,
         });
         ctrl.tick_bus(None, Some(0xfeed), None, false, false);
-        for _ in 0..5 { ctrl.tick_bus(None, None, None, false, false); }
+        for _ in 0..5 {
+            ctrl.tick_bus(None, None, None, false, false);
+        }
         assert_eq!(ctrl.writes, 0);
         ctrl.tick_bus(Some(0x30), None, None, false, false);
         assert_eq!(ctrl.register(0x30), 0xfeed);
         assert_eq!(ctrl.writes, 1);
-        for _ in 0..4 { ctrl.tick_bus(None, None, None, false, false); }
+        for _ in 0..4 {
+            ctrl.tick_bus(None, None, None, false, false);
+        }
         assert!(ctrl.b_valid());
         ctrl.tick_bus(None, None, None, true, false);
         assert!(!ctrl.b_valid());
@@ -356,10 +470,17 @@ mod tests {
         u.input.request_valid = true;
         u.tick().unwrap();
         u.input.request_valid = false;
-        for _ in 0..10 { u.tick().unwrap(); }
+        for _ in 0..10 {
+            u.tick().unwrap();
+        }
         assert!(!u.response_valid());
         u.controller.push_rx(b'Z');
-        for _ in 0..10 { if u.response_valid() { break; } u.tick().unwrap(); }
+        for _ in 0..10 {
+            if u.response_valid() {
+                break;
+            }
+            u.tick().unwrap();
+        }
         assert_eq!(u.response_bits().unwrap().load[1], Int(b'Z' as i32));
         u.input.response_ready = true;
         u.tick().unwrap();

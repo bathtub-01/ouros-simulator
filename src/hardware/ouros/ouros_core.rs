@@ -2,6 +2,7 @@
 
 use std::cmp::max;
 
+use crate::error;
 use crate::hardware::common::fifo::FIFOStat;
 use crate::hardware::common::memory::DualPortMemStat;
 use crate::hardware::common::{Fifo, PArbiter, RArbiter, Ring};
@@ -15,6 +16,21 @@ use super::garbage_collector::{GbgCollector, GbgCollectorStat};
 use super::io_unit::{AxiTiming, IoUnit};
 use super::program::*;
 use super::reducer::{Reducer, ReducerStat};
+
+/// Core errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("DereHead Failed {err} ({context})")]
+    DereHeapFailed {
+        err: super::deref_heap_new::Error,
+        context: String,
+    },
+    #[error("Alu Failed {err} ({context})")]
+    AluFailed {
+        err: super::alu::Error,
+        context: String,
+    },
+}
 
 enum DESTs {
     ToDHeap,
@@ -56,7 +72,7 @@ pub struct OurosCoreInput {
 
 impl HwInput for OurosCoreInput {}
 
-// #[derive(Default)]
+#[derive(Debug)]
 pub struct OurosCoreStat<'a> {
     pub dheap_stat: &'a DrfHeapStat,
     pub reducer_stat: &'a ReducerStat,
@@ -65,6 +81,41 @@ pub struct OurosCoreStat<'a> {
     pub mem_stat: &'a DualPortMemStat,
     pub gc_stat: &'a GbgCollectorStat,
     pub peak_workset_size: usize,
+}
+
+#[derive(Debug)]
+pub struct OurosCoreStatsError {
+    pub dheap_stat: DrfHeapStat,
+    pub reducer_stat: ReducerStat,
+    pub alu_stat: AluStat,
+    pub fifos_stat: Vec<FIFOStat>,
+    pub mem_stat: DualPortMemStat,
+    pub gc_stat: GbgCollectorStat,
+    pub peak_workset_size: usize,
+}
+
+impl<'a> From<OurosCoreStat<'a>> for OurosCoreStatsError {
+    fn from(
+        OurosCoreStat {
+            dheap_stat,
+            reducer_stat,
+            alu_stat,
+            fifos_stat,
+            mem_stat,
+            gc_stat,
+            peak_workset_size,
+        }: OurosCoreStat<'a>,
+    ) -> Self {
+        Self {
+            dheap_stat: dheap_stat.clone(),
+            reducer_stat: reducer_stat.clone(),
+            alu_stat: alu_stat.clone(),
+            fifos_stat: fifos_stat.into_iter().cloned().collect(),
+            mem_stat: mem_stat.clone(),
+            gc_stat: gc_stat.clone(),
+            peak_workset_size,
+        }
+    }
 }
 
 pub struct OurosCore {
@@ -181,11 +232,15 @@ impl OurosCore {
         self.io_unit = Some(IoUnit::new(timing));
     }
 
-    pub fn io_unit(&self) -> Option<&IoUnit> {
-        self.io_unit.as_ref()
+    pub fn io_unit(&self) -> Result<&IoUnit, error::sim::TickHw> {
+        self.io_unit
+            .as_ref()
+            .ok_or_else(|| error::sim::TickHw::IOunit("getting ref".to_string()))
     }
-    pub fn io_unit_mut(&mut self) -> Option<&mut IoUnit> {
-        self.io_unit.as_mut()
+    pub fn io_unit_mut(&mut self) -> Result<&mut IoUnit, error::sim::TickHw> {
+        self.io_unit
+            .as_mut()
+            .ok_or_else(|| error::sim::TickHw::IOunit("getting ref".to_string()))
     }
 
     /// Ready/valid interface to the optional IO unit.
@@ -288,7 +343,7 @@ fn buffers_arbiter<T: Clone + Default, const N: usize, const A: usize, const P: 
 }
 
 impl HwModule for OurosCore {
-    fn update_local(&mut self) -> Result<(), String> {
+    fn update_local(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         let _span = tracy_client::span!("ouros: update_local");
         /*
         NOTE: there is an assignment ring in the circuit, the order of
@@ -318,7 +373,11 @@ impl HwModule for OurosCore {
         // it. A fully applied Pair is a Reducer input; a WHNF Pair must go
         // through DHeap to finish (or wake) the current thread.
         let response = if let Some(io) = &self.io_unit {
-            if io.response_valid() { io.response_bits() } else { None }
+            if io.response_valid() {
+                io.response_bits()
+            } else {
+                None
+            }
         } else if self.input.io_response_valid {
             Some(&self.input.io_response_bits)
         } else {
@@ -383,8 +442,29 @@ impl HwModule for OurosCore {
             self.gc.input.monitor_valid = self.reducer.spine_valid();
             self.gc.input.monitor_bits = self.reducer.spine_bits();
             self.gc.input.monitor_big_drf_valid = self.dheap.out_big_drf_valid();
-            self.gc.input.monitor_big_drf_stk = self.dheap.out_main_bits()?.stack_idx as usize;
-            self.gc.input.monitor_big_drf_bits = self.dheap.out_main_bits()?.load[0];
+
+            self.gc.input.monitor_big_drf_stk = self
+                .dheap
+                .out_main_bits()
+                .map_err(|err| {
+                    error::sim::TickHw::Core(Error::DereHeapFailed {
+                        err,
+                        context: "self.gc.input.monitor_big_drf_stk".to_string(),
+                    })
+                })?
+                .stack_idx as usize;
+
+            self.gc.input.monitor_big_drf_bits = self
+                .dheap
+                .out_main_bits()
+                .map_err(|err| {
+                    error::sim::TickHw::Core(Error::DereHeapFailed {
+                        err,
+                        context: "self.gc.input.monitor_big_drf_bits".to_string(),
+                    })
+                })?
+                .load[0];
+
             self.gc.input.monitor_unset_valid = self.dheap.port_a_fire();
             self.gc.input.monitor_unset = self.dheap.input.port_a_bits.stack_idx as usize;
 
@@ -473,6 +553,10 @@ impl HwModule for OurosCore {
                 }
             });
 
+            let map_out_main_bits = |err, context: String| {
+                error::sim::TickHw::Core(Error::DereHeapFailed { err, context })
+            };
+
             // Saturated requests leave DHeap through one of two output paths.
             // Buffering decouples strict argument processing from the IO unit.
             self.buffers_io_1.input.in_valid = self.dheap.out_io_valid();
@@ -495,17 +579,29 @@ impl HwModule for OurosCore {
                     }
                     DESTs::ToDHeap => {
                         self.buffers_dheap_a_0.input.in_valid = true;
-                        self.buffers_dheap_a_0.input.din = self.dheap.out_main_bits()?.clone();
+                        self.buffers_dheap_a_0.input.din = self
+                            .dheap
+                            .out_main_bits()
+                            .map_err(|e| map_out_main_bits(e, "DESTs::ToDHeap".to_string()))?
+                            .clone();
                         self.dheap.input.out_main_ready = self.buffers_dheap_a_0.in_ready();
                     }
                     DESTs::ToALU => {
                         self.buffers_alu_1.input.in_valid = true;
-                        self.buffers_alu_1.input.din = self.dheap.out_main_bits()?.clone();
+                        self.buffers_alu_1.input.din = self
+                            .dheap
+                            .out_main_bits()
+                            .map_err(|e| map_out_main_bits(e, "DESTs::ToALU".to_string()))?
+                            .clone();
                         self.dheap.input.out_main_ready = self.buffers_alu_1.in_ready();
                     }
                     DESTs::ToReducer => {
                         self.buffers_reducer_1.input.in_valid = true;
-                        self.buffers_reducer_1.input.din = self.dheap.out_main_bits()?.clone();
+                        self.buffers_reducer_1.input.din = self
+                            .dheap
+                            .out_main_bits()
+                            .map_err(|e| map_out_main_bits(e, "DESTs::ToReducer".to_string()))?
+                            .clone();
                         self.dheap.input.out_main_ready = self.buffers_reducer_1.in_ready();
                     }
                 }
@@ -543,7 +639,13 @@ impl HwModule for OurosCore {
             self.buffers_dheap_b_0.input.din = self.reducer.app_bits().clone();
 
             self.buffers_dheap_b_1.input.in_valid = self.dheap.out_big_drf_valid();
-            self.buffers_dheap_b_1.input.din = self.dheap.out_big_drg_bits()?;
+
+            self.buffers_dheap_b_1.input.din = self.dheap.out_big_drg_bits().map_err(|err| {
+                error::sim::TickHw::Core(Error::DereHeapFailed {
+                    err,
+                    context: "self.buffers_dheap_b_1.input.din".to_string(),
+                })
+            })?;
 
             let out_spine = &self.reducer.spine_bits();
             if self.reducer.spine_valid() {
@@ -572,20 +674,39 @@ impl HwModule for OurosCore {
                 }
             }
 
+            let map_output_bits = |err: super::alu::Error, context: String| {
+                error::sim::TickHw::Core(Error::AluFailed { err, context })
+            };
+
             if self.alu.output_valid() {
-                if !is_whnf(&self.alu.output_bits()?.load) {
+                if !is_whnf(
+                    &self
+                        .alu
+                        .output_bits()
+                        .map_err(|e| map_output_bits(e, "is_whnf check".to_string()))?
+                        .load,
+                ) {
                     self.buffers_reducer_2.input.in_valid = true;
-                    self.buffers_reducer_2.input.din = self.alu.output_bits()?;
+                    self.buffers_reducer_2.input.din = self.alu.output_bits().map_err(|e| {
+                        map_output_bits(e, "self.buffers_reducer_2.input.din".to_string())
+                    })?;
                     self.alu.input.output_ready = self.buffers_reducer_2.in_ready();
                 } else {
                     self.buffers_dheap_a_2.input.in_valid = true;
-                    self.buffers_dheap_a_2.input.din = self.alu.output_bits()?;
+                    self.buffers_dheap_a_2.input.din = self.alu.output_bits().map_err(|e| {
+                        map_output_bits(e, "self.buffers_dheap_a_2.input.din".to_string())
+                    })?;
                     self.alu.input.output_ready = self.buffers_dheap_a_2.in_ready();
                 }
             }
 
             // when dheap reads an app, search whether that app is still outstanding
-            let search = self.dheap.search()?;
+            let search = self.dheap.search().map_err(|err| {
+                error::sim::TickHw::Core(Error::DereHeapFailed {
+                    err,
+                    context: "deref search app outstanding".to_string(),
+                })
+            })?;
             self.reducer.input.search = search;
             self.rings_dheap_b_0.input.search = search;
             self.rings_dheap_b_0.input.in_fire = self.buffers_dheap_b_0.in_fire();
@@ -667,7 +788,7 @@ impl HwModule for OurosCore {
         Ok(())
     }
 
-    fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
+    fn tick_children(&mut self) -> std::result::Result<(), error::sim::TickHw> {
         let _span = tracy_client::span!("ouros_core: tick_children");
         self.dheap.tick()?;
         self.reducer.tick()?;
@@ -717,7 +838,7 @@ impl HwModule for OurosCore {
 ///////////////////// helper function for heap graph traversal /////////////////////
 /// traverse the heap and return all reachable addrs from the roots
 fn traverse(
-    ram: &Vec<App>,
+    ram: &[App],
     size: usize,
     free_from: usize,
     monitors: &[(bool, App); MAX_THREADS],
@@ -744,6 +865,7 @@ fn traverse(
     }
 
     while !traverse_stk.is_empty() {
+        // TODO: add error result here || OR change to while let
         let work_on = traverse_stk.pop().unwrap();
         let app = &ram[work_on];
         res.push(work_on);
@@ -832,9 +954,14 @@ mod io_routing_tests {
         let active_pair = ActiveApp {
             stack_idx: 2,
             load: [
-                Atom::Com(3, 2), Atom::Int(106), Atom::Int(1993),
-                Atom::Ptr(11, true, false), Atom::Ptr(9, true, false),
-                Atom::Nop, Atom::Nop, Atom::Nop,
+                Atom::Com(3, 2),
+                Atom::Int(106),
+                Atom::Int(1993),
+                Atom::Ptr(11, true, false),
+                Atom::Ptr(9, true, false),
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
             ],
         };
         let mut core = OurosCore::new(&prog, 0, 128, 0.0);
@@ -844,7 +971,10 @@ mod io_routing_tests {
         assert!(core.io_response_ready());
         core.tick().unwrap();
         assert_eq!(core.buffers_reducer_4.dout().unwrap().stack_idx, 2);
-        assert_eq!(core.buffers_reducer_4.dout().unwrap().load, active_pair.load);
+        assert_eq!(
+            core.buffers_reducer_4.dout().unwrap().load,
+            active_pair.load
+        );
         assert!(!core.buffers_dheap_a_4.out_valid());
 
         // The same Pair without a continuation is WHNF, and must return to
@@ -852,8 +982,16 @@ mod io_routing_tests {
         let mut core = OurosCore::new(&prog, 0, 128, 0.0);
         core.input.io_response_bits = ActiveApp {
             stack_idx: 0,
-            load: [Atom::Com(3, 2), Atom::Int(106), Atom::Int(1993),
-                   Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop],
+            load: [
+                Atom::Com(3, 2),
+                Atom::Int(106),
+                Atom::Int(1993),
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+            ],
         };
         core.input.io_response_valid = true;
         assert!(!core.io_response_to_reducer());
@@ -872,8 +1010,16 @@ mod io_routing_tests {
         let mut core = OurosCore::new(&prog, 0, 128, 0.0);
         core.input.io_response_bits = ActiveApp {
             stack_idx: 0,
-            load: [Atom::Com(3, 2), Atom::Int(10), Atom::Int(20),
-                   Atom::Int(30), Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop],
+            load: [
+                Atom::Com(3, 2),
+                Atom::Int(10),
+                Atom::Int(20),
+                Atom::Int(30),
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+                Atom::Nop,
+            ],
         };
         core.input.io_response_valid = true;
         for _ in 0..BUFFER_SIZE {
@@ -1110,28 +1256,47 @@ mod integrated_io_tests {
         // no compiler-generated combinator table is needed for this test.
         let mut heap_img = vec![vec![Atom::Int(0)]; 12];
         heap_img[0] = vec![
-            Atom::IO(false), Atom::Int(0x20), Atom::Int(1993),
-            Atom::Ptr(11, true, false), Atom::Ptr(9, true, false),
+            Atom::IO(false),
+            Atom::Int(0x20),
+            Atom::Int(1993),
+            Atom::Ptr(11, true, false),
+            Atom::Ptr(9, true, false),
         ];
-        let prog = Program { heap_img, comb_img: vec![] };
+        let prog = Program {
+            heap_img,
+            comb_img: vec![],
+        };
         let mut core = OurosCore::new(&prog, 0, 256, 0.0);
         core.enable_io(AxiTiming::default());
-        core.io_unit_mut().unwrap().controller.set_register(0x20, 106);
+        core.io_unit_mut()
+            .unwrap()
+            .controller
+            .set_register(0x20, 106);
         core.tick().unwrap();
         core.input.start = true;
         core.tick().unwrap();
         core.input.start = false;
         for _ in 0..500 {
             core.tick().unwrap();
-            if core.buffers_reducer_4.out_valid() { break; }
+            if core.buffers_reducer_4.out_valid() {
+                break;
+            }
         }
-        let forwarded = core.buffers_reducer_4.dout()
+        let forwarded = core
+            .buffers_reducer_4
+            .dout()
             .expect("over-applied IO result never reached Reducer FIFO");
         assert_eq!(forwarded.stack_idx, 0);
-        assert_eq!(&forwarded.load[..5], &[
-            Atom::Com(3, 2), Atom::Int(106), Atom::Int(1993),
-            Atom::Ptr(11, true, false), Atom::Ptr(9, true, false),
-        ]);
+        assert_eq!(
+            &forwarded.load[..5],
+            &[
+                Atom::Com(3, 2),
+                Atom::Int(106),
+                Atom::Int(1993),
+                Atom::Ptr(11, true, false),
+                Atom::Ptr(9, true, false),
+            ]
+        );
         assert!(!core.buffers_dheap_a_4.out_valid());
     }
 

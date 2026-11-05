@@ -1,6 +1,18 @@
-use crate::hardware::ouros::combinator::{holes_of, Arity, Idx};
+use crate::error;
+use crate::hardware::ouros::combinator::{Arity, Idx, holes_of};
 use crate::hardware::ouros::config::{APP_LENGTH, HOLES};
+use crate::hardware::ouros::program;
 use std::fmt;
+
+
+/// Atom
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    // FIX: to specialise errors
+    #[error("Could not lookup atom attribute: {context}")]
+    Lookup { context: String },
+}
+
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 // FIX: should we fix capitalisation of variant names?
@@ -135,12 +147,15 @@ fn app_length_spec() {
 
 /// Determine whether an Application is in Weak-Head-Normal-Form.
 pub fn is_whnf(app: &App) -> bool {
+    // TODO: associate this function to App
+
     // +, a, b --- false
     // +, a    --- true
     arity_of(&app[0]) >= app_length(app) as u8
 }
 
 pub fn is_seq(atom: &Atom) -> bool {
+    // TODO: associate this function to Atom
     matches!(atom, Atom::Seq)
 }
 
@@ -164,6 +179,7 @@ pub fn get_ptr(atom: &Atom) -> usize {
     match atom {
         Atom::Ptr(pt, _, _) => *pt,
         Atom::Spe(_, _, _, _, pt) => *pt,
+        // TODO: add a result value
         _ => unimplemented!(),
     }
 }
@@ -190,6 +206,7 @@ pub fn is_comb(atom: &Atom) -> bool {
 pub fn get_comb_addr(atom: &Atom) -> usize {
     match atom {
         Atom::Com(_, addr) => *addr,
+        // TODO: add a result value
         _ => unimplemented!(),
     }
 }
@@ -198,12 +215,12 @@ pub fn is_int(atom: &Atom) -> bool {
     matches!(atom, Atom::Int(_))
 }
 
-pub fn take_int(atom: &Atom) -> Result<i32, String> {
+pub fn take_int(atom: &Atom) -> Result<i32, program::Error> {
     match *atom {
         Atom::Int(i) => Ok(i),
-        _ => {
-            Err("atom not an INT: {:?}".to_string())
-        }
+        _ => Err(Error::Lookup {
+            context: "Not an INT: {:?}".to_string(),
+        }),
     }
 }
 
