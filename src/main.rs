@@ -381,7 +381,10 @@ fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros
     let mut cycles: u64 = 0;
     let mut stdin_closed = false;
     let mut interrupted = false;
-    'simulation: while !core.done() {
+    let core: RefCell<OurosCore> = RefCell::new(core);
+    let ouros_core = core.borrow();
+
+    'simulation: while !core.borrow().done() {
         // No artificial cycle ceiling: this is an interactive application,
         // which may intentionally keep running indefinitely.
         // Receive events are buffered in the simulated peripheral even if
@@ -389,7 +392,15 @@ fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros
         while !stdin_closed {
             match receiver.try_recv() {
                 Ok(InputEvent::Byte(byte)) => {
-                    core.io_unit_mut().unwrap().controller.push_rx(byte);
+                    core.borrow_mut()
+                        .io_unit_mut()
+                        .map_err(|run| error::TickHwToOuros {
+                            ouros_core: &ouros_core,
+                            prog_name: program_name.clone(),
+                            run,
+                        })?
+                        .controller
+                        .push_rx(byte);
                 }
                 Ok(InputEvent::Interrupt) => {
                     interrupted = true;
@@ -403,16 +414,22 @@ fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros
             }
         }
 
-        core.tick().map_err(|run| error::TickHwToOuros {
-            ouros_core: &core,
-            prog_name: program_name.clone(),
-            run,
-        })?;
+        core.borrow_mut()
+            .tick()
+            .map_err(|run| error::TickHwToOuros {
+                ouros_core: &ouros_core,
+                prog_name: program_name.clone(),
+                run,
+            })?;
         cycles += 1;
+
+        let ouros_core = core.borrow();
+
         if let Some(first) = core
+            .borrow_mut()
             .io_unit_mut()
             .map_err(|run| error::TickHwToOuros {
-                ouros_core: &core,
+                ouros_core: &ouros_core,
                 prog_name: program_name.clone(),
                 run,
             })?
@@ -421,10 +438,12 @@ fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros
         {
             let mut stdout = std::io::stdout().lock();
             stdout.write_all(&[first])?;
+            let ouros_core = core.borrow();
             while let Some(byte) = core
+                .borrow_mut()
                 .io_unit_mut()
                 .map_err(|run| error::TickHwToOuros {
-                    ouros_core: &core,
+                    ouros_core: &ouros_core,
                     prog_name: program_name.clone(),
                     run,
                 })?
@@ -451,9 +470,10 @@ fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros
         eprintln!(
             "\nOuros finished normally after {} cycles ({} IO completions).",
             cycles,
-            core.io_unit()
+            core.borrow_mut()
+                .io_unit()
                 .map_err(|run| error::TickHwToOuros {
-                    ouros_core: &core,
+                    ouros_core: &ouros_core,
                     prog_name: program_name,
                     run
                 })?
@@ -853,9 +873,8 @@ fn main() -> Result<(), error::Ouros> {
                     progs
                         .get(program_name.as_str())
                         .ok_or(error::Ouros::ProgramNotFound {
-                            program_name: program_name.to_string(),
-                        })
-                        .map_err(error::Ouros::from)?,
+                            program_name: program_name.to_owned(),
+                        })?,
                     program_name.clone(),
                 ),
                 Args {
@@ -864,8 +883,7 @@ fn main() -> Result<(), error::Ouros> {
                     ..
                 } => Err(error::Ouros::InvalidCliArgs {
                     reason: "--mode=terminal requires --prog-name=<compiled-program>".into(),
-                })
-                    ,
+                }),
                 Args {
                     prog_name: Some(program_name),
                     ..
