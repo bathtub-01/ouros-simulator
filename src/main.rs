@@ -12,10 +12,10 @@ use std::{
     collections::HashMap,
     env,
     fs::{self, File},
-    io::{Error, Write, prelude::*},
+    io::{prelude::*, Error, Write},
     path::Path,
     rc::Rc,
-    sync::{LazyLock, mpsc},
+    sync::{mpsc, LazyLock},
     thread,
 };
 
@@ -23,7 +23,7 @@ use hardware::ouros::{
     benchmarks::{self, *},
     config::{BIG_HEAP, DLV_GC, GC_AT, HEAP_SIZE},
     ouros_core::OurosCore,
-    program::{ActiveApp, App, Program, app_length},
+    program::{app_length, ActiveApp, App, Program},
 };
 
 use hw_module::HwModule;
@@ -381,26 +381,27 @@ fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros
     let mut cycles: u64 = 0;
     let mut stdin_closed = false;
     let mut interrupted = false;
-    let core: RefCell<OurosCore> = RefCell::new(core);
-    let ouros_core = core.borrow();
+    let core = RefCell::new(core);
 
     'simulation: while !core.borrow().done() {
-        // No artificial cycle ceiling: this is an interactive application,
-        // which may intentionally keep running indefinitely.
-        // Receive events are buffered in the simulated peripheral even if
-        // there is no pending blocking RX transaction.
+        // Buffer incoming bytes even when Ouros is not currently reading RX.
         while !stdin_closed {
             match receiver.try_recv() {
                 Ok(InputEvent::Byte(byte)) => {
-                    core.borrow_mut()
-                        .io_unit_mut()
-                        .map_err(|run| error::TickHwToOuros {
-                            ouros_core: &ouros_core,
+                    // Finish the mutable borrow before constructing an error
+                    // report, which needs an immutable snapshot of the core.
+                    let pushed = {
+                        let mut c = core.borrow_mut();
+                        c.io_unit_mut().map(|io| io.controller.push_rx(byte))
+                    };
+                    pushed.map_err(|run| {
+                        let c = core.borrow();
+                        error::Ouros::from(error::TickHwToOuros {
+                            ouros_core: &c,
                             prog_name: program_name.clone(),
                             run,
-                        })?
-                        .controller
-                        .push_rx(byte);
+                        })
+                    })?;
                 }
                 Ok(InputEvent::Interrupt) => {
                     interrupted = true;
@@ -414,46 +415,55 @@ fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros
             }
         }
 
-        core.borrow_mut()
-            .tick()
-            .map_err(|run| error::TickHwToOuros {
-                ouros_core: &ouros_core,
+        // Never keep a Ref or RefMut alive across another borrow_mut().
+        let tick_result = { core.borrow_mut().tick() };
+        tick_result.map_err(|run| {
+            let c = core.borrow();
+            error::Ouros::from(error::TickHwToOuros {
+                ouros_core: &c,
                 prog_name: program_name.clone(),
                 run,
-            })?;
+            })
+        })?;
         cycles += 1;
 
-        let ouros_core = core.borrow();
-
-        if let Some(first) = core
-            .borrow_mut()
-            .io_unit_mut()
-            .map_err(|run| error::TickHwToOuros {
-                ouros_core: &ouros_core,
+        let first = {
+            let mut c = core.borrow_mut();
+            c.io_unit_mut().map(|io| io.controller.pop_tx())
+        };
+        let first = first.map_err(|run| {
+            let c = core.borrow();
+            error::Ouros::from(error::TickHwToOuros {
+                ouros_core: &c,
                 prog_name: program_name.clone(),
                 run,
-            })?
-            .controller
-            .pop_tx()
-        {
+            })
+        })?;
+
+        if let Some(first) = first {
             let mut stdout = std::io::stdout().lock();
             stdout.write_all(&[first])?;
-            let ouros_core = core.borrow();
-            while let Some(byte) = core
-                .borrow_mut()
-                .io_unit_mut()
-                .map_err(|run| error::TickHwToOuros {
-                    ouros_core: &ouros_core,
-                    prog_name: program_name.clone(),
-                    run,
-                })?
-                .controller
-                .pop_tx()
-            {
-                stdout.write_all(&[byte])?;
+            loop {
+                let next = {
+                    let mut c = core.borrow_mut();
+                    c.io_unit_mut().map(|io| io.controller.pop_tx())
+                };
+                let next = next.map_err(|run| {
+                    let c = core.borrow();
+                    error::Ouros::from(error::TickHwToOuros {
+                        ouros_core: &c,
+                        prog_name: program_name.clone(),
+                        run,
+                    })
+                })?;
+                match next {
+                    Some(byte) => stdout.write_all(&[byte])?,
+                    None => break,
+                }
             }
             stdout.flush()?;
         }
+
         // Periodically yield to the stdin worker and other host processes.
         if cycles % 10_000 == 0 {
             thread::sleep(Duration::from_millis(1));
@@ -467,17 +477,18 @@ fn run_terminal(prog: &Program, program_name: String) -> Result<(), error::Ouros
     if interrupted {
         eprintln!("\nOuros terminal interrupted after {} cycles.", cycles);
     } else {
+        let completed = { core.borrow().io_unit().map(|io| io.completed) };
+        let completed = completed.map_err(|run| {
+            let c = core.borrow();
+            error::Ouros::from(error::TickHwToOuros {
+                ouros_core: &c,
+                prog_name: program_name.clone(),
+                run,
+            })
+        })?;
         eprintln!(
             "\nOuros finished normally after {} cycles ({} IO completions).",
-            cycles,
-            core.borrow_mut()
-                .io_unit()
-                .map_err(|run| error::TickHwToOuros {
-                    ouros_core: &ouros_core,
-                    prog_name: program_name,
-                    run
-                })?
-                .completed
+            cycles, completed
         );
     }
     Ok(())
@@ -861,8 +872,9 @@ fn main() -> Result<(), error::Ouros> {
                 // ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, ORDLIST, PERMSORT, QUEENS, QUEENS2,
                 // SKIABSEVAL, SUMEULER, SUMPUZ, TAUT, TREEPARI, /*TREESUM,*/ TRIBELIE, WHILEX,
                 ADJOXO, BRAUN, CLAUSIFY, COUNTDOWN, FIB, MSS, QUEENS, QUEENS2, SUMEULER, WHILEX,
-                UART
             ); // ignoring TREESUM as it does not have much garbage..
+
+            let terminal_progs = benchmarks!(UART,);
 
             match parsed_args {
                 Args {
@@ -870,11 +882,11 @@ fn main() -> Result<(), error::Ouros> {
                     prog_name: Some(program_name),
                     ..
                 } => run_terminal(
-                    progs
-                        .get(program_name.as_str())
-                        .ok_or(error::Ouros::ProgramNotFound {
+                    terminal_progs.get(program_name.as_str()).ok_or(
+                        error::Ouros::ProgramNotFound {
                             program_name: program_name.to_owned(),
-                        })?,
+                        },
+                    )?,
                     program_name.clone(),
                 ),
                 Args {
