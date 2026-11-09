@@ -25,6 +25,8 @@ pub const CONSUMERS_DHEAP: usize = 1;
 
 pub const GC_AT: f32 = 0.2; // start GC when freelist is shorter than this
 pub const CACHE_SIZE: usize = 8;
+/// Number of unevaluated `par` hints buffered by each core.
+pub const SPARK_POOL_SIZE: usize = 256;
 
 // system-wise setup, changing them will require also modifying the compiler
 pub const HOLES: usize = 6;

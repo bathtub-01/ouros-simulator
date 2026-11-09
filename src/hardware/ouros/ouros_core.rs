@@ -14,6 +14,7 @@ use super::deref_heap_new::{DrfHeap, DrfHeapStat};
 use super::garbage_collector::{GbgCollector, GbgCollectorStat};
 use super::program::*;
 use super::reducer::{Reducer, ReducerStat};
+use super::spark_pool::SparkPool;
 
 enum DESTs {
     ToDHeap,
@@ -68,6 +69,7 @@ pub struct OurosCore {
     abox: AddrBox,
     reducer: Reducer,
     alu: Alu,
+    pub spark_pool: SparkPool<SPARK_POOL_SIZE>,
 
     buffers_dealloc: Fifo<usize, 2, false>,
     buffers_free_addr: Fifo<usize, 2, false>,
@@ -118,6 +120,7 @@ impl OurosCore {
                 .program(&prog.comb_img)
                 .detail(detail_lv),
             alu: Alu::new().detail(detail_lv),
+            spark_pool: SparkPool::new(),
 
             buffers_dealloc: Fifo::new(),
             buffers_free_addr: Fifo::new(),
@@ -230,7 +233,10 @@ impl HwModule for OurosCore {
 
         // connect start signal
         self.dheap.input.start = self.input.start;
-
+        // GC's root sweep must not mutate the spark FIFO. Only saturated
+        // `par` inputs are held on DHeap A; the frozen-App port B is free.
+        self.spark_pool.input.gc_lock = self.gc.rooting_sparks();
+        self.spark_pool.input.pop_ready = false; // no remote stealer yet
         // this 'kind of' fixes the ring problem
         for _ in 0..2 {
             // gc control signals
@@ -247,6 +253,13 @@ impl HwModule for OurosCore {
 
             self.gc.input.feedback_bits = *self.buffers_feedback.dout().unwrap_or(&0);
             self.gc.input.feedback_valid = self.buffers_feedback.out_valid();
+
+            // Compute the par barrier after refreshing GC's mutator-request
+            // inputs, not from the previous cycle's feedback/alloc handshake.
+            // Root always blocks par; Mark blocks only offers that would be
+            // stored when another operation needs the GC metadata write port.
+            self.dheap.input.spark_block = self.gc.rooting_sparks()
+                || (self.spark_pool.offer_will_store() && self.gc.spark_blocked());
 
             self.abox.input.free_addr_bits = *self.buffers_free_addr.dout().unwrap_or(&0);
             self.abox.input.free_addr_valid = self.buffers_free_addr.out_valid();
@@ -284,6 +297,23 @@ impl HwModule for OurosCore {
             self.gc.input.monitor_big_drf_bits = self.dheap.out_main_bits()?.load[0];
             self.gc.input.monitor_unset_valid = self.dheap.port_a_fire();
             self.gc.input.monitor_unset = self.dheap.input.port_a_bits.stack_idx as usize;
+
+            // The accepted offer and the GC barrier are one handshake.
+            self.spark_pool.input.offer_valid = self.dheap.spark_valid();
+            self.spark_pool.input.offer_bits = self.dheap.spark_bits();
+            self.gc.input.spark_valid = self.dheap.spark_valid()
+                && self.spark_pool.offer_will_store();
+            self.gc.input.spark_bits = self.dheap.spark_bits();
+            self.gc.input.spark_pool_len = self.spark_pool.len();
+            self.gc.input.spark_root_bits = self.gc.root_scan_index()
+                .and_then(|idx| self.spark_pool.search(idx));
+            self.gc.input.pending_par = if self.dheap.input.port_a_valid
+                && is_saturated_par(&self.dheap.input.port_a_bits.load)
+            {
+                Some(self.dheap.input.port_a_bits.load)
+            } else {
+                None
+            };
 
             // connect arbiters as components' input (arbiter first)
             self.arbiter_dheap_a.input.out_ready = self.dheap.port_a_ready();
@@ -482,6 +512,7 @@ impl HwModule for OurosCore {
         self.dheap.tick()?;
         self.reducer.tick()?;
         self.alu.tick()?;
+        self.spark_pool.tick()?;
         self.gc.tick()?;
         self.abox.tick()?;
 
@@ -603,3 +634,71 @@ fn traverse(
 //         eprintln! {"passed!"};
 //     }
 // }
+
+#[cfg(test)]
+mod spark_integration_tests {
+    use super::*;
+
+    fn simple_par_program() -> Program {
+        Program {
+            heap_img: vec![
+                vec![Atom::Par, Atom::Ptr(1, false, false), Atom::Int(42)],
+                vec![Atom::Prm(AluOp::Add, false), Atom::Int(1), Atom::Int(2)],
+            ],
+            comb_img: vec![],
+        }
+    }
+
+    #[test]
+    fn par_hint_does_not_evaluate_spark_or_change_main_result() {
+        let mut core = OurosCore::new(&simple_par_program(), 0, 64, 0.0);
+        core.tick().unwrap();
+        core.input.start = true;
+        core.tick().unwrap();
+        core.input.start = false;
+        for _ in 0..200 {
+            if core.done() { break; }
+            core.tick().unwrap();
+        }
+        assert!(core.done(), "main must terminate without evaluating the spark");
+        assert_eq!(core.spark_pool.front(), Some(Atom::Ptr(1, false, false)));
+        assert_eq!(core.dheap.heap_mem.ram[1][0], Atom::Prm(AluOp::Add, false));
+    }
+
+    #[test]
+    fn root_phase_holds_par_until_gc_can_track_it() {
+        // The tiny original program can consume `par` before GC enters Root,
+        // or after Root has finished. A short pointer chain delays arrival
+        // at DHeap A; extra initial roots lengthen Root once it starts.
+        let mut prog = simple_par_program();
+        prog.heap_img[0] = vec![Atom::Ptr(2, false, false)];
+        for addr in 2..7 {
+            prog.heap_img.push(vec![Atom::Ptr(addr + 1, false, false)]);
+        }
+        prog.heap_img.push(vec![
+            Atom::Par, Atom::Ptr(1, false, false), Atom::Int(42),
+        ]); // heap address 7
+        prog.heap_img.extend(std::iter::repeat(vec![Atom::Nop]).take(64));
+        let mut core = OurosCore::new(&prog, 0, 256, 1.0);
+        core.tick().unwrap();
+        core.input.start = true;
+        core.tick().unwrap();
+        core.input.start = false;
+        let mut witnessed_block = false;
+        for _ in 0..1000 {
+            if core.gc.rooting_sparks()
+                && core.dheap.input.port_a_valid
+                && is_saturated_par(&core.dheap.input.port_a_bits.load)
+            {
+                witnessed_block = true;
+                assert!(!core.dheap.port_a_fire());
+                assert!(core.dheap.port_b_ready());
+            }
+            if core.done() { break; }
+            core.tick().unwrap();
+        }
+        assert!(witnessed_block, "the GC root phase should block this par");
+        assert!(core.done());
+        assert_eq!(core.spark_pool.front(), Some(Atom::Ptr(1, false, false)));
+    }
+}

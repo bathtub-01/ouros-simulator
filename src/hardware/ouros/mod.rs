@@ -16,4 +16,6 @@ pub mod ouros_core;
 
 pub mod garbage_collector;
 
+pub mod spark_pool;
+
 pub mod addr_box;

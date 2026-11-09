@@ -139,6 +139,39 @@ pub fn is_whnf(app: &App) -> bool {
     arity_of(&app[0]) >= app_length(app) as u8
 }
 
+/// A `par` application is reducible only when both operands are present.
+/// Extra arguments belong to the continuation, not the spark.
+pub fn is_saturated_par(app: &App) -> bool {
+    matches!(app[0], Atom::Par) && app_length(app) >= 3
+}
+
+/// Reduction of `[Par, a, b, ...]` to `[b, ...]` (without evaluating `a`).
+pub fn par_continuation(app: &App) -> App {
+    debug_assert!(is_saturated_par(app));
+    let mut continuation = [Atom::Nop; APP_LENGTH];
+    let len = app_length(app);
+    continuation[..len - 2].copy_from_slice(&app[2..len]);
+    continuation
+}
+
+#[test]
+fn par_reduction_spec() {
+    let app: App = [
+        Atom::Par, Atom::Ptr(7, false, false), Atom::Com(2, 40),
+        Atom::Int(1), Atom::Int(2), Atom::Nop, Atom::Nop, Atom::Nop,
+    ];
+    assert_eq!(arity_of(&Atom::Par), 2);
+    assert!(!is_whnf(&app));
+    assert_eq!(par_continuation(&app), [
+        Atom::Com(2, 40), Atom::Int(1), Atom::Int(2),
+        Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop,
+    ]);
+    let partial = [Atom::Par, Atom::Int(1), Atom::Nop, Atom::Nop,
+                   Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop];
+    assert!(is_whnf(&partial));
+    assert!(!is_saturated_par(&partial));
+}
+
 pub fn is_seq(atom: &Atom) -> bool {
     matches!(atom, Atom::Seq)
 }

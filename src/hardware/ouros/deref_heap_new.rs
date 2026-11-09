@@ -24,6 +24,8 @@ pub struct DrfHeapInput {
     pub out_main_ready: bool,
     pub out_sub_ready: bool,
     pub found: bool,
+    /// GC is reading the spark pool; a saturated par cannot be consumed yet.
+    pub spark_block: bool,
     // GC signals
     pub free_addr: usize,
     pub free_addr_valid: bool,
@@ -412,6 +414,15 @@ impl DrfHeap {
         fire(self.input.port_a_valid, self.port_a_ready())
     }
 
+    /// Non-strict `par` offer, committed together with DHeap port A's fire.
+    pub fn spark_valid(&self) -> bool {
+        self.port_a_fire() && is_saturated_par(&self.input.port_a_bits.load)
+    }
+
+    pub fn spark_bits(&self) -> Atom {
+        self.input.port_a_bits.load[1]
+    }
+
     pub fn port_b_fire(&self) -> bool {
         fire(self.input.port_b_valid, self.port_b_ready())
     }
@@ -425,6 +436,15 @@ impl DrfHeap {
     }
 
     pub fn port_a_ready(&self) -> bool {
+        if self.holder_out.0 && !self.input.out_main_ready {
+            return false;
+        }
+        if self.input.port_a_valid
+            && is_saturated_par(&self.input.port_a_bits.load)
+            && self.input.spark_block
+        {
+            return false;
+        }
         let local_release: bool = match *self.stm.value() {
             Stm::Idle => true,
             Stm::Whnf => matches!(self.get_whnfs(), WHNFs::NoNewFrame),
@@ -591,6 +611,11 @@ impl DrfHeap {
             //     self.input.port_a_bits.stack_idx,
             //     self.thread_stack[self.input.port_a_bits.stack_idx as usize].top()
             // );
+            // `par` never dereferences its first argument. Its continuation is
+            // emitted as a new token rather than fetching any target here.
+            if is_saturated_par(&in_app) {
+                return Ok(0);
+            }
             let (_, p) = select_1st_arg(&in_app)?;
             Ok(p)
         } else if *self.stm.value() == Stm::Ia {
@@ -1034,6 +1059,21 @@ impl DrfHeap {
             load: in_app,
         });
 
+        // Saturated `par a b` is non-strict in `a`: it offers `a` to the
+        // bounded pool and immediately continues as `b`. The offer itself is
+        // driven by spark_valid(), i.e. only when port A actually fires.
+        if self.spark_valid() {
+            self.holder_out = (
+                true,
+                ActiveApp {
+                    stack_idx: self.input.port_a_bits.stack_idx,
+                    load: par_continuation(&in_app),
+                },
+            );
+            self.stm.connect(&Stm::Idle);
+            return Ok(());
+        }
+
         match self.get_consumes()? {
             CONSUMEs::NoInput => self.stm.connect(&Stm::Idle),
             CONSUMEs::InputIA => {
@@ -1421,5 +1461,41 @@ impl HwModule for DrfHeap {
         self.non_exist.tick()?;
         self.gc_read_granted.tick()?;
         self.reg_free_addr.tick()
+    }
+}
+
+#[cfg(test)]
+mod par_tests {
+    use super::*;
+
+    #[test]
+    fn par_blocks_only_port_a_during_gc_rooting() {
+        let mut dh = DrfHeap::new(32);
+        dh.working.connect(&true);
+        dh.working.tick().unwrap();
+        dh.thread_stack[0].push((false, 0));
+        dh.frame_stack[0].push(Default::default());
+        dh.input.free_addr_valid = true;
+        dh.input.port_a_valid = true;
+        dh.input.port_a_bits = ActiveApp {
+            stack_idx: 0,
+            load: [Atom::Par, Atom::Ptr(11, false, false), Atom::Int(42),
+                   Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop],
+        };
+        dh.input.spark_block = true;
+        assert!(!dh.port_a_ready());
+        assert!(!dh.spark_valid());
+        assert!(dh.port_b_ready());
+        dh.input.spark_block = false;
+        assert!(dh.spark_valid());
+        assert_eq!(dh.spark_bits(), Atom::Ptr(11, false, false));
+        dh.tick().unwrap();
+        assert!(dh.out_main_valid());
+        assert_eq!(dh.out_main_bits().unwrap().load,
+                   [Atom::Int(42), Atom::Nop, Atom::Nop, Atom::Nop,
+                    Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop]);
+        // A held continuation cannot be overwritten by another accepted par.
+        assert!(!dh.port_a_ready());
+        assert!(dh.port_b_ready());
     }
 }
