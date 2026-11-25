@@ -47,14 +47,6 @@ enum CollectorState {
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
-enum RootStage {
-    #[default]
-    Program,
-    Sparks,
-    PendingPar,
-}
-
-#[derive(Default, Clone, Debug, PartialEq)]
 enum CellState {
     #[default]
     Unmarked,
@@ -90,14 +82,7 @@ pub struct GbgCollectorInput {
     pub monitor_big_drf_stk: usize,
     pub monitor_unset_valid: bool,
     pub monitor_unset: usize,
-    /// Read-only, indexable spark FIFO port, oldest spark first.
-    pub spark_pool_len: usize,
-    pub spark_root_bits: Option<Atom>,
-    /// Saturated `par` currently held at DHeap port A by the root-phase lock.
-    pub pending_par: Option<App>,
-    /// Accepted `par` offer; serves as a new-root barrier during Mark.
-    pub spark_valid: bool,
-    pub spark_bits: Atom,
+
 }
 
 impl HwInput for GbgCollectorInput {}
@@ -137,9 +122,6 @@ pub struct GbgCollector {
     reg_app_idx: Register<usize>,
     pub reg_monitors: Register<[(bool, App); MAX_THREADS]>,
     reg_monitor_idx: Register<usize>,
-    reg_root_stage: Register<RootStage>,
-    reg_root_idx: Register<usize>,
-    reg_pending_par: Register<Option<App>>,
     const_sweep_from: usize,
     const_heap_size: usize,
     const_gc_at: f32,
@@ -171,9 +153,6 @@ impl GbgCollector {
             reg_app_idx: Default::default(),
             reg_monitors: Default::default(),
             reg_monitor_idx: Default::default(),
-            reg_root_stage: Default::default(),
-            reg_root_idx: Default::default(),
-            reg_pending_par: Default::default(),
             const_sweep_from: free_from,
             const_heap_size: heap_size,
             const_gc_at: gc_at,
@@ -199,26 +178,31 @@ impl GbgCollector {
         self
     }
 
-    /// GC holds `par` acceptance during Root; in Mark an offered spark is a
-    /// write barrier, so it must be serialized with mutator GC-memory writes.
-    pub fn rooting_sparks(&self) -> bool {
-        *self.reg_collector.value() == CollectorState::Root
-    }
-
-    pub fn spark_blocked(&self) -> bool {
-        self.rooting_sparks()
-            || (*self.reg_collector.value() == CollectorState::Mark && self.mutator_request())
-    }
-
-    pub fn root_scan_index(&self) -> Option<usize> {
-        if *self.reg_collector.value() == CollectorState::Root
-            && *self.reg_root_stage.value() == RootStage::Sparks
-            && *self.reg_root_idx.value() < self.input.spark_pool_len
+    /// Reclaimed address in the *current cycle*. Connect this signal to the
+    /// spark pool's `unset` port. Sweep reclaims only Unmarked cells; a
+    /// simultaneous mutator request stalls sweeping. Immediate deallocation
+    /// is included as well, even if the address is directly reused.
+    ///
+    /// The predicate intentionally matches `update_local`/`step_sweep`.
+    pub fn spark_reclaim_addr(&self) -> Option<usize> {
+        let state = self.reg_collector.value();
+        if self.deallocate_fire()
+            && *state != CollectorState::Mark
+            && self.input.deallocate_bits != *self.reg_sweeper.value()
         {
-            Some(*self.reg_root_idx.value())
-        } else {
-            None
+            return Some(self.input.deallocate_bits);
         }
+        if *state == CollectorState::Sweep && !self.mutator_request() {
+            let read_out = if *self.reg_pre_gc.value() {
+                self.gc_mem.dout_a()
+            } else {
+                self.reg_bk_reader.value()
+            };
+            if read_out.state == CellState::Unmarked {
+                return Some(*self.reg_sweeper.value());
+            }
+        }
+        None
     }
 
     pub fn detail(mut self, lv: u8) -> Self {
@@ -433,74 +417,23 @@ impl GbgCollector {
             );
             self.reg_sweeper.connect(&0);
             self.reg_monitor_idx.connect(&0);
-            self.reg_root_stage.connect(&RootStage::Program);
-            self.reg_root_idx.connect(&0);
-            self.reg_pending_par.connect(&None);
-        }
-    }
-
-    /// Add a newly discovered root only if it has not already been queued or
-    /// marked. The GC metadata RAM is inspected as a combinational lookup in
-    /// the simulator; a hardware implementation can pipeline this lookup.
-    fn enqueue_spark_root(&mut self, atom: Atom) {
-        let Atom::Ptr(addr, _, _) = atom else { return; };
-        if addr >= self.const_heap_size { return; }
-        if self.gc_mem.ram[addr].state == CellState::Unmarked {
-            // `update_local` has already resolved any pending worklist-head
-            // read into the register's next input (see reg_work_drawed).
-            let old_head = self.reg_work_head.input;
-            self.push_to_worklist(addr, old_head);
-            self.work_len_plus_one();
         }
     }
 
     fn step_root(&mut self) {
         if self.mutator_request() { return; }
-        match self.reg_root_stage.value().clone() {
-            RootStage::Program => {
-                if *self.reg_sweeper.value() < self.const_sweep_from - 1 {
-                    let next = self.reg_sweeper.value() + 1;
-                    self.reg_sweeper.connect(&next);
-                    self.push_to_worklist(next, *self.reg_work_head.value());
-                    self.work_len_plus_one();
-                } else {
-                    self.reg_root_stage.connect(&RootStage::Sparks);
-                    self.reg_root_idx.connect(&0);
-                }
-            }
-            RootStage::Sparks => {
-                let idx = *self.reg_root_idx.value();
-                if idx < self.input.spark_pool_len {
-                    if let Some(atom) = self.input.spark_root_bits {
-                        self.enqueue_spark_root(atom);
-                    }
-                    self.reg_root_idx.connect(&(idx + 1));
-                } else {
-                    // Snapshot the blocked attempt. A higher-priority DHeap
-                    // buffer could otherwise change the arbiter selection
-                    // while GC is scanning its argument pointers.
-                    self.reg_pending_par.connect(&self.input.pending_par);
-                    self.reg_root_stage.connect(&RootStage::PendingPar);
-                    self.reg_root_idx.connect(&0);
-                }
-            }
-            RootStage::PendingPar => {
-                // The candidate is blocked on DHeap A, hence cannot discard
-                // any of its pointers while we walk it. Include both the
-                // spark argument and the continuation's pointers.
-                let idx = *self.reg_root_idx.value();
-                if idx < APP_LENGTH {
-                    if let Some(app) = *self.reg_pending_par.value() {
-                        self.enqueue_spark_root(app[idx]);
-                    }
-                    self.reg_root_idx.connect(&(idx + 1));
-                } else {
-                    self.reg_collector.connect(&CollectorState::Mark);
-                    self.reg_move.connect(&0);
-                    self.reg_pre_gc.connect(&false);
-                    self.gc_cache.flush();
-                }
-            }
+        if *self.reg_sweeper.value() < self.const_sweep_from - 1 {
+            let next = *self.reg_sweeper.value() + 1;
+            self.reg_sweeper.connect(&next);
+            self.push_to_worklist(next, *self.reg_work_head.value());
+            self.work_len_plus_one();
+        } else {
+            // Spark hints are *not* GC roots. Only the ordinary program
+            // roots and existing active-App monitors are traced.
+            self.reg_collector.connect(&CollectorState::Mark);
+            self.reg_move.connect(&0);
+            self.reg_pre_gc.connect(&false);
+            self.gc_cache.flush();
         }
     }
 
@@ -838,18 +771,7 @@ impl HwModule for GbgCollector {
         match self.reg_collector.value() {
             CollectorState::Idle => self.step_idle(),
             CollectorState::Root => self.step_root(),
-            CollectorState::Mark => {
-                // A spark is a new GC root even if it is absent from the
-                // original snapshot. Reserve the metadata write port on an
-                // offer cycle; the DHeap sender is held if a mutator request
-                // has priority over this barrier.
-                if self.input.spark_valid && is_ptr(&self.input.spark_bits) {
-                    debug_assert!(!self.mutator_request());
-                    self.enqueue_spark_root(self.input.spark_bits);
-                } else {
-                    self.step_mark();
-                }
-            },
+            CollectorState::Mark => self.step_mark(),
             CollectorState::Sweep => self.step_sweep()?,
         }
 
@@ -941,53 +863,116 @@ impl HwModule for GbgCollector {
         self.reg_app_idx.tick()?;
         self.reg_monitors.tick()?;
         self.reg_monitor_idx.tick()?;
-        self.reg_root_stage.tick()?;
-        self.reg_root_idx.tick()?;
-        self.reg_pending_par.tick()
+        Ok(())
     }
 }
 
 #[cfg(test)]
-mod spark_root_tests {
+mod spark_reclamation_tests {
     use super::*;
 
     #[test]
-    fn root_scan_adds_spark_without_duplicate_worklist_nodes() {
-        let mut gc = GbgCollector::new(32, 1, 1.0).init_freelist();
-        // Remove address 12 from the initial free-list chain, modelling an
-        // allocated cell that is reachable only from the spark pool.
+    fn immediate_reclamation_notifies_spark_pool() {
+        let mut gc = GbgCollector::new(32, 1, 0.0).init_freelist();
+        // Model an allocated cell by removing it from the free-list chain.
         gc.gc_mem.ram[11].ptr = 13;
         gc.gc_mem.ram[12].state = CellState::Unmarked;
         gc.reg_free_len.connect(&30);
         gc.reg_free_len.tick().unwrap();
-        gc.input.spark_pool_len = 2;
-        gc.tick().unwrap();  // Idle -> Root
-        let mut root_checks = 0;
-        for _ in 0..4 {
-            if let Some(idx) = gc.root_scan_index() {
-                gc.input.spark_root_bits = Some(Atom::Ptr(12, false, false));
-                assert!(idx < 2);
-                root_checks += 1;
-            }
-            gc.tick().unwrap();
-        }
-        assert_eq!(root_checks, 2);
-        assert_eq!(gc.root_scan_index(), None);
-        assert_eq!(gc.gc_mem.ram[12].state, CellState::WorkList);
-        // Main (0) and the spark (12); duplicate spark must not add another.
-        assert_eq!(*gc.reg_work_len.value(), 2);
+        gc.input.deallocate_valid = true;
+        gc.input.deallocate_bits = 12;
+        assert_eq!(gc.spark_reclaim_addr(), Some(12));
+        gc.tick().unwrap();
+        assert_eq!(gc.gc_mem.ram[12].state, CellState::FreeList);
     }
 
     #[test]
-    fn spark_accepted_during_mark_is_a_new_root() {
+    fn immediate_reclamation_invalidates_a_queued_hint() {
+        use super::super::spark_pool::SparkPool;
         let mut gc = GbgCollector::new(32, 1, 0.0).init_freelist();
+        gc.gc_mem.ram[11].ptr = 13;
         gc.gc_mem.ram[12].state = CellState::Unmarked;
-        gc.reg_collector.connect(&CollectorState::Mark);
-        gc.reg_collector.tick().unwrap();
-        gc.input.spark_valid = true;
-        gc.input.spark_bits = Atom::Ptr(12, false, false);
+        gc.reg_free_len.connect(&30);
+        gc.reg_free_len.tick().unwrap();
+
+        let mut pool = SparkPool::<4>::new(32);
+        pool.input.offer_valid = true;
+        pool.input.offer_bits = Atom::Ptr(12, false, false);
+        pool.tick().unwrap();
+        assert_eq!(pool.front_candidate(), Some(12));
+
+        gc.input.deallocate_valid = true;
+        gc.input.deallocate_bits = 12;
+        let reclaim = gc.spark_reclaim_addr();
+        assert_eq!(reclaim, Some(12));
+        pool.input.offer_valid = false;
+        pool.input.unset_valid = reclaim.is_some();
+        pool.input.unset_bits = reclaim.unwrap_or(0);
+        pool.tick().unwrap();
         gc.tick().unwrap();
-        assert_eq!(gc.gc_mem.ram[12].state, CellState::WorkList);
-        assert_eq!(*gc.reg_work_len.value(), 1);
+        assert_eq!(gc.gc_mem.ram[12].state, CellState::FreeList);
+        assert_eq!(pool.front_candidate(), None);
+    }
+
+    #[test]
+    fn sweep_notifies_only_for_unmarked_cells() {
+        let mut gc = GbgCollector::new(32, 1, 0.0).init_freelist();
+        gc.reg_collector.connect(&CollectorState::Sweep);
+        gc.reg_collector.tick().unwrap();
+        gc.reg_sweeper.connect(&12);
+        gc.reg_sweeper.tick().unwrap();
+        gc.gc_mem.ram[11].ptr = 13;
+        gc.gc_mem.ram[12].state = CellState::Unmarked;
+        gc.reg_free_len.connect(&30);
+        gc.reg_free_len.tick().unwrap();
+        gc.reg_bk_reader.connect(&no_ptr_cell(CellState::Unmarked));
+        gc.reg_bk_reader.tick().unwrap();
+        assert_eq!(gc.spark_reclaim_addr(), Some(12));
+        // A mutator request delays sweep and therefore its notification.
+        gc.input.addr_out_ready = true;
+        assert_eq!(gc.spark_reclaim_addr(), None);
+        gc.input.addr_out_ready = false;
+        gc.reg_bk_reader.connect(&no_ptr_cell(CellState::Marked));
+        gc.reg_bk_reader.tick().unwrap();
+        assert_eq!(gc.spark_reclaim_addr(), None);
+    }
+
+    #[test]
+    fn sweep_reclamation_invalidates_a_queued_hint() {
+        use super::super::spark_pool::SparkPool;
+        let mut gc = GbgCollector::new(32, 1, 0.0).init_freelist();
+        gc.gc_mem.ram[11].ptr = 13;
+        gc.gc_mem.ram[12].state = CellState::Unmarked;
+        gc.reg_free_len.connect(&30);
+        gc.reg_free_len.tick().unwrap();
+        gc.reg_collector.connect(&CollectorState::Sweep);
+        gc.reg_collector.tick().unwrap();
+        gc.reg_sweeper.connect(&12);
+        gc.reg_sweeper.tick().unwrap();
+        gc.reg_bk_reader.connect(&no_ptr_cell(CellState::Unmarked));
+        gc.reg_bk_reader.tick().unwrap();
+
+        let mut pool = SparkPool::<4>::new(32);
+        pool.input.offer_valid = true;
+        pool.input.offer_bits = Atom::Ptr(12, false, false);
+        pool.tick().unwrap();
+        assert_eq!(pool.front_candidate(), Some(12));
+
+        let reclaim = gc.spark_reclaim_addr();
+        assert_eq!(reclaim, Some(12));
+        pool.input.offer_valid = false;
+        pool.input.unset_valid = reclaim.is_some();
+        pool.input.unset_bits = reclaim.unwrap_or(0);
+        pool.tick().unwrap();
+        gc.tick().unwrap();
+        assert_eq!(gc.gc_mem.ram[12].state, CellState::FreeList);
+        assert_eq!(pool.front(), Some(Atom::Ptr(12, false, false)));
+        assert_eq!(pool.front_candidate(), None);
+    }
+
+    #[test]
+    fn mark_has_no_spark_root_barrier() {
+        let gc = GbgCollector::new(32, 1, 0.0).init_freelist();
+        assert_eq!(gc.spark_reclaim_addr(), None);
     }
 }

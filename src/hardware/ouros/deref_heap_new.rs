@@ -24,8 +24,6 @@ pub struct DrfHeapInput {
     pub out_main_ready: bool,
     pub out_sub_ready: bool,
     pub found: bool,
-    /// GC is reading the spark pool; a saturated par cannot be consumed yet.
-    pub spark_block: bool,
     // GC signals
     pub free_addr: usize,
     pub free_addr_valid: bool,
@@ -410,6 +408,14 @@ impl DrfHeap {
         self
     }
 
+    /// This check is only a candidate filter for future stealing, not an
+    /// atomic claim. GC protection and ownership transfer are still needed.
+    pub fn spark_target_eligible(&self, addr: usize) -> bool {
+        addr < self.heap_mem.ram.len()
+            && !self.working_heap.ram[addr]
+            && !is_whnf(&self.heap_mem.ram[addr])
+    }
+
     pub fn port_a_fire(&self) -> bool {
         fire(self.input.port_a_valid, self.port_a_ready())
     }
@@ -437,12 +443,6 @@ impl DrfHeap {
 
     pub fn port_a_ready(&self) -> bool {
         if self.holder_out.0 && !self.input.out_main_ready {
-            return false;
-        }
-        if self.input.port_a_valid
-            && is_saturated_par(&self.input.port_a_bits.load)
-            && self.input.spark_block
-        {
             return false;
         }
         let local_release: bool = match *self.stm.value() {
@@ -1469,7 +1469,22 @@ mod par_tests {
     use super::*;
 
     #[test]
-    fn par_blocks_only_port_a_during_gc_rooting() {
+    fn spark_candidate_rejects_working_or_whnf_heap_cells() {
+        let mut dh = DrfHeap::new(32);
+        dh.heap_mem.ram[11] = [Atom::Prm(AluOp::Add, false), Atom::Int(1), Atom::Int(2),
+                               Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop];
+        assert!(dh.spark_target_eligible(11));
+        dh.working_heap.ram[11] = true;
+        assert!(!dh.spark_target_eligible(11));
+        dh.working_heap.ram[11] = false;
+        dh.heap_mem.ram[11] = [Atom::Int(3), Atom::Nop, Atom::Nop, Atom::Nop,
+                               Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop];
+        assert!(!dh.spark_target_eligible(11));
+        assert!(!dh.spark_target_eligible(100));
+    }
+
+    #[test]
+    fn par_reduction_uses_normal_port_a_handshake() {
         let mut dh = DrfHeap::new(32);
         dh.working.connect(&true);
         dh.working.tick().unwrap();
@@ -1482,11 +1497,9 @@ mod par_tests {
             load: [Atom::Par, Atom::Ptr(11, false, false), Atom::Int(42),
                    Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop, Atom::Nop],
         };
-        dh.input.spark_block = true;
-        assert!(!dh.port_a_ready());
-        assert!(!dh.spark_valid());
+        // GC does not lock port A for spark rooting anymore.
+        assert!(dh.port_a_ready());
         assert!(dh.port_b_ready());
-        dh.input.spark_block = false;
         assert!(dh.spark_valid());
         assert_eq!(dh.spark_bits(), Atom::Ptr(11, false, false));
         dh.tick().unwrap();
