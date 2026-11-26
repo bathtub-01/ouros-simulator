@@ -19,3 +19,8 @@ pub mod garbage_collector;
 pub mod spark_pool;
 
 pub mod addr_box;
+
+pub mod network_interface;
+pub mod processing_element;
+
+pub mod ouros_mesh;
