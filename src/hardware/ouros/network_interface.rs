@@ -2,10 +2,10 @@
 //! the local port of the existing 2-D mesh router.
 //!
 //! The router owns the TX-side queue (its local input FIFO). The NI only
-//! buffers RX traffic. A future protocol dispatcher will consume the RX
-//! stream and produce TX messages; it may then inject ActiveApps/FrozenApps
-//! into the appropriate DHeap arbiters. This transport layer deliberately
-//! does not interpret messages, allocate proxies, or access the heap.
+//! buffers RX traffic. The PE-side dispatcher currently handles only the
+//! failure-only FISH protocol and will later inject ActiveApps/FrozenApps
+//! into DHeap arbiters. This transport module deliberately does not interpret
+//! messages, allocate proxies, or access heap memory.
 
 use crate::hardware::common::fifo::Fifo;
 use crate::hardware::noc::router::{Packet, RouterPortIn, RouterPortOut};
@@ -14,27 +14,17 @@ use crate::hw_module::{HwInput, HwModule};
 use super::config::NI_RX_DEPTH;
 use super::program::App;
 
-/// Packet purpose. Only `App` traffic is meaningful in this milestone;
-/// the remaining tags reserve names for the future protocol dispatcher.
-/// No handling/encoding of FISH, FETCH, PUT, etc. is implemented here.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum MessageKind {
-    #[default]
-    App,
-    Fish,
-    NoWork,
-    Fetch,
-    Put,
-    Release,
+/// The router owns the source/destination header; a payload is a sum type.
+/// `origin` is the original fisherman: Packet.source changes on every hop.
+#[derive(Clone, Debug, PartialEq)]
+pub enum NetworkPayload {
+    App(App),
+    Fish { origin: (u8, u8), age: u16 },
+    FishFailed,
 }
 
-/// One network payload always carries one complete App-sized data field.
-/// Control messages may leave this field unused. Router coordinates are in
-/// the existing Packet header, not duplicated here.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct NetworkPayload {
-    pub kind: MessageKind,
-    pub app: App,
+impl Default for NetworkPayload {
+    fn default() -> Self { Self::App(Default::default()) }
 }
 
 pub type NetworkFlit = Packet<NetworkPayload>;
@@ -133,14 +123,10 @@ mod tests {
     use crate::hardware::ouros::program::Atom;
     use crate::hardware::ouros::config::APP_LENGTH;
 
-    fn flit(dest: (u8, u8), kind: MessageKind, v: i32) -> NetworkFlit {
+    fn app_flit(dest: (u8, u8), v: i32) -> NetworkFlit {
         NetworkFlit {
-            source: (99, 99), // NI must rewrite this field on transmission.
-            dest,
-            load: NetworkPayload {
-                kind,
-                app: [Atom::Int(v); APP_LENGTH],
-            },
+            source: (99, 99), dest,
+            load: NetworkPayload::App([Atom::Int(v); APP_LENGTH]),
         }
     }
 
@@ -148,20 +134,20 @@ mod tests {
     fn tx_is_direct_and_uses_router_ready() {
         let mut ni = NetworkInterface::new((1, 2));
         ni.input.core.tx_valid = true;
-        ni.input.core.tx_bits = flit((3, 4), MessageKind::Fetch, 17);
+        ni.input.core.tx_bits = NetworkFlit {
+            source: (99, 99), dest: (3, 4),
+            load: NetworkPayload::Fish { origin: (0, 0), age: 2 },
+        };
         ni.input.router.in_ready = false;
         assert!(!ni.core_port().tx_ready);
         let port = ni.router_port();
         assert!(port.in_valid);
         assert_eq!(port.in_bits.source, (1, 2));
         assert_eq!(port.in_bits.dest, (3, 4));
-        assert_eq!(port.in_bits.load.kind, MessageKind::Fetch);
-        assert_eq!(port.in_bits.load.app[0], Atom::Int(17));
-
+        assert_eq!(port.in_bits.load, NetworkPayload::Fish { origin: (0, 0), age: 2 });
         ni.input.router.in_ready = true;
         assert!(ni.core_port().tx_ready);
-        assert!(ni.router_port().in_valid);
-        assert_eq!(ni.rx_len(), 0); // no TX queue to advance
+        assert_eq!(ni.rx_len(), 0);
     }
 
     #[test]
@@ -171,12 +157,12 @@ mod tests {
         for i in 0..NI_RX_DEPTH {
             assert!(ni.router_port().out_ready);
             ni.input.router.out_valid = true;
-            ni.input.router.out_bits = flit((0, 0), MessageKind::App, i as i32);
+            ni.input.router.out_bits = app_flit((0, 0), i as i32);
             ni.tick().unwrap();
         }
         assert!(!ni.router_port().out_ready);
-        ni.input.router.out_bits = flit((0, 0), MessageKind::App, 999);
-        ni.tick().unwrap(); // full: must not accept a new flit
+        ni.input.router.out_bits = app_flit((0, 0), 999);
+        ni.tick().unwrap();
         assert_eq!(ni.rx_len(), NI_RX_DEPTH);
 
         ni.input.router.out_valid = false;
@@ -184,7 +170,7 @@ mod tests {
         for i in 0..NI_RX_DEPTH {
             let output = ni.core_port();
             assert!(output.rx_valid);
-            assert_eq!(output.rx_bits.load.app[0], Atom::Int(i as i32));
+            assert_eq!(output.rx_bits.load, NetworkPayload::App([Atom::Int(i as i32); APP_LENGTH]));
             ni.tick().unwrap();
         }
         assert!(!ni.core_port().rx_valid);
@@ -196,15 +182,17 @@ mod tests {
         let mut ni = NetworkInterface::new((1, 1));
         ni.input.router.in_ready = true;
         ni.input.router.out_valid = true;
-        ni.input.router.out_bits = flit((1, 1), MessageKind::Put, 99);
+        ni.input.router.out_bits = NetworkFlit {
+            source: (0, 0), dest: (1, 1), load: NetworkPayload::FishFailed,
+        };
         ni.input.core.tx_valid = true;
-        ni.input.core.tx_bits = flit((0, 0), MessageKind::App, 42);
+        ni.input.core.tx_bits = app_flit((0, 0), 42);
         let tx = ni.router_port();
         assert!(tx.in_valid && tx.out_ready);
-        assert_eq!(tx.in_bits.load.app[0], Atom::Int(42));
+        assert_eq!(tx.in_bits.load, NetworkPayload::App([Atom::Int(42); APP_LENGTH]));
         ni.tick().unwrap();
         let rx = ni.core_port();
         assert!(rx.rx_valid);
-        assert_eq!(rx.rx_bits.load.app[0], Atom::Int(99));
+        assert_eq!(rx.rx_bits.load, NetworkPayload::FishFailed);
     }
 }

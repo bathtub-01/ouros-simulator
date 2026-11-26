@@ -29,6 +29,10 @@ pub const CACHE_SIZE: usize = 8;
 pub const SPARK_POOL_SIZE: usize = 256;
 /// Per-PE receive buffering between the router and the future dispatcher.
 pub const NI_RX_DEPTH: usize = 4;
+/// Number of failed probes per FISH, including its first destination.
+pub const FISH_MAX_AGE: u16 = 4;
+/// Number of full cycles to wait after receiving FISH_FAILED.
+pub const FISH_RETRY_DELAY: u32 = 16;
 
 // system-wise setup, changing them will require also modifying the compiler
 pub const HOLES: usize = 6;

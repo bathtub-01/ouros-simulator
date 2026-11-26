@@ -1,7 +1,7 @@
-//! Transport-only mesh composition: each local router port connects to a PE's
-//! network interface. Core network traffic is still supplied/consumed through
-//! the placeholder PE protocol-side stream; this module does not interpret
-//! FISH/FETCH/PUT, allocate proxies or inject into DHeap.
+//! Mesh composition: each router local port connects to a PE's NI. The PE
+//! dispatcher implements failure-only random fishing; App traffic remains
+//! externally exposed. No successful stealing, FETCH/PUT, proxy allocation,
+//! or DHeap network injection is implemented.
 
 use crate::hardware::noc::network::Network;
 use crate::hw_module::HwModule;
@@ -19,13 +19,14 @@ pub struct OurosMesh {
 
 impl OurosMesh {
     /// `pes` must contain exactly one PE per router, in row-major order.
-    pub fn new(width: usize, height: usize, pes: Vec<ProcessingElement>) -> Self {
+    pub fn new(width: usize, height: usize, mut pes: Vec<ProcessingElement>) -> Self {
         let network = Network::new(width, height);
         assert_eq!(pes.len(), width * height, "one PE per router is required");
         for (index, pe) in pes.iter().enumerate() {
             let coord = ((index % width) as u8, (index / width) as u8);
             assert_eq!(pe.coordinates(), coord, "PE coordinate mismatch");
         }
+        for pe in &mut pes { pe.configure_mesh(width, height); }
         let mut mesh = Self {
             network,
             pes,
@@ -91,7 +92,7 @@ impl HwModule for OurosMesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hardware::ouros::network_interface::{MessageKind, NetworkFlit, NetworkPayload};
+    use crate::hardware::ouros::network_interface::{NetworkFlit, NetworkPayload};
     use crate::hardware::ouros::program::{Atom, Program};
     use crate::hardware::ouros::config::APP_LENGTH;
 
@@ -112,11 +113,10 @@ mod tests {
         let message = NetworkFlit {
             source: (99, 99),
             dest: (1, 1),
-            load: NetworkPayload {
-                kind: MessageKind::App,
-                app: [Atom::Int(123); APP_LENGTH],
-            },
+            load: NetworkPayload::App([Atom::Int(123); APP_LENGTH]),
         };
+        // Disable autonomous fishing to isolate the App transport test.
+        for pe in &mut mesh.pes { pe.fishing.set_enabled(false); }
         assert!(mesh.pe(0, 0).core_network_port().tx_ready);
         mesh.pe_mut(0, 0).input.network.tx_valid = true;
         mesh.pe_mut(0, 0).input.network.tx_bits = message;
@@ -128,8 +128,7 @@ mod tests {
             if received.rx_valid {
                 assert_eq!(received.rx_bits.source, (0, 0));
                 assert_eq!(received.rx_bits.dest, (1, 1));
-                assert_eq!(received.rx_bits.load.kind, MessageKind::App);
-                assert_eq!(received.rx_bits.load.app[0], Atom::Int(123));
+                assert_eq!(received.rx_bits.load, NetworkPayload::App([Atom::Int(123); APP_LENGTH]));
                 mesh.pe_mut(1, 1).input.network.rx_ready = true;
                 mesh.tick().unwrap();
                 assert!(!mesh.pe(1, 1).core_network_port().rx_valid);
@@ -138,5 +137,62 @@ mod tests {
             mesh.tick().unwrap();
         }
         panic!("App flit did not reach remote NI");
+    }
+}
+
+#[cfg(test)]
+mod fishing_mesh_tests {
+    use super::*;
+    use crate::hardware::ouros::config::FISH_RETRY_DELAY;
+    use crate::hardware::ouros::program::{Atom, Program};
+
+    fn pe(x: u8) -> ProcessingElement {
+        let program = Program {
+            heap_img: vec![vec![Atom::Int(0)]],
+            comb_img: vec![],
+        };
+        ProcessingElement::new((x, 0), &program, 0, 64, 0.0)
+    }
+
+    #[test]
+    fn random_fish_fails_across_mesh_then_cools_down() {
+        let mut mesh = OurosMesh::new(3, 1, vec![pe(0), pe(1), pe(2)]);
+        // Only node 0 generates fish, but every PE responds and can forward.
+        mesh.pe_mut(1, 0).fishing.set_enabled(false);
+        mesh.pe_mut(2, 0).fishing.set_enabled(false);
+
+        for _ in 0..512 {
+            mesh.tick().unwrap();
+            if mesh.pe(0, 0).fishing.stats.failures_received > 0 { break; }
+        }
+        assert_eq!(mesh.pe(0, 0).fishing.stats.launched, 1);
+        assert_eq!(mesh.pe(0, 0).fishing.stats.failures_received, 1);
+        assert!(!mesh.pe(0, 0).fishing.waiting_for_reply());
+        let forwards = mesh.pe(1, 0).fishing.stats.forwarded
+            + mesh.pe(2, 0).fishing.stats.forwarded;
+        let failed = mesh.pe(1, 0).fishing.stats.failed_at_target
+            + mesh.pe(2, 0).fishing.stats.failed_at_target;
+        assert!(forwards > 0);
+        assert_eq!(failed, 1);
+
+        for _ in 0..FISH_RETRY_DELAY {
+            mesh.tick().unwrap();
+            assert_eq!(mesh.pe(0, 0).fishing.stats.launched, 1);
+        }
+        mesh.tick().unwrap();
+        assert_eq!(mesh.pe(0, 0).fishing.stats.launched, 2);
+    }
+
+    #[test]
+    fn two_pe_mesh_responds_without_forwarding() {
+        let mut mesh = OurosMesh::new(2, 1, vec![pe(0), pe(1)]);
+        mesh.pe_mut(1, 0).fishing.set_enabled(false);
+        for _ in 0..256 {
+            mesh.tick().unwrap();
+            if mesh.pe(0, 0).fishing.stats.failures_received != 0 { break; }
+        }
+        assert_eq!(mesh.pe(0, 0).fishing.stats.failures_received, 1);
+        assert_eq!(mesh.pe(1, 0).fishing.stats.forwarded, 0);
+        assert_eq!(mesh.pe(1, 0).fishing.stats.failed_at_target, 1);
     }
 }

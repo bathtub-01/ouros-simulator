@@ -161,6 +161,20 @@ impl OurosCore {
         }
     }
 
+    /// Candidate-only test: skip invalid hints in the FIFO. Does not claim
+    /// or protect an App; success will need GC barriers and ownership transfer.
+    pub fn has_stealable_spark_candidate(&self) -> bool {
+        (0..self.spark_pool.len()).any(|i| match self.spark_pool.search(i) {
+            Some(Atom::Ptr(addr, _, _)) =>
+                self.spark_pool.still_spark(addr) && self.dheap.spark_target_eligible(addr),
+            _ => false,
+        })
+    }
+
+    pub fn thread_zero_empty(&self) -> bool {
+        self.dheap.thread_zero_empty()
+    }
+
     pub fn done(&self) -> bool {
         self.dheap.done()
     }

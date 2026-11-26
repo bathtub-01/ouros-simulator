@@ -21,6 +21,7 @@ pub mod spark_pool;
 pub mod addr_box;
 
 pub mod network_interface;
+pub mod fishing;
 pub mod processing_element;
 
 pub mod ouros_mesh;

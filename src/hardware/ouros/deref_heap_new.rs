@@ -597,6 +597,11 @@ impl DrfHeap {
         *self.addr_holder.value()
     }
 
+    /// Fishing watches thread 0's address-stack occupancy, not core-wide done.
+    pub fn thread_zero_empty(&self) -> bool {
+        self.thread_stack[0].elements() == 0
+    }
+
     /// machine's work has been finished
     pub fn done(&self) -> bool {
         !self.working.value()
