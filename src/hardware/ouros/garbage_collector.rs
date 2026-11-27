@@ -1,6 +1,6 @@
 use std::cmp::max;
 
-use crate::hardware::common::{DualPortMem, Register};
+use crate::hardware::common::{DualPortMem, Register, SinglePortMem};
 use crate::hw_module::{HwInput, HwModule};
 
 use super::config::{APP_LENGTH, CACHE_SIZE, DLV_GC, DLV_GC1, MAX_THREADS};
@@ -44,6 +44,15 @@ enum CollectorState {
     Root,
     Mark,
     Sweep,
+}
+
+/// The Root phase first enumerates the existing program image roots, then
+/// scans every remote-reference count before entering Mark.
+#[derive(Default, Clone, Debug, PartialEq)]
+enum RootStage {
+    #[default]
+    Program,
+    RemoteRefs,
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -107,6 +116,12 @@ pub struct GbgCollector {
     pub input: GbgCollectorInput,
     reg_collector: Register<CollectorState>,
     gc_mem: DualPortMem<GCCell>,
+    /// One unsigned incoming remote-reference count per local heap address.
+    /// Counts remain zero until the distributed reference protocol is added.
+    remote_ref_counts: SinglePortMem<u16>,
+    reg_root_stage: Register<RootStage>,
+    /// Address whose count is currently held at remote_ref_counts.dout().
+    reg_remote_scan_addr: Register<usize>,
     reg_free_head: Register<usize>,
     reg_work_head: Register<usize>,
     reg_free_drawed: Register<bool>, // whether freelist was drawed in previous cycle
@@ -138,6 +153,9 @@ impl GbgCollector {
             input: Default::default(),
             reg_collector: Default::default(),
             gc_mem: DualPortMem::new(heap_size),
+            remote_ref_counts: SinglePortMem::new(heap_size),
+            reg_root_stage: Default::default(),
+            reg_remote_scan_addr: Default::default(),
             reg_free_head: Register::init(free_from),
             reg_work_head: Default::default(),
             reg_free_drawed: Default::default(),
@@ -417,23 +435,60 @@ impl GbgCollector {
             );
             self.reg_sweeper.connect(&0);
             self.reg_monitor_idx.connect(&0);
+            self.reg_root_stage.connect(&RootStage::Program);
+            self.reg_remote_scan_addr.connect(&0);
         }
     }
 
+    fn finish_root_phase(&mut self) {
+        self.reg_collector.connect(&CollectorState::Mark);
+        self.reg_move.connect(&0);
+        self.reg_pre_gc.connect(&false);
+        self.gc_cache.flush();
+    }
+
     fn step_root(&mut self) {
-        if self.mutator_request() { return; }
-        if *self.reg_sweeper.value() < self.const_sweep_from - 1 {
-            let next = *self.reg_sweeper.value() + 1;
-            self.reg_sweeper.connect(&next);
-            self.push_to_worklist(next, *self.reg_work_head.value());
-            self.work_len_plus_one();
-        } else {
-            // Spark hints are *not* GC roots. Only the ordinary program
-            // roots and existing active-App monitors are traced.
-            self.reg_collector.connect(&CollectorState::Mark);
-            self.reg_move.connect(&0);
-            self.reg_pre_gc.connect(&false);
-            self.gc_cache.flush();
+        // GC bookkeeping port B can append only one root per cycle; let
+        // mutator feedback/deallocation/allocation take priority as before.
+        if self.mutator_request() {
+            return;
+        }
+
+        match self.reg_root_stage.value() {
+            RootStage::Program => {
+                if *self.reg_sweeper.value() < self.const_sweep_from - 1 {
+                    let next = *self.reg_sweeper.value() + 1;
+                    self.reg_sweeper.connect(&next);
+                    self.push_to_worklist(next, *self.reg_work_head.value());
+                    self.work_len_plus_one();
+                } else if self.const_heap_size == 0 {
+                    self.finish_root_phase();
+                } else {
+                    // Synchronous memory read: the count at address zero is
+                    // available *next* cycle, in RootStage::RemoteRefs.
+                    self.reg_root_stage.connect(&RootStage::RemoteRefs);
+                    self.reg_remote_scan_addr.connect(&0);
+                    self.remote_ref_counts.read(0);
+                }
+            }
+            RootStage::RemoteRefs => {
+                let addr = *self.reg_remote_scan_addr.value();
+                let count = *self.remote_ref_counts.dout();
+                // 0..const_sweep_from are already in the worklist as
+                // permanent program-image roots. Never enqueue them twice.
+                // Every other address is visited exactly once.
+                if count != 0 && addr >= self.const_sweep_from {
+                    self.push_to_worklist(addr, *self.reg_work_head.value());
+                    self.work_len_plus_one();
+                }
+                if addr + 1 < self.const_heap_size {
+                    let next = addr + 1;
+                    self.reg_remote_scan_addr.connect(&next);
+                    self.remote_ref_counts.read(next);
+                } else {
+                    self.finish_root_phase();
+                }
+            }
         }
     }
 
@@ -767,6 +822,10 @@ impl HwModule for GbgCollector {
             );
         }
 
+        // The remote-RC memory has no mutator write interface in this version.
+        // Reads are issued only while scanning Root; never replay a stale read.
+        self.remote_ref_counts.input.default_input();
+
         // background GC work
         match self.reg_collector.value() {
             CollectorState::Idle => self.step_idle(),
@@ -848,6 +907,9 @@ impl HwModule for GbgCollector {
     fn tick_children(&mut self) -> std::result::Result<(), std::string::String> {
         self.reg_collector.tick()?;
         self.gc_mem.tick()?;
+        self.remote_ref_counts.tick()?;
+        self.reg_root_stage.tick()?;
+        self.reg_remote_scan_addr.tick()?;
         self.reg_free_head.tick()?;
         self.reg_work_head.tick()?;
         self.reg_free_drawed.tick()?;
@@ -974,5 +1036,134 @@ mod spark_reclamation_tests {
     fn mark_has_no_spark_root_barrier() {
         let gc = GbgCollector::new(32, 1, 0.0).init_freelist();
         assert_eq!(gc.spark_reclaim_addr(), None);
+    }
+}
+
+#[cfg(test)]
+mod remote_ref_root_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn run_root_phase(gc: &mut GbgCollector) {
+        // The first tick enters Root from Idle.
+        gc.tick().unwrap();
+        assert_eq!(*gc.reg_collector.value(), CollectorState::Root);
+        let mut cycles = 0;
+        while *gc.reg_collector.value() == CollectorState::Root {
+            gc.tick().unwrap();
+            cycles += 1;
+            assert!(cycles < 128, "root scan did not finish");
+        }
+        assert_eq!(*gc.reg_collector.value(), CollectorState::Mark);
+    }
+
+    fn worklist(gc: &GbgCollector) -> Vec<usize> {
+        let mut nodes = Vec::new();
+        let mut seen = HashSet::new();
+        let mut addr = *gc.reg_work_head.value();
+        for _ in 0..*gc.reg_work_len.value() {
+            assert!(seen.insert(addr), "duplicate/cyclic GC worklist node {addr}");
+            assert_eq!(gc.gc_mem.ram[addr].state, CellState::WorkList);
+            nodes.push(addr);
+            addr = gc.gc_mem.ram[addr].ptr;
+        }
+        nodes
+    }
+
+    #[test]
+    fn remote_reference_counts_initialise_to_zero() {
+        let mut gc = GbgCollector::new(16, 2, 1.0).init_freelist();
+        for address in [0, 1, 5, 15] {
+            gc.remote_ref_counts.read(address);
+            gc.remote_ref_counts.tick().unwrap();
+            assert_eq!(*gc.remote_ref_counts.dout(), 0);
+        }
+        run_root_phase(&mut gc);
+        assert_eq!(worklist(&gc).len(), 2); // only the program image
+    }
+
+    #[test]
+    fn remote_rc_root_scan_adds_live_cells_once_without_duplicating_program_roots() {
+        let mut gc = GbgCollector::new(12, 3, 1.0).init_freelist();
+        // Reserve 5 and 8 as allocated cells (remove both from the free chain).
+        gc.gc_mem.ram[4].ptr = 6;
+        gc.gc_mem.ram[7].ptr = 9;
+        gc.gc_mem.ram[5].state = CellState::Unmarked;
+        gc.gc_mem.ram[8].state = CellState::Unmarked;
+        gc.reg_free_len.connect(&7);
+        gc.reg_free_len.tick().unwrap();
+
+        // Test-only memory image: no runtime increment/decrement protocol yet.
+        let mut counts = vec![0u16; 12];
+        counts[0] = 1; // already a permanent root
+        counts[1] = 2; // already a permanent root
+        counts[5] = 1;
+        counts[8] = u16::MAX; // any nonzero count qualifies
+        gc.remote_ref_counts.image(&counts);
+
+        run_root_phase(&mut gc);
+        let roots = worklist(&gc);
+        assert_eq!(roots.len(), 5);
+        assert_eq!(roots.iter().copied().collect::<HashSet<_>>(),
+                   HashSet::from([0, 1, 2, 5, 8]));
+    }
+
+    #[test]
+    fn root_scan_stall_preserves_unconsumed_rc_read() {
+        let mut gc = GbgCollector::new(8, 1, 1.0).init_freelist();
+        gc.gc_mem.ram[2].ptr = 4; // remove allocated address 3
+        gc.gc_mem.ram[3].state = CellState::Unmarked;
+        gc.reg_free_len.connect(&6);
+        gc.reg_free_len.tick().unwrap();
+        let mut counts = vec![0u16; 8];
+        counts[3] = 2;
+        gc.remote_ref_counts.image(&counts);
+
+        gc.tick().unwrap(); // Idle -> Root
+        gc.tick().unwrap(); // program roots -> schedule read(0)
+        for _ in 0..3 {
+            gc.tick().unwrap(); // consume counts[0..2]
+        }
+        assert_eq!(*gc.reg_root_stage.value(), RootStage::RemoteRefs);
+        assert_eq!(*gc.reg_remote_scan_addr.value(), 3);
+        let len = *gc.reg_work_len.value();
+        gc.input.addr_out_ready = true; // mutator takes priority over scan
+        gc.tick().unwrap();
+        assert_eq!(*gc.reg_remote_scan_addr.value(), 3);
+        assert_eq!(*gc.reg_work_len.value(), len);
+        gc.input.addr_out_ready = false;
+        gc.tick().unwrap(); // consume count[3] exactly once
+        assert_eq!(*gc.reg_work_len.value(), len + 1);
+        while *gc.reg_collector.value() == CollectorState::Root {
+            gc.tick().unwrap();
+        }
+        assert_eq!(worklist(&gc), vec![3, 0]);
+    }
+
+    #[test]
+    fn remote_rc_root_survives_mark_and_sweep_without_local_reachability() {
+        let mut gc = GbgCollector::new(8, 1, 1.0).init_freelist();
+        gc.gc_mem.ram[2].ptr = 4; // remove cell 3 from free chain
+        gc.gc_mem.ram[3].state = CellState::Unmarked;
+        gc.reg_free_len.connect(&6);
+        gc.reg_free_len.tick().unwrap();
+        let mut counts = vec![0u16; 8];
+        counts[3] = 1;
+        gc.remote_ref_counts.image(&counts);
+        run_root_phase(&mut gc);
+        assert_eq!(worklist(&gc), vec![3, 0]);
+
+        // Both roots are Apps without child pointers. Supply a valid read
+        // response whenever the collector asks DHeap for a heap App.
+        gc.input.heap_read_valid = true;
+        gc.input.heap_read_bits = Default::default();
+        let mut cycles = 0;
+        while *gc.reg_collector.value() != CollectorState::Idle {
+            gc.tick().unwrap();
+            cycles += 1;
+            assert!(cycles < 128, "GC round did not finish");
+        }
+        assert_eq!(gc.gc_mem.ram[3].state, CellState::Unmarked);
+        assert_eq!(gc.gc_mem.ram[4].state, CellState::FreeList);
     }
 }
